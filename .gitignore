@@ -88,6 +88,52 @@ __pycache__/
 venv/
 ENV/
 
+# R and RStudio
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+.Rdata
+.httr-oauth
+.DS_Store
+
+# R package build
+/*.tar.gz
+/*.zip
+/*.Rcheck/
+/man/*.Rd
+
+# Stan
+*.rds
+*.RDS
+models/*.rds
+models/*.RDS
+*.stan.d
+
+# Data files (raw data should not be in git)
+data-raw/*.csv
+data-raw/*.xlsx
+data-raw/*.dat
+data/*.csv
+data/*.xlsx
+
+# Large model objects
+models/*.stan
+models/*.rda
+models/*.RData
+
+# Quarto
+/.quarto/
+_site/
+_book/
+*.qmd.html
+
+# renv (R package management)
+renv/library/
+renv/local/
+renv/staging/
+
 # Note: We intentionally DO NOT ignore:
 # - .claude/commands/ (core product)
 # - .claude/agents/ (core product)  

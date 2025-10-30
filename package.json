@@ -1,7 +1,7 @@
 {
-  "name": "claude-setup",
-  "version": "2.0.0",
-  "description": "Professional command templates and tools for structured AI-assisted development with Claude Code",
+  "name": "phd-unemployment-model",
+  "version": "0.1.0",
+  "description": "Statistical modeling of PhD unemployment rates using R/Stan with TDD workflow",
   "scripts": {
     "validate": "echo 'Validating command templates...' && find .claude/commands -name '*.md' -exec echo 'Checking {}' \\; -exec head -5 {} \\;",
     "list-commands": "ls -1 .claude/commands/*.md | sed 's|.claude/commands/||' | sed 's|\\.md$||' | sort",
@@ -70,6 +70,14 @@
     "test:verbose": "node --test --test-reporter=spec test/*.test.js",
     "test:coverage": "node --test --experimental-test-coverage test/*.test.js",
     "test:watch": "node --test --watch test/*.test.js",
+    "test:r": "Rscript -e 'testthat::test_dir(\"tests/testthat\")'",
+    "test:r:coverage": "Rscript -e 'covr::package_coverage()'",
+    "// R Commands": "=== R development commands ===",
+    "r:check": "R CMD check .",
+    "r:install": "Rscript -e 'devtools::install()'",
+    "r:document": "Rscript -e 'devtools::document()'",
+    "r:test": "Rscript -e 'devtools::test()'",
+    "r:load": "Rscript -e 'devtools::load_all()'",
     "// CI/CD": "=== Continuous Integration commands ===",
     "quality:ci": "npm run lint:check && npm test && npm run docs validate",
     "ci:pre-push": "npm run quality:ci && npm run git:unpushed",
@@ -82,24 +90,27 @@
     "prepare": "husky"
   },
   "keywords": [
-    "claude",
-    "claude-code",
-    "command-templates",
-    "development-workflows",
-    "ai-assisted-development",
-    "token-efficiency",
-    "self-documenting"
+    "r",
+    "stan",
+    "statistics",
+    "time-series",
+    "unemployment",
+    "phd",
+    "tdd",
+    "brms",
+    "cmdstanr",
+    "gam"
   ],
-  "author": "Rebecca Murphey",
+  "author": "John Flournoy",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rmurphey/claude-setup.git"
+    "url": "https://github.com/jflournoy/phd-unemployment-model.git"
   },
   "bugs": {
-    "url": "https://github.com/rmurphey/claude-setup/issues"
+    "url": "https://github.com/jflournoy/phd-unemployment-model/issues"
   },
-  "homepage": "https://github.com/rmurphey/claude-setup#readme",
+  "homepage": "https://github.com/jflournoy/phd-unemployment-model#readme",
   "files": [
     ".claude/",
     "docs/",

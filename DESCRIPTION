@@ -1,0 +1,32 @@
+Package: phdunemployment
+Title: PhD Unemployment Statistical Modeling
+Version: 0.1.0
+Authors@R:
+    person("John", "Flournoy", , "your.email@example.com", role = c("aut", "cre"))
+Description: Statistical modeling of PhD unemployment rates relative to general
+    unemployment and other graduate degrees using time series methods (GAMs,
+    Gaussian processes, seasonal decomposition) with Stan via brms.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+Depends:
+    R (>= 4.0.0)
+Imports:
+    brms (>= 2.19.0),
+    cmdstanr,
+    dplyr (>= 1.1.0),
+    ggplot2 (>= 3.4.0),
+    tidyr (>= 1.3.0),
+    readr (>= 2.1.0),
+    lubridate (>= 1.9.0)
+Suggests:
+    testthat (>= 3.0.0),
+    covr,
+    knitr,
+    rmarkdown,
+    quarto
+Config/testthat/edition: 3
+Date: 2025-10-30
+URL: https://github.com/jflournoy/phd-unemployment-model
+BugReports: https://github.com/jflournoy/phd-unemployment-model/issues

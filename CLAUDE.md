@@ -1,5 +1,17 @@
 # CLAUDE.md - Project AI Guidelines
 
+## Project Overview
+
+This project models PhD unemployment rates relative to sensible baselines (general unemployment, other graduate degrees) using:
+
+- **Languages**: R and Stan (via brms, cmdstanr)
+- **Data source**: IPUMS (https://usa.ipums.org/usa/index.shtml)
+- **Development environment**: RStudio Quarto Docker container
+- **Statistical approach**: Simplest models allowing maximum disaggregation
+  - Multiple seasonal components
+  - GAMs, Gaussian processes, autocorrelation for dense time series
+- **Communication goal**: Clear TDD process documentation and beautiful visualization of insights
+
 ## Development Method: TDD
 
 **RECOMMENDED: Use Test-Driven Development for new features**
@@ -60,11 +72,19 @@ Examples of honest responses:
 ## Testing Standards
 **CRITICAL: Any error during test execution = test failure**
 
-- **Zero tolerance for test errors** - stderr output, command failures, warnings all mark tests as failed
-- **Integration tests required** for CLI functionality, NPX execution, file operations
-- **Unit tests for speed** - development feedback (<1s)
-- **Integration tests for confidence** - real-world validation (<30s)
-- **Performance budgets** - enforce time limits to prevent hanging tests
+### R Testing with testthat
+- **Zero tolerance for test errors** - All tests must pass, warnings should be addressed
+- **Unit tests for functions** - Test data processing, transformation functions
+- **Statistical tests** - Verify model convergence, parameter estimates within expected ranges
+- **Data validation tests** - Ensure data integrity and proper preprocessing
+- **Model comparison tests** - Compare nested models, validate model selection criteria
+- **Performance budgets** - Long-running Stan models should have timeout limits
+
+### Testing Workflow
+- Use `npm run test:r` to run R tests via testthat
+- Use `npm run r:test` for development testing with devtools
+- Keep test execution time reasonable (<2 min for unit tests)
+- Use mock data for rapid iteration, real data for validation
 
 ## Markdown Standards
 **All markdown files must pass validation before commit**
@@ -98,11 +118,22 @@ Examples of honest responses:
 - `/docs` - Update documentation
 
 ## Architecture Principles
-- Keep functions under 15 complexity
-- Code files under 400 lines
-- Comprehensive error handling
-- Prefer functional programming patterns
-- Avoid mutation where possible
+
+### R Code Standards
+- Keep functions focused and testable (< 50 lines preferred)
+- R script files under 400 lines
+- Comprehensive error handling with informative messages
+- Use tidyverse patterns for data manipulation
+- Document functions with roxygen2 comments
+- Avoid global state, use function parameters
+
+### Statistical Modeling Standards
+- Start with simplest model, add complexity incrementally
+- Always check model convergence diagnostics (Rhat, ESS)
+- Validate prior choices with prior predictive checks
+- Perform posterior predictive checks
+- Compare models using LOO-CV or WAIC
+- Document model assumptions and limitations
 
 ## Claude Usage Guidelines
 - Use `/estimate` before starting any non-trivial task
@@ -124,13 +155,27 @@ Examples of honest responses:
 - Regular `/reflect` sessions for insights
 
 ## Project Standards
-- Test coverage: 60% minimum
-- Documentation: All features documented
+- Test coverage: 60% minimum for R functions
+- Documentation: All functions documented with roxygen2
 - Error handling: Graceful failures with clear messages
 - Performance: Monitor code complexity and file sizes
+- Reproducibility: Use renv for R package management
+- Data provenance: Document data sources and transformations
+- Model artifacts: Save models with metadata (date, version, convergence stats)
 - ALWAYS use atomic commits
-- use emojis, judiciously
-- NEVER Update() a file before you Read() the file.
+- Use emojis judiciously
+- NEVER Edit() a file before you Read() the file
+
+## R Project Structure
+- `R/` - R functions and utilities
+- `tests/testthat/` - Unit tests for R functions
+- `data/` - Processed data files (RDS, parquet)
+- `data-raw/` - Raw data and processing scripts
+- `models/` - Saved Stan models and fitted objects
+- `reports/` - Quarto documents and analysis notebooks
+- `stan/` - Stan model files (.stan)
+- `DESCRIPTION` - R package metadata
+- `NAMESPACE` - R package namespace (auto-generated)
 
 ### TDD Examples
 
