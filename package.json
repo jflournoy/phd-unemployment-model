@@ -6,6 +6,7 @@
     "validate": "echo 'Validating command templates...' && find .claude/commands -name '*.md' -exec echo 'Checking {}' \\; -exec head -5 {} \\;",
     "list-commands": "ls -1 .claude/commands/*.md | sed 's|.claude/commands/||' | sed 's|\\.md$||' | sort",
     "// Core Workflow": "=== Core workflow commands ===",
+    "env:check": "bash scripts/check-environment.sh",
     "hygiene": "npm run hygiene:quick --silent",
     "hygiene:quick": "npm run lint:check && npm run test:check && npm run markdown:lint && npm run git:status:summary",
     "hygiene:full": "npm run lint:check && npm run test:check && npm run deps:check && npm run git:status:full && npm run maintain:summary",

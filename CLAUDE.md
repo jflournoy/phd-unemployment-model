@@ -12,6 +12,21 @@ This project models PhD unemployment rates relative to sensible baselines (gener
   - GAMs, Gaussian processes, autocorrelation for dense time series
 - **Communication goal**: Clear TDD process documentation and beautiful visualization of insights
 
+## CRITICAL: Docker Environment Requirement
+
+**ALWAYS check environment at session start:**
+
+```bash
+npm run env:check
+```
+
+This project MUST be developed inside the RStudio Quarto Docker container. The script above will:
+- Verify you're in the Docker container
+- Check R, RStudio Server, and Quarto are available
+- Validate required R packages are installed
+
+If not in the container, the script will show connection instructions.
+
 ## Development Method: TDD
 
 **RECOMMENDED: Use Test-Driven Development for new features**

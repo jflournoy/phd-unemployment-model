@@ -58,7 +58,23 @@ The TDD workflow infrastructure is preserved from [rmurphey/claude-setup](https:
 
 **IMPORTANT**: All development should occur within the **RStudio Quarto Docker container**.
 
-This ensures:
+### Environment Check
+
+**Always run this at the start of a session:**
+
+```bash
+npm run env:check
+```
+
+This script will verify:
+
+- You're inside the Docker container
+- R, RStudio Server, and Quarto are available
+- Required R packages are installed
+
+If you're not in the correct environment, the script provides connection instructions.
+
+### Why Docker?
 
 - Consistent R and package versions
 - Pre-configured Stan toolchain
