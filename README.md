@@ -148,6 +148,66 @@ npm run test:r
 
 See [CLAUDE.md](CLAUDE.md) for complete command reference.
 
+### CI Monitoring
+
+The project includes multiple ways to monitor continuous integration status:
+
+#### Option 1: Hygiene Command
+
+The `/hygiene` command includes CI status checks:
+
+```bash
+/hygiene
+```
+
+This displays recent GitHub Actions workflow runs and their status.
+
+#### Option 2: Repository Monitoring
+
+Active monitoring with desktop notifications:
+
+```bash
+npm run monitor:start        # Start monitoring
+npm run monitor:check        # Check current status
+npm run monitor:stop         # Stop monitoring
+```
+
+Features:
+- Desktop notifications for test failures
+- Sound alerts (configurable)
+- Failure history tracking
+- Customizable check intervals
+
+Configure in `.monitor-config.json`:
+
+```json
+{
+  "interval": 300000,
+  "desktopNotifications": true,
+  "sound": true,
+  "testsOnly": true
+}
+```
+
+#### Option 3: Pre-Push Hook
+
+Automatically check CI status before pushing:
+
+```bash
+git push
+```
+
+The pre-push hook will:
+- Check if CI is currently failing
+- Block push if tests are failing on main
+- Can be bypassed with `git push --no-verify` if needed
+
+Install the hook:
+
+```bash
+npm run hooks:install
+```
+
 ## Development Workflow
 
 ### 1. Data Acquisition
