@@ -3,6 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![R](https://img.shields.io/badge/R-%3E%3D4.0.0-blue)](https://www.r-project.org/)
 [![Stan](https://img.shields.io/badge/Stan-brms%2Fcmdstanr-red)](https://mc-stan.org/)
+[![Commands](https://img.shields.io/badge/commands-14-brightgreen)](.claude/commands/)
 
 Statistical modeling of PhD unemployment rates relative to sensible baselines (general unemployment, other graduate degrees) using Bayesian time series methods with Test-Driven Development.
 
