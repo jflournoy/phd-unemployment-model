@@ -138,9 +138,30 @@ Examples of honest responses:
 - Keep functions focused and testable (< 50 lines preferred)
 - R script files under 400 lines
 - Comprehensive error handling with informative messages
-- Use tidyverse patterns for data manipulation
+- **Prefer base R and data.table over tidyverse**
+  - Use base R for core operations (subsetting, transformations)
+  - Use data.table for efficient operations on large datasets (millions of rows)
+  - Avoid tidyverse/dplyr unless specifically beneficial
+  - Rationale: Fewer dependencies, better performance for CPS data
 - Document functions with roxygen2 comments
 - Avoid global state, use function parameters
+
+#### Data Manipulation Examples
+```r
+# Preferred: data.table
+library(data.table)
+dt <- as.data.table(cps_data)
+dt[EDUC == 125, .(unemp_rate = weighted.mean(EMPSTAT == 2, WTFINL)),
+   by = .(YEAR, MONTH)]
+
+# Acceptable: base R
+cps_phd <- cps_data[cps_data$EDUC == 125, ]
+aggregate(EMPSTAT ~ YEAR + MONTH, data = cps_phd, FUN = mean)
+
+# Avoid: tidyverse
+# library(dplyr)
+# cps_data %>% filter(EDUC == 125) %>% ...
+```
 
 ### Statistical Modeling Standards
 - Start with simplest model, add complexity incrementally

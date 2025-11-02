@@ -28,10 +28,12 @@ This project aims to model PhD unemployment patterns using advanced time series 
 ### Core Technologies
 
 - **R** (≥ 4.0.0) - Data processing and analysis
+  - **Base R** - Core operations (subsetting, transformations)
+  - **data.table** - Efficient operations on large CPS datasets (millions of rows)
+  - Avoids tidyverse for fewer dependencies and better performance
 - **Stan** - Bayesian statistical modeling via:
   - [brms](https://paul-buerkner.github.io/brms/) - High-level modeling interface
   - [cmdstanr](https://mc-stan.org/cmdstanr/) - R interface to CmdStan
-- **tidyverse** - Data manipulation and visualization
 
 ### Statistical Methods
 
