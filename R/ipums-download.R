@@ -33,10 +33,11 @@
 #'
 #' Default variables for unemployment analysis:
 #' - YEAR: Survey year
-#' - MONTH: Survey month (for time series)
 #' - EMPSTAT: Employment status (1=employed, 2=unemployed, 3=not in labor force)
 #' - EDUC: Education level (116=Doctorate degree)
-#' - WTFINL: Person weight for calculating population estimates
+#' - AGE: Age in years
+#' - SEX: Sex (1=male, 2=female)
+#' - PERWT: Person weight for calculating population estimates
 #'
 #' ## Placeholder Mode
 #'
@@ -63,7 +64,7 @@
 download_ipums_data <- function(output_dir = "data-raw",
                                   use_api = FALSE,
                                   samples = NULL,
-                                  variables = c("YEAR", "MONTH", "EMPSTAT", "EDUC", "WTFINL"),
+                                  variables = c("YEAR", "EMPSTAT", "EDUC", "AGE", "SEX", "PERWT"),
                                   extract_description = "PhD unemployment data",
                                   api_key = NULL) {
   # Validate input
