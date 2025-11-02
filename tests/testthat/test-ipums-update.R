@@ -142,21 +142,23 @@ test_that("update_ipums_data uses default max_age_days of 30", {
   expect_true(result$downloaded)
 })
 
-test_that("update_ipums_data passes through API parameters", {
+test_that("update_ipums_data passes through CPS API parameters", {
   skip_if(Sys.getenv("IPUMS_API_KEY") == "", "IPUMS_API_KEY not set")
 
   temp_dir <- tempfile()
   on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
 
-  # Should pass samples and variables to download function
+  # Should pass CPS samples and variables to download function
   result <- update_ipums_data(
     output_dir = temp_dir,
     use_api = TRUE,
-    samples = c("us2022a"),
+    samples = c("cps2024_01s"),  # CPS monthly sample
     variables = c("YEAR", "EMPSTAT", "EDUC"),
+    collection = "cps",
     force = TRUE
   )
 
   expect_true(result$downloaded)
   expect_true("extract_info" %in% names(result))
+  expect_equal(result$extract_info$samples, c("cps2024_01s"))
 })

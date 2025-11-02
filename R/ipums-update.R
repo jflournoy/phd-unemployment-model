@@ -1,6 +1,6 @@
-#' Smart IPUMS Data Update
+#' Smart IPUMS CPS Data Update
 #'
-#' Checks if IPUMS data exists and is current, downloads new data only when needed.
+#' Checks if IPUMS CPS data exists and is current, downloads new data only when needed.
 #' This function intelligently manages data freshness by:
 #' - Downloading data if none exists
 #' - Downloading data if existing data is older than max_age_days
@@ -14,9 +14,11 @@
 #' @param force Logical. If TRUE, always download new data regardless of age.
 #'   Default is FALSE.
 #' @param use_api Logical. If TRUE, uses IPUMS API. If FALSE, uses placeholder.
-#' @param samples Character vector. IPUMS sample IDs (passed to download_ipums_data).
+#' @param samples Character vector. IPUMS CPS sample IDs (passed to download_ipums_data).
+#'   Use generate_cps_samples() to create lists for time series (e.g., 2000-2025).
 #' @param variables Character vector. IPUMS variables (passed to download_ipums_data).
 #' @param extract_description Character. Description for extract request.
+#' @param collection Character. IPUMS collection to use. Default is "cps".
 #' @param ... Additional arguments passed to download_ipums_data()
 #'
 #' @return A list with:
@@ -54,8 +56,13 @@
 #'   message("Using existing data (", round(result$data_age_days, 1), " days old)")
 #' }
 #'
-#' # Force fresh download
-#' result <- update_ipums_data(force = TRUE, use_api = TRUE)
+#' # Force fresh download with full time series
+#' samples <- generate_cps_samples(2000, 2025)
+#' result <- update_ipums_data(
+#'   force = TRUE,
+#'   use_api = TRUE,
+#'   samples = samples
+#' )
 #'
 #' # Check weekly (7 days)
 #' result <- update_ipums_data(max_age_days = 7, use_api = TRUE)
@@ -67,8 +74,9 @@ update_ipums_data <- function(output_dir = "data-raw",
                                 force = FALSE,
                                 use_api = FALSE,
                                 samples = NULL,
-                                variables = c("YEAR", "EMPSTAT", "EDUC", "AGE", "SEX", "PERWT"),
+                                variables = c("YEAR", "MONTH", "EMPSTAT", "EDUC", "AGE", "SEX", "WTFINL"),
                                 extract_description = "PhD unemployment data",
+                                collection = "cps",
                                 ...) {
   # Construct expected file path
   file_path <- file.path(output_dir, "ipums_data.rds")
@@ -119,6 +127,7 @@ update_ipums_data <- function(output_dir = "data-raw",
       samples = samples,
       variables = variables,
       extract_description = extract_description,
+      collection = collection,
       ...
     )
 

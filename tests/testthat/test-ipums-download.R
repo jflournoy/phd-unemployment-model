@@ -58,40 +58,45 @@ test_that("download_ipums_data handles missing output_dir parameter", {
   expect_true(file.exists(result$file_path))
 })
 
-# New tests for IPUMS API integration
-test_that("download_ipums_data can accept sample specifications", {
+# New tests for IPUMS CPS API integration
+test_that("download_ipums_data can accept CPS sample specifications", {
   # Skip if no API key is set (for CI/development without credentials)
   skip_if(Sys.getenv("IPUMS_API_KEY") == "", "IPUMS_API_KEY not set")
 
   temp_dir <- tempfile()
   on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
 
-  # Should accept samples parameter for IPUMS API
+  # Should accept CPS monthly samples
   result <- download_ipums_data(
     output_dir = temp_dir,
-    samples = c("us2022a"),
-    use_api = TRUE
+    samples = c("cps2024_01s"),  # CPS monthly sample
+    use_api = TRUE,
+    collection = "cps"
   )
 
   expect_true(file.exists(result$file_path))
   expect_true("extract_info" %in% names(result))
+  expect_equal(result$extract_info$samples, c("cps2024_01s"))
 })
 
-test_that("download_ipums_data can accept variable specifications", {
+test_that("download_ipums_data can accept CPS variable specifications", {
   skip_if(Sys.getenv("IPUMS_API_KEY") == "", "IPUMS_API_KEY not set")
 
   temp_dir <- tempfile()
   on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
 
-  # Should accept variables parameter
+  # Should accept variables parameter with CPS samples
   result <- download_ipums_data(
     output_dir = temp_dir,
-    samples = c("us2022a"),
+    samples = c("cps2024_01s"),  # CPS monthly sample
     variables = c("YEAR", "EMPSTAT", "EDUC"),
-    use_api = TRUE
+    use_api = TRUE,
+    collection = "cps"
   )
 
   expect_true(file.exists(result$file_path))
+  expect_true("extract_info" %in% names(result))
+  expect_equal(result$extract_info$variables, c("YEAR", "EMPSTAT", "EDUC"))
 })
 
 test_that("download_ipums_data falls back to placeholder when use_api=FALSE", {
