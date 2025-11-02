@@ -1,3 +1,86 @@
+#' Generate CPS Sample Codes for Time Series
+#'
+#' Creates a vector of IPUMS CPS monthly sample codes for a specified date range.
+#' Queries IPUMS to get actual available sample names (suffix varies by year/month).
+#'
+#' @param start_year Integer. First year to include (e.g., 2000)
+#' @param end_year Integer. Last year to include (e.g., 2025)
+#'
+#' @return Character vector of CPS sample codes (e.g., "cps2024_01s", "cps2024_02b", etc.)
+#'
+#' @details
+#' CPS samples follow the naming convention: cpsYYYY_MMx where:
+#' - YYYY is the 4-digit year
+#' - MM is the 2-digit month (01-12)
+#' - x is either 'b' (basic) or 's' (supplement)
+#'
+#' The suffix (b/s) varies by year and month in ways that aren't easily predictable.
+#' This function queries IPUMS to get the actual available samples.
+#'
+#' Note: March samples typically have both basic (03b) and ASEC (03s) versions.
+#' This function returns ASEC (03s) for March to get additional income/employment data.
+#'
+#' @examples
+#' \dontrun{
+#' # Single year (12 months)
+#' samples_2024 <- generate_cps_samples(2024, 2024)
+#' length(samples_2024)  # ~12 (may vary by availability)
+#'
+#' # Multiple years for time series
+#' samples_5yr <- generate_cps_samples(2020, 2024)
+#' length(samples_5yr)  # ~60 (may vary by availability)
+#'
+#' # Full time series for seasonal adjustment
+#' samples_full <- generate_cps_samples(2000, 2025)
+#' }
+#'
+#' @export
+generate_cps_samples <- function(start_year, end_year) {
+  # Validate inputs
+  if (!is.numeric(start_year) || !is.numeric(end_year)) {
+    stop("start_year and end_year must be numeric")
+  }
+
+  if (end_year < start_year) {
+    stop("end_year must be >= start_year")
+  }
+
+  # Get all available CPS samples from IPUMS
+  all_samples <- ipumsr::get_sample_info("cps")
+
+  # Filter to requested date range
+  # Sample format: cpsYYYY_MMx
+  pattern <- paste0("cps(", paste(start_year:end_year, collapse = "|"), ")_\\d{2}[bs]")
+  matching_samples <- grep(pattern, all_samples$name, value = TRUE)
+
+  # For March, prefer ASEC (03s) over basic (03b) when both exist
+  # Remove basic March samples if ASEC version exists
+  march_basic <- grep("_03b$", matching_samples, value = TRUE)
+  march_asec <- grep("_03s$", matching_samples, value = TRUE)
+
+  # Get years that have both
+  years_with_both <- gsub("cps(\\d{4})_03b", "\\1", march_basic)
+  years_with_both <- years_with_both[paste0("cps", years_with_both, "_03s") %in% march_asec]
+
+  # Remove basic version for years that have both
+  if (length(years_with_both) > 0) {
+    to_remove <- paste0("cps", years_with_both, "_03b")
+    matching_samples <- matching_samples[!matching_samples %in% to_remove]
+  }
+
+  # Sort chronologically
+  matching_samples <- sort(matching_samples)
+
+  if (length(matching_samples) == 0) {
+    warning(
+      "No CPS samples found for ", start_year, "-", end_year, ". ",
+      "Check sample availability at https://cps.ipums.org/cps-action/samples"
+    )
+  }
+
+  return(matching_samples)
+}
+
 #' Download IPUMS CPS Data
 #'
 #' Downloads IPUMS CPS monthly data for PhD unemployment analysis using the IPUMS API.
