@@ -19,7 +19,8 @@ Imports:
     ggplot2 (>= 3.4.0),
     tidyr (>= 1.3.0),
     readr (>= 2.1.0),
-    lubridate (>= 1.9.0)
+    lubridate (>= 1.9.0),
+    ipumsr (>= 0.7.0)
 Suggests:
     testthat (>= 3.0.0),
     covr,
