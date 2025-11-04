@@ -138,13 +138,12 @@ renv/staging/
 
 # Note: We intentionally DO NOT ignore:
 # - .claude/commands/ (core product)
-# - .claude/agents/ (core product)  
+# - .claude/agents/ (core product)
 # - .claude/metrics.json (self-tracking)
 # - session-history/ (learning system)
 # - archive/ (archived workflow files)
 # - internal/ (project decisions)
 # - plans/ (project planning)
-# Quarto generated files
-reports/*.html
+# Quarto generated files (ignore support files but keep HTML reports)
 reports/*_files/
 
