@@ -115,7 +115,7 @@ plot(
   xlab = "Month",
   ylab = "Unemployment Rate (%)",
   main = "PhD Unemployment Rate in 2024",
-  ylim = c(20, 28),
+  ylim = c(0, 2.5),
   xaxt = "n"
 )
 
@@ -172,13 +172,13 @@ text(
 
 ### Unemployment Rate Patterns
 
-1. **Average Rate**: PhD unemployment in 2024 averaged `r sprintf("%.2f%%", mean(phd_unemployment$unemployment_rate) * 100)`
+1. **Average Rate**: PhD unemployment in 2024 averaged `r sprintf("%.2f%%", mean(phd_unemployment$unemployment_rate) * 100)` - significantly lower than the overall US unemployment rate (~4% in 2024)
 
 2. **Seasonal Variation**:
-   - Lowest: October (`r sprintf("%.2f%%", phd_unemployment$unemployment_rate[10] * 100)`)
-   - Highest: January and March (`r sprintf("%.2f%%", phd_unemployment$unemployment_rate[1] * 100)`)
+   - Lowest: February (`r sprintf("%.2f%%", min(phd_unemployment$unemployment_rate) * 100)`)
+   - Highest: January (`r sprintf("%.2f%%", max(phd_unemployment$unemployment_rate) * 100)`)
 
-3. **Trend**: Unemployment appears to decline slightly through the year, from ~25% in early 2024 to ~23-24% in late 2024
+3. **Trend**: PhD unemployment remains consistently low throughout 2024, ranging from 0.5% to 2.0%
 
 ### Sample Quality
 
@@ -204,11 +204,12 @@ text(
 
 ### Interpretation of Results
 
-The unemployment rates shown (e.g., 24.53% mean for 2024) represent:
+The unemployment rates shown (e.g., 1.16% mean for 2024) represent:
 
 - **Population-level estimates** for PhD holders in the US
 - **Not** the proportion of our sample that is unemployed
 - Properly accounting for survey design and sampling probabilities
+- **Labor force participants only** - excludes those not in labor force (retired, students, etc.)
 
 ### March ASEC Supplement
 
@@ -223,10 +224,11 @@ March 2024 uses the Annual Social and Economic Supplement (ASEC), which:
 Unemployment rates calculated using CPS EMPSTAT detailed codes:
 
 - **Employed**: EMPSTAT in [10, 12] (at work or has job, not at work)
-- **Unemployed**: EMPSTAT in [20-36] (experienced workers and new entrants)
+- **Unemployed**: EMPSTAT in [20, 21, 22] (unemployed persons seeking work)
+- **Not in labor force**: EMPSTAT in [30-36] (retired, school, housework, disabled, other)
 - **Unemployment Rate** = Σ(weights × unemployed) / Σ(weights × labor_force)
 
-This follows the official BLS definition of unemployment rate.
+This follows the official BLS definition of unemployment rate. Note that "not in labor force" individuals (codes 30-36) are excluded from both the numerator and denominator.
 
 ## Next Steps
 

@@ -140,8 +140,58 @@ This is appropriate because:
 3. Reduces computational burden (12-312 observations vs. millions)
 4. Stan excels at modeling time series of aggregated rates
 
+## Critical: EMPSTAT Classification
+
+**ONLY codes 20-22 are unemployed! Codes 30-36 are NOT in labor force.**
+
+### EMPSTAT Code Definitions
+
+**Employed (codes 10, 12)**:
+- 10: At work
+- 12: Has job, not at work last week
+
+**Unemployed (codes 20-22 ONLY)**:
+- 20: Unemployed
+- 21: Unemployed, experienced worker
+- 22: Unemployed, new worker
+
+**Not in Labor Force (codes 30-36)** - EXCLUDED from unemployment:
+- 30: Not in labor force (general)
+- 31: NILF, housework
+- 32: NILF, unable to work
+- 33: NILF, school
+- 34: NILF, other
+- 35: NILF, unpaid, less than 15 hours
+- 36: NILF, retired
+
+### Correct Unemployment Calculation
+
+```r
+employed <- data$EMPSTAT %in% c(10, 12)
+unemployed <- data$EMPSTAT %in% c(20, 21, 22)  # NOT 20-36!
+in_labor_force <- employed | unemployed  # Excludes NILF
+
+unemployment_rate <- sum(weights[unemployed]) / sum(weights[in_labor_force])
+```
+
+### Historical Bug (Fixed January 2025)
+
+**Original bug**: Classified codes 30-36 as "unemployed" instead of "not in labor force"
+
+**Impact**: Inflated PhD unemployment from ~1% (correct) to ~25% (incorrect)
+
+**Root cause**: Misinterpreted EMPSTAT coding scheme - codes 30-36 are NILF, not unemployed
+
+**Example from January 2024 data**:
+- Total PhDs: 1,658
+- EMPSTAT 36 (retired): 371 individuals (22% of sample)
+- These 428 NILF individuals were incorrectly counted as unemployed
+- Correct rate: 2.0% (23 unemployed / 1,226 in labor force)
+- Incorrect rate: 25.4% (451 "unemployed" / 1,654 "labor force")
+
 ## References
 
 - [IPUMS CPS Weight Documentation](https://cps.ipums.org/cps/weights.shtml)
+- [IPUMS CPS EMPSTAT Documentation](https://cps.ipums.org/cps-action/variables/EMPSTAT)
 - [CPS Survey Design](https://www.census.gov/programs-surveys/cps/technical-documentation/methodology.html)
 - Lumley, T. (2010). *Complex Surveys: A Guide to Analysis Using R*

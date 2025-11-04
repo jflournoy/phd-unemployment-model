@@ -92,6 +92,38 @@ test_that("calculate_unemployment_rate handles weighted data correctly", {
   expect_equal(result, 2000/3000, tolerance = 0.01)
 })
 
+test_that("calculate_unemployment_rate excludes NILF (codes 30-36) from labor force", {
+  source(here::here("R", "data-processing.R"))
+
+  # Test that NILF codes (30-36: retired, school, housework, etc.) are excluded
+  test_data <- data.frame(
+    EMPSTAT = c(10, 10, 20, 21, 32, 34, 36),  # employed, unemployed, NILF
+    WTFINL = c(1000, 1000, 1000, 1000, 1000, 1000, 1000)
+  )
+
+  result <- calculate_unemployment_rate(test_data)
+
+  # Labor force = 4 (2 employed + 2 unemployed)
+  # NILF = 3 (codes 32, 34, 36) should be excluded
+  # Unemployment rate = 2 / 4 = 0.5
+  expect_equal(result, 0.5, tolerance = 0.01)
+})
+
+test_that("calculate_unemployment_rate only counts codes 20-22 as unemployed", {
+  source(here::here("R", "data-processing.R"))
+
+  # Verify that only codes 20, 21, 22 are counted as unemployed
+  test_data <- data.frame(
+    EMPSTAT = c(10, 20, 21, 22),  # All should be in labor force
+    WTFINL = c(1000, 1000, 1000, 1000)
+  )
+
+  result <- calculate_unemployment_rate(test_data)
+
+  # 1 employed, 3 unemployed -> 3/4 = 0.75
+  expect_equal(result, 0.75, tolerance = 0.01)
+})
+
 test_that("calculate_monthly_unemployment function exists", {
   source(here::here("R", "data-processing.R"))
   expect_true(exists("calculate_monthly_unemployment", mode = "function"))

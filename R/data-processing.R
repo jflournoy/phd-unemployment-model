@@ -47,14 +47,15 @@ filter_phd_holders <- function(cps_data) {
 #' - 1: Armed Forces
 #' - 10: At work
 #' - 12: Has job, not at work last week
-#' - 20: Unemployed, experienced worker
-#' - 21: Unemployed, experienced worker, job loser - on layoff
-#' - 22: Unemployed, experienced worker, other job loser
-#' - 30-36: Unemployed, new/re-entrant
+#' - 20: Unemployed
+#' - 21: Unemployed, experienced worker
+#' - 22: Unemployed, new worker
+#' - 30-36: Not in labor force (retired, school, housework, disabled, other)
 #'
 #' Unemployment rate = (unemployed) / (employed + unemployed)
 #' - Employed: EMPSTAT in [10, 12]
-#' - Unemployed: EMPSTAT in [20, 21, 22, 30-36]
+#' - Unemployed: EMPSTAT in [20, 21, 22]
+#' - Not in labor force: EMPSTAT in [30-36] (excluded from calculation)
 #'
 #' Uses WTFINL (final person weight) for regular monthly samples or ASECWT for
 #' March ASEC supplement to compute population-representative estimates.
@@ -89,8 +90,10 @@ calculate_unemployment_rate <- function(data) {
   # Employed: 10 (at work) or 12 (has job, not at work)
   employed <- data$EMPSTAT %in% c(10, 12)
 
-  # Unemployed: 20-22 (experienced), 30-36 (new/re-entrant)
-  unemployed <- data$EMPSTAT >= 20 & data$EMPSTAT <= 36
+  # Unemployed: 20-22 only (unemployed persons in labor force)
+  # 20: Unemployed, 21: Unemployed experienced worker, 22: Unemployed new worker
+  # NOTE: Codes 30-36 are NOT in labor force (retired, school, housework, etc.)
+  unemployed <- data$EMPSTAT %in% c(20, 21, 22)
 
   # Labor force = employed + unemployed
   in_labor_force <- employed | unemployed
@@ -104,7 +107,7 @@ calculate_unemployment_rate <- function(data) {
   }
 
   # Calculate weighted unemployment rate using the appropriate weight
-  unemployed_lf <- lf_data$EMPSTAT >= 20 & lf_data$EMPSTAT <= 36
+  unemployed_lf <- lf_data$EMPSTAT %in% c(20, 21, 22)
   weights <- lf_data[[weight_var]]
   total_unemployed_weight <- sum(weights[unemployed_lf], na.rm = TRUE)
   total_lf_weight <- sum(weights, na.rm = TRUE)
