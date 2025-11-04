@@ -117,6 +117,8 @@ models/*.RDS
 data-raw/*.csv
 data-raw/*.xlsx
 data-raw/*.dat
+data-raw/*.dat.gz
+data-raw/*.xml
 data/*.csv
 data/*.xlsx
 
