@@ -1,0 +1,5 @@
+
+# Quarto generated output
+reports/*_files/
+reports/*.html
+
