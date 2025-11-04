@@ -144,6 +144,5 @@ renv/staging/
 # - archive/ (archived workflow files)
 # - internal/ (project decisions)
 # - plans/ (project planning)
-# Quarto generated files (ignore support files but keep HTML reports)
-reports/*_files/
+# - reports/ (Quarto HTML reports and support files - commit for easy viewing)
 

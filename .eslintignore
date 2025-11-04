@@ -1,5 +1,5 @@
 
-# Quarto generated output
+# Quarto generated output (keep in git for viewing, but ignore for linting)
 reports/*_files/
 reports/*.html
 
