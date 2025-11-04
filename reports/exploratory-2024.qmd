@@ -1,0 +1,181 @@
+---
+title: "PhD Unemployment Exploratory Analysis: 2024"
+author: "PhD Unemployment Project"
+date: "`r Sys.Date()`"
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+    theme: cosmo
+    fig-width: 10
+    fig-height: 6
+---
+
+## Overview
+
+Exploratory analysis of PhD unemployment rates in 2024 using CPS (Current Population Survey) monthly microdata from IPUMS.
+
+## Data Loading
+
+```{r setup, message=FALSE}
+# Load processed data
+phd_unemployment <- readRDS(here::here("data", "phd_unemployment_2024.rds"))
+
+# Display data structure
+str(phd_unemployment)
+```
+
+## Summary Statistics
+
+```{r summary}
+# Calculate summary statistics
+summary_stats <- data.frame(
+  Metric = c(
+    "Mean Unemployment Rate",
+    "Median Unemployment Rate",
+    "Min Unemployment Rate",
+    "Max Unemployment Rate",
+    "Standard Deviation",
+    "Mean Sample Size per Month"
+  ),
+  Value = c(
+    sprintf("%.2f%%", mean(phd_unemployment$unemployment_rate) * 100),
+    sprintf("%.2f%%", median(phd_unemployment$unemployment_rate) * 100),
+    sprintf("%.2f%%", min(phd_unemployment$unemployment_rate) * 100),
+    sprintf("%.2f%%", max(phd_unemployment$unemployment_rate) * 100),
+    sprintf("%.2f pp", sd(phd_unemployment$unemployment_rate) * 100),
+    sprintf("%d PhD holders", round(mean(phd_unemployment$n_obs)))
+  )
+)
+
+knitr::kable(summary_stats, align = c("l", "r"))
+```
+
+## Monthly Data Table
+
+```{r data_table}
+# Format table
+display_table <- phd_unemployment
+display_table$unemployment_rate <- sprintf("%.2f%%",
+                                           display_table$unemployment_rate * 100)
+
+knitr::kable(
+  display_table,
+  col.names = c("Year", "Month", "Unemployment Rate", "N Observations"),
+  align = c("c", "c", "r", "r")
+)
+```
+
+## Time Series Visualization
+
+```{r timeseries_plot}
+# Create time series plot
+par(mar = c(5, 4, 4, 2))
+plot(
+  phd_unemployment$MONTH,
+  phd_unemployment$unemployment_rate * 100,
+  type = "b",
+  pch = 19,
+  col = "steelblue",
+  lwd = 2,
+  xlab = "Month",
+  ylab = "Unemployment Rate (%)",
+  main = "PhD Unemployment Rate in 2024",
+  ylim = c(20, 28),
+  xaxt = "n"
+)
+
+# Add month labels
+axis(1, at = 1:12, labels = month.abb)
+
+# Add mean line
+abline(h = mean(phd_unemployment$unemployment_rate) * 100,
+       col = "red", lty = 2, lwd = 1.5)
+
+# Add legend
+legend("topright",
+       legend = c("Monthly Rate",
+                  sprintf("Mean (%.2f%%)",
+                          mean(phd_unemployment$unemployment_rate) * 100)),
+       col = c("steelblue", "red"),
+       lty = c(1, 2),
+       lwd = c(2, 1.5),
+       pch = c(19, NA))
+
+# Add grid
+grid(nx = NA, ny = NULL, col = "gray90", lty = 1)
+```
+
+## Sample Size by Month
+
+```{r sample_size_plot}
+# Plot sample sizes
+par(mar = c(5, 4, 4, 2))
+barplot(
+  phd_unemployment$n_obs,
+  names.arg = month.abb,
+  col = "lightblue",
+  border = "steelblue",
+  main = "PhD Sample Size by Month (2024)",
+  xlab = "Month",
+  ylab = "Number of PhD Holders in Sample",
+  ylim = c(0, max(phd_unemployment$n_obs) * 1.1)
+)
+
+# Add mean line
+abline(h = mean(phd_unemployment$n_obs), col = "red", lty = 2, lwd = 2)
+
+# Add value labels on bars
+text(
+  x = seq_along(phd_unemployment$n_obs),
+  y = phd_unemployment$n_obs + 50,
+  labels = phd_unemployment$n_obs,
+  cex = 0.8
+)
+```
+
+## Key Findings
+
+### Unemployment Rate Patterns
+
+1. **Average Rate**: PhD unemployment in 2024 averaged `r sprintf("%.2f%%", mean(phd_unemployment$unemployment_rate) * 100)`
+
+2. **Seasonal Variation**:
+   - Lowest: October (`r sprintf("%.2f%%", phd_unemployment$unemployment_rate[10] * 100)`)
+   - Highest: January and March (`r sprintf("%.2f%%", phd_unemployment$unemployment_rate[1] * 100)`)
+
+3. **Trend**: Unemployment appears to decline slightly through the year, from ~25% in early 2024 to ~23-24% in late 2024
+
+### Sample Quality
+
+- Consistent sample sizes across months (~1,600-1,700 PhD holders per month)
+- March ASEC has larger sample (~2,200) due to supplement design
+- All months have sufficient observations for reliable estimates
+
+## Notes on Data Quality
+
+### March ASEC Supplement
+
+March 2024 uses the Annual Social and Economic Supplement (ASEC), which:
+
+- Has a larger sample size (2,248 vs ~1,600-1,700 for other months)
+- Uses different weight variable (ASECWT instead of WTFINL)
+- Our processing pipeline handles this automatically
+
+### CPS Employment Status Codes
+
+Unemployment rates calculated using CPS EMPSTAT codes:
+
+- **Employed**: EMPSTAT in [10, 12]
+- **Unemployed**: EMPSTAT in [20-36]
+- **Unemployment Rate** = Unemployed / (Employed + Unemployed)
+
+All estimates use person weights (WTFINL or ASECWT) for population representativeness.
+
+## Next Steps
+
+1. **Extended Time Series**: Download 2000-2025 data for seasonal adjustment
+2. **Comparison Groups**: Calculate unemployment for other education levels
+3. **Demographic Breakdowns**: Analyze by age, sex, field of study
+4. **Statistical Modeling**: Implement seasonal adjustment and trend analysis using Stan/brms
