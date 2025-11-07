@@ -86,6 +86,17 @@ If you're not in the correct environment, the script provides connection instruc
 
 *See [Issue #2](https://github.com/jflournoy/phd-unemployment-model/issues/2) for Docker setup documentation (coming soon)*
 
+### Docker File Permissions
+
+Files created in Docker may be owned by root. Fix this automatically:
+
+```bash
+# From inside Docker container (after generating files)
+./scripts/set-ownership.sh
+```
+
+See [docs/DOCKER-PERMISSIONS.md](docs/DOCKER-PERMISSIONS.md) for detailed solutions.
+
 ## Project Structure
 
 ```
