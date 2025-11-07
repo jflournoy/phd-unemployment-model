@@ -10,6 +10,8 @@
 #' In CPS, EDUC codes education levels. Code 125 = Doctorate degree.
 #' This function is typically the first step in analyzing PhD-specific unemployment.
 #'
+#' Uses data.table for efficient filtering of large datasets.
+#'
 #' @examples
 #' \dontrun{
 #' cps_data <- readRDS("data-raw/ipums_data.rds")
@@ -27,8 +29,14 @@ filter_phd_holders <- function(cps_data) {
     stop("cps_data must contain EDUC variable")
   }
 
-  # Filter to PhD holders (EDUC == 125)
-  phd_data <- cps_data[cps_data$EDUC == 125, ]
+  # Use data.table for efficient filtering
+  if (!requireNamespace("data.table", quietly = TRUE)) {
+    # Fallback to base R if data.table not available
+    phd_data <- cps_data[cps_data$EDUC == 125, ]
+  } else {
+    dt <- data.table::as.data.table(cps_data)
+    phd_data <- as.data.frame(dt[EDUC == 125])
+  }
 
   return(phd_data)
 }
@@ -160,40 +168,54 @@ calculate_monthly_unemployment <- function(data) {
     stop("data missing required variables: ", paste(missing_vars, collapse = ", "))
   }
 
-  # Get unique year-month combinations
-  year_months <- unique(data[, c("YEAR", "MONTH")])
+  # Use data.table for efficient single-pass aggregation
+  if (!requireNamespace("data.table", quietly = TRUE)) {
+    stop("data.table package required for efficient processing. Install with: install.packages('data.table')")
+  }
 
-  # Calculate unemployment rate for each month
-  results <- lapply(seq_len(nrow(year_months)), function(i) {
-    year <- year_months$YEAR[i]
-    month <- year_months$MONTH[i]
+  dt <- data.table::as.data.table(data)
 
-    # Filter to this month
-    month_data <- data[data$YEAR == year & data$MONTH == month, ]
+  # Determine which weight variable to use
+  if ("ASECWT" %in% names(dt) && any(!is.na(dt$ASECWT))) {
+    weight_var <- "ASECWT"
+  } else {
+    weight_var <- "WTFINL"
+  }
 
-    # Calculate unemployment rate
-    unemp_rate <- calculate_unemployment_rate(month_data)
+  # Single-pass aggregation: calculate unemployment rate for all year-months at once
+  # Define employed and unemployed status
+  dt[, `:=`(
+    is_employed = EMPSTAT %in% c(10, 12),
+    is_unemployed = EMPSTAT %in% c(20, 21, 22)
+  )]
 
-    # Return result
-    data.frame(
-      YEAR = year,
-      MONTH = month,
-      unemployment_rate = unemp_rate,
-      n_obs = nrow(month_data),
-      stringsAsFactors = FALSE
-    )
-  })
+  # Filter to labor force only
+  dt_lf <- dt[is_employed | is_unemployed]
 
-  # Combine results
-  result_df <- do.call(rbind, results)
+  # Calculate unemployment rate by year-month
+  result_dt <- dt_lf[, {
+    weight_col <- get(weight_var)
+    total_unemployed_weight <- sum(weight_col[is_unemployed], na.rm = TRUE)
+    total_lf_weight <- sum(weight_col, na.rm = TRUE)
+
+    if (total_lf_weight == 0) {
+      list(
+        unemployment_rate = NA_real_,
+        n_obs = .N
+      )
+    } else {
+      list(
+        unemployment_rate = total_unemployed_weight / total_lf_weight,
+        n_obs = .N
+      )
+    }
+  }, by = .(YEAR, MONTH)]
 
   # Sort chronologically
-  result_df <- result_df[order(result_df$YEAR, result_df$MONTH), ]
+  data.table::setorder(result_dt, YEAR, MONTH)
 
-  # Reset row names
-  rownames(result_df) <- NULL
-
-  return(result_df)
+  # Convert back to data.frame for compatibility
+  as.data.frame(result_dt)
 }
 
 #' Process CPS Data Pipeline
