@@ -141,3 +141,92 @@ test_that("placeholder data mimics CPS structure", {
   expect_true(is.numeric(data$EMPSTAT))
   expect_gt(min(data$WTFINL), 0)
 })
+
+# TDD RED: Test for full 2000-2025 dataset download
+test_that("download_full_cps_dataset generates samples for 2000-2025", {
+  # Test that we can generate the correct sample list for full time series
+  samples <- generate_cps_samples(2000, 2025)
+
+  # Should have samples from multiple years
+  expect_gt(length(samples), 200)  # At least 200 months (~17 years * 12)
+
+  # Samples should follow cpsYYYY_MMx format
+  expect_true(all(grepl("^cps\\d{4}_\\d{2}[bs]$", samples)))
+
+  # Should start with 2000 samples
+  expect_true(any(grepl("^cps2000_", samples)))
+
+  # Should include recent samples (2024 or 2025)
+  expect_true(any(grepl("^cps202[45]_", samples)))
+})
+
+test_that("download_full_cps_dataset creates complete time series", {
+  skip_if(Sys.getenv("IPUMS_API_KEY") == "", "IPUMS_API_KEY not set")
+  skip_if(Sys.getenv("RUN_FULL_DOWNLOAD_TEST") != "true",
+          "Full download test disabled (set RUN_FULL_DOWNLOAD_TEST=true to enable)")
+
+  temp_dir <- tempfile()
+  on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
+
+  # Generate full sample list for 2000-2025
+  samples <- generate_cps_samples(2000, 2025)
+
+  message("Downloading ", length(samples), " monthly CPS samples from 2000-2025")
+  message("This may take 30+ minutes...")
+
+  # Download the full dataset
+  result <- download_ipums_data(
+    output_dir = temp_dir,
+    samples = samples,
+    variables = c("YEAR", "MONTH", "EMPSTAT", "EDUC", "AGE", "SEX", "WTFINL"),
+    use_api = TRUE,
+    collection = "cps",
+    extract_description = "PhD unemployment analysis 2000-2025 full time series"
+  )
+
+  # Verify the download succeeded
+  expect_true(file.exists(result$file_path))
+  expect_true("extract_info" %in% names(result))
+
+  # Load and verify data
+  data <- readRDS(result$file_path)
+
+  # Should have data from multiple years
+  expect_true(2000 %in% data$YEAR)
+  expect_true(max(data$YEAR) >= 2024)
+
+  # Should have all 12 months represented
+  expect_equal(sort(unique(data$MONTH)), 1:12)
+
+  # Should have substantial sample size (millions of observations)
+  expect_gt(nrow(data), 1000000)
+
+  # Should have required variables
+  required_vars <- c("YEAR", "MONTH", "EMPSTAT", "EDUC", "WTFINL")
+  expect_true(all(required_vars %in% names(data)))
+})
+
+test_that("full dataset includes sufficient PhD observations", {
+  skip_if(Sys.getenv("IPUMS_API_KEY") == "", "IPUMS_API_KEY not set")
+  skip_if(Sys.getenv("RUN_FULL_DOWNLOAD_TEST") != "true",
+          "Full download test disabled")
+  skip_if(!file.exists("data-raw/ipums_data.rds"),
+          "Full dataset not yet downloaded")
+
+  # Load the full dataset
+  data <- readRDS("data-raw/ipums_data.rds")
+
+  # Filter to doctorate holders (EDUC == 125 in CPS)
+  phd_data <- data[data$EDUC == 125, ]
+
+  # Should have thousands of PhD observations per year
+  expect_gt(nrow(phd_data), 10000)
+
+  # Should span the full time range
+  expect_true(2000 %in% phd_data$YEAR)
+  expect_true(max(phd_data$YEAR) >= 2024)
+
+  # Should have sufficient observations per month for stable estimates
+  monthly_counts <- aggregate(YEAR ~ YEAR + MONTH, data = phd_data, FUN = length)
+  expect_true(all(monthly_counts$YEAR >= 50))  # At least 50 PhDs per month
+})

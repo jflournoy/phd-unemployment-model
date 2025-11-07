@@ -175,3 +175,126 @@ test_that("validate_data_completeness returns TRUE for complete data", {
 
   expect_true(result)
 })
+
+# TDD RED: Tests for multi-year completeness validation
+test_that("generate_completeness_report handles multi-year data", {
+  source(here::here("R", "data-completeness.R"))
+
+  # Data spanning multiple years
+  test_data <- data.frame(
+    YEAR = c(rep(2000, 24), rep(2001, 24)),
+    MONTH = rep(1:12, 4),
+    EMPSTAT = rep(10, 48),
+    EDUC = rep(125, 48),
+    WTFINL = rep(1000, 48)
+  )
+
+  result <- generate_completeness_report(test_data,
+                                          start_year = 2000,
+                                          end_year = 2001)
+
+  # Should have one row per year-month combination
+  expect_equal(nrow(result), 24)  # 2 years × 12 months
+
+  # Should have both years represented
+  expect_true(2000 %in% result$year)
+  expect_true(2001 %in% result$year)
+
+  # Each year should have all 12 months
+  expect_equal(sum(result$year == 2000), 12)
+  expect_equal(sum(result$year == 2001), 12)
+})
+
+test_that("generate_completeness_report identifies missing year-month combinations", {
+  source(here::here("R", "data-completeness.R"))
+
+  # Data with missing year-month: missing Jan 2001
+  test_data <- data.frame(
+    YEAR = c(rep(2000, 24), rep(2001, 22)),
+    MONTH = c(rep(1:12, 2), 2:12, 2:12),
+    EMPSTAT = rep(10, 46),
+    EDUC = rep(125, 46),
+    WTFINL = rep(1000, 46)
+  )
+
+  result <- generate_completeness_report(test_data,
+                                          start_year = 2000,
+                                          end_year = 2001)
+
+  # Should still have 24 rows (all year-month combinations)
+  expect_equal(nrow(result), 24)
+
+  # Jan 2001 should be flagged as missing
+  jan_2001 <- result[result$year == 2001 & result$month == 1, ]
+  expect_equal(nrow(jan_2001), 1)
+  expect_false(jan_2001$has_data)
+})
+
+test_that("validate_completeness_time_range validates 2000-2025 data", {
+  source(here::here("R", "data-completeness.R"))
+
+  # Simulate 2000-2025 data (26 years × 12 months = 312 combinations)
+  n_years <- 26
+  n_obs_per_month <- 10
+
+  test_data <- data.frame(
+    YEAR = rep(2000:2025, each = 12 * n_obs_per_month),
+    MONTH = rep(rep(1:12, each = n_obs_per_month), n_years),
+    EMPSTAT = rep(10, n_years * 12 * n_obs_per_month),
+    EDUC = rep(125, n_years * 12 * n_obs_per_month),
+    WTFINL = rep(1000, n_years * 12 * n_obs_per_month)
+  )
+
+  # Should validate successfully (use min_obs = 5 since test data has 10 obs/month)
+  result <- validate_completeness_time_range(test_data,
+                                             start_year = 2000,
+                                             end_year = 2025,
+                                             min_obs = 5)
+
+  expect_type(result, "logical")
+  expect_true(result)
+})
+
+test_that("plot_seasonal_pattern_by_year function exists", {
+  source(here::here("R", "data-completeness.R"))
+  expect_true(exists("plot_seasonal_pattern_by_year", mode = "function"))
+})
+
+test_that("plot_seasonal_pattern_by_year creates plot with year lines", {
+  source(here::here("R", "data-completeness.R"))
+
+  # Create multi-year test data with varying sample sizes by month
+  test_data <- data.frame(
+    YEAR = rep(2023:2025, each = 12),
+    MONTH = rep(1:12, 3),
+    n_obs = rep(c(50000, 51000, 52000, 53000, 54000, 55000,
+                  56000, 57000, 58000, 59000, 60000, 61000), 3) +
+           rep(c(0, 1000, 2000), each = 12)  # Slight variation by year
+  )
+
+  # Should not error when creating plot
+  expect_no_error({
+    plot_seasonal_pattern_by_year(test_data,
+                                   y_var = "n_obs",
+                                   y_label = "Sample Size",
+                                   title = "Test Plot")
+  })
+})
+
+test_that("plot_seasonal_pattern_by_year handles single year gracefully", {
+  source(here::here("R", "data-completeness.R"))
+
+  # Single year data
+  test_data <- data.frame(
+    YEAR = rep(2024, 12),
+    MONTH = 1:12,
+    n_obs = seq(50000, 61000, length.out = 12)
+  )
+
+  # Should still work with just one line
+  expect_no_error({
+    plot_seasonal_pattern_by_year(test_data,
+                                   y_var = "n_obs",
+                                   y_label = "Sample Size")
+  })
+})

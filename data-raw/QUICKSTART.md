@@ -39,14 +39,38 @@ print(summary(data))
 
 **Large download (~30-60 min), needed for seasonal adjustment**
 
-```r
-source("data-raw/ipums-cps-config.R")
+### Using the Download Script (Recommended)
 
-# Full 25 years of monthly data
-result <- download_cps_unemployment_data(
-  start_year = 2000,
-  end_year = 2025,
-  variable_groups = c("time", "employment", "education", "weights", "demographics")
+```bash
+# Set your API key
+export IPUMS_API_KEY='your-key-here'
+
+# Run the download script
+Rscript data-raw/download-full-dataset.R
+```
+
+The script will:
+- Generate sample list for all available months (2000-2025)
+- Submit extract request to IPUMS
+- Wait for extract to complete
+- Download and save to `data-raw/ipums_data.rds`
+- Display summary statistics
+
+### Using R Directly
+
+```r
+source(here::here("R", "ipums-download.R"))
+
+# Generate samples for full time series
+samples <- generate_cps_samples(2000, 2025)
+
+# Download the data
+result <- download_ipums_data(
+  output_dir = "data-raw",
+  use_api = TRUE,
+  samples = samples,
+  variables = c("YEAR", "MONTH", "EMPSTAT", "EDUC", "AGE", "SEX", "WTFINL"),
+  collection = "cps"
 )
 ```
 

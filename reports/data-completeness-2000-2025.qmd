@@ -1,0 +1,324 @@
+---
+title: "Data Completeness Report: CPS 2000-2025"
+author: "PhD Unemployment Analysis Project"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: false
+    embed-resources: true
+    theme: cosmo
+    fig-width: 12
+    fig-height: 8
+---
+
+## Executive Summary
+
+This report validates the completeness and quality of the full CPS (Current Population Survey) dataset spanning 2000-2025. This 25-year time series enables:
+
+- Long-term unemployment trend analysis
+- Multiple seasonal cycle modeling
+- Economic recession impact assessment
+- Structural change detection
+
+## Data Loading and Overview
+
+```{r setup, message=FALSE}
+library(here)
+source(here("R", "data-completeness.R"))
+
+# Load full CPS data
+cps_data <- readRDS(here("data-raw", "ipums_data.rds"))
+
+cat("Dataset dimensions:", format(nrow(cps_data), big.mark = ","),
+    "rows ×", ncol(cps_data), "columns\n")
+cat("Year coverage:", min(cps_data$YEAR), "-", max(cps_data$YEAR), "\n")
+cat("Total months:", length(unique(paste(cps_data$YEAR, cps_data$MONTH))), "\n")
+cat("Expected months (2000-2025):", 26 * 12, "\n")
+```
+
+## Variable Coverage
+
+```{r variables}
+# Display all variables in dataset
+cat("Variables in dataset:\n")
+cat(paste("-", names(cps_data), collapse = "\n"), "\n")
+```
+
+## Completeness Analysis
+
+### Full Time Series Check (2000-2025)
+
+```{r completeness_full}
+# Generate completeness report for all 26 years
+report_full <- generate_completeness_report(
+  cps_data,
+  start_year = 2000,
+  end_year = 2025,
+  expected_months = 1:12,
+  min_obs = 1000,  # Higher threshold for real CPS data
+  required_vars = c("YEAR", "MONTH", "EMPSTAT", "EDUC", "WTFINL")
+)
+
+# Summary statistics
+n_expected <- nrow(report_full)
+n_with_data <- sum(report_full$has_data)
+n_complete <- sum(report_full$issue == "OK")
+
+cat("=== Time Series Completeness Summary ===\n\n")
+cat("Expected year-months:", n_expected, "(26 years × 12 months)\n")
+cat("Year-months with data:", n_with_data,
+    sprintf("(%.1f%%)\n", 100 * n_with_data / n_expected))
+cat("Year-months complete:", n_complete,
+    sprintf("(%.1f%%)\n", 100 * n_complete / n_expected))
+cat("\nTotal observations:", format(sum(report_full$n_obs), big.mark = ","), "\n")
+cat("Avg obs/month:", format(round(mean(report_full$n_obs[report_full$has_data])), big.mark = ","), "\n")
+```
+
+### Missing Data Report
+
+```{r missing_data}
+# Identify any missing year-month combinations
+missing <- report_full[!report_full$has_data, ]
+
+if (nrow(missing) > 0) {
+  cat("\n⚠ Missing Year-Month Combinations:\n\n")
+  for (i in seq_len(nrow(missing))) {
+    cat(sprintf("  - %d-%s\n", missing$year[i], month.abb[missing$month[i]]))
+  }
+} else {
+  cat("\n✓ No missing year-month combinations!\n")
+}
+
+# Show any issues (excluding "OK")
+issues <- report_full[report_full$issue != "OK", ]
+if (nrow(issues) > 0 && nrow(issues) <= 20) {
+  cat("\nIssues found:\n")
+  for (i in seq_len(nrow(issues))) {
+    cat(sprintf("  - %d-%s: %s\n",
+                issues$year[i], month.abb[issues$month[i]], issues$issue[i]))
+  }
+} else if (nrow(issues) > 20) {
+  cat(sprintf("\n%d year-months have issues (see full report below)\n", nrow(issues)))
+}
+```
+
+## Visualization: Sample Sizes Over Time
+
+### Seasonal Pattern Across Years
+
+```{r seasonal_pattern, fig.height=8}
+# Create seasonal pattern plot showing all years
+# Rename columns to match expected format (uppercase)
+report_plot <- report_full
+names(report_plot)[names(report_plot) == "year"] <- "YEAR"
+names(report_plot)[names(report_plot) == "month"] <- "MONTH"
+
+plot_seasonal_pattern_by_year(
+  report_plot,
+  y_var = "n_obs",
+  y_label = "Sample Size (observations)",
+  title = "CPS Monthly Sample Sizes by Year (2000-2025)",
+  highlight_years = c(2000, 2010, 2020, 2025)
+)
+
+# Add annotation for March bump (ASEC)
+text(3, max(report_full$n_obs) * 0.95,
+     "March spike: ASEC supplement",
+     col = "blue", cex = 0.9, pos = 4)
+```
+
+### Sample Size Trends
+
+```{r sample_trends, fig.height=6}
+# Annual average sample sizes
+annual_avg <- aggregate(n_obs ~ year, data = report_full[report_full$has_data, ], FUN = mean)
+
+par(mar = c(5, 4, 4, 2) + 0.1)
+plot(annual_avg$year, annual_avg$n_obs,
+     type = "b", pch = 19, col = "steelblue", lwd = 2,
+     main = "Average Monthly Sample Size by Year",
+     xlab = "Year", ylab = "Average Sample Size",
+     ylim = c(0, max(annual_avg$n_obs) * 1.1))
+
+# Add grid
+grid(col = "lightgray", lty = "dotted")
+
+# Add value labels for key years
+key_years <- c(2000, 2005, 2010, 2015, 2020, 2025)
+key_data <- annual_avg[annual_avg$year %in% key_years, ]
+text(key_data$year, key_data$n_obs,
+     format(round(key_data$n_obs), big.mark = ","),
+     pos = 3, cex = 0.7)
+```
+
+## PhD Subsample Analysis
+
+```{r phd_analysis}
+# Filter to PhD holders (EDUC == 125 for CPS doctorate)
+phd_data <- cps_data[cps_data$EDUC == 125, ]
+
+cat("\n=== PhD Subsample (2000-2025) ===\n\n")
+cat("Total PhD observations:", format(nrow(phd_data), big.mark = ","), "\n")
+cat("Percentage of total:", sprintf("%.2f%%", 100 * nrow(phd_data) / nrow(cps_data)), "\n")
+
+# PhD observations by year
+phd_by_year <- table(phd_data$YEAR)
+cat("\nPhD observations per year:\n")
+cat("  Mean:", format(round(mean(phd_by_year)), big.mark = ","), "\n")
+cat("  Median:", format(median(phd_by_year), big.mark = ","), "\n")
+cat("  Min:", format(min(phd_by_year), big.mark = ","),
+    "(", names(which.min(phd_by_year)), ")\n")
+cat("  Max:", format(max(phd_by_year), big.mark = ","),
+    "(", names(which.max(phd_by_year)), ")\n")
+
+# Monthly counts
+phd_monthly <- as.data.frame(table(phd_data$YEAR, phd_data$MONTH))
+names(phd_monthly) <- c("YEAR", "MONTH", "n_phds")
+phd_monthly$YEAR <- as.numeric(as.character(phd_monthly$YEAR))
+phd_monthly$MONTH <- as.numeric(as.character(phd_monthly$MONTH))
+phd_monthly <- phd_monthly[phd_monthly$n_phds > 0, ]  # Remove zeros
+cat("\nAverage PhDs per month:", round(mean(phd_monthly$n_phds)), "\n")
+```
+
+### PhD Sample Size Seasonal Pattern
+
+```{r phd_seasonal, fig.height=8}
+# Add year column for plotting
+phd_monthly_plot <- phd_monthly
+names(phd_monthly_plot)[1] <- "YEAR"
+
+plot_seasonal_pattern_by_year(
+  phd_monthly_plot,
+  y_var = "n_phds",
+  y_label = "PhD Observations",
+  title = "Monthly PhD Sample Sizes by Year (2000-2025)",
+  highlight_years = c(2000, 2010, 2020, 2025)
+)
+```
+
+## Data Quality Metrics
+
+### Completeness by Decade
+
+```{r decade_completeness}
+report_full$decade <- floor(report_full$year / 10) * 10
+
+decade_summary <- aggregate(
+  cbind(n_obs, has_data = as.numeric(has_data)) ~ decade,
+  data = report_full,
+  FUN = function(x) c(mean = mean(x), sum = sum(x))
+)
+
+cat("\n=== Completeness by Decade ===\n\n")
+for (d in unique(report_full$decade)) {
+  decade_data <- report_full[report_full$decade == d, ]
+  pct_complete <- 100 * sum(decade_data$issue == "OK") / nrow(decade_data)
+  avg_sample <- mean(decade_data$n_obs[decade_data$has_data])
+
+  cat(sprintf("%ds: %.1f%% complete, avg sample: %s\n",
+              d, pct_complete, format(round(avg_sample), big.mark = ",")))
+}
+```
+
+### Weight Variable Coverage
+
+```{r weights}
+cat("\n=== Weight Variable Coverage ===\n\n")
+
+# Check WTFINL coverage by year
+wtfinl_by_year <- aggregate(WTFINL ~ YEAR, data = cps_data,
+                             FUN = function(x) sum(!is.na(x)))
+names(wtfinl_by_year)[2] <- "n_with_wtfinl"
+
+# Calculate coverage percentage
+total_by_year <- table(cps_data$YEAR)
+wtfinl_by_year$total <- as.numeric(total_by_year[as.character(wtfinl_by_year$YEAR)])
+wtfinl_by_year$pct <- 100 * wtfinl_by_year$n_with_wtfinl / wtfinl_by_year$total
+
+cat("WTFINL coverage across all years:\n")
+cat("  Min:", sprintf("%.2f%%", min(wtfinl_by_year$pct)), "\n")
+cat("  Max:", sprintf("%.2f%%", max(wtfinl_by_year$pct)), "\n")
+cat("  Mean:", sprintf("%.2f%%", mean(wtfinl_by_year$pct)), "\n")
+
+if (all(wtfinl_by_year$pct >= 99)) {
+  cat("\n✓ Excellent weight coverage across all years\n")
+}
+```
+
+## Validation Results
+
+```{r validation}
+# Comprehensive validation
+is_complete <- validate_completeness_time_range(
+  cps_data,
+  start_year = 2000,
+  end_year = 2025,
+  expected_months = 1:12,
+  min_obs = 1000,
+  required_vars = c("YEAR", "MONTH", "EMPSTAT", "EDUC", "WTFINL")
+)
+
+cat("\n=== Overall Data Quality Certification ===\n\n")
+
+if (is_complete) {
+  cat("✓ PASS: 2000-2025 dataset meets all quality criteria!\n\n")
+  cat("  ✓ All expected year-month combinations present\n")
+  cat("  ✓ All months meet minimum sample size threshold\n")
+  cat("  ✓ All required variables have complete data\n")
+  cat("  ✓ Weight variables properly distributed\n\n")
+  cat("Dataset APPROVED for:\n")
+  cat("  - Long-term unemployment trend analysis\n")
+  cat("  - Seasonal adjustment with multiple cycles\n")
+  cat("  - Economic recession impact studies\n")
+  cat("  - Structural change detection\n")
+  cat("  - Multi-decade comparative analysis\n")
+} else {
+  cat("⚠ ISSUES DETECTED:\n\n")
+  cat("Review the missing data and issues sections above.\n")
+  cat("Some year-month combinations may not meet quality thresholds.\n")
+}
+```
+
+## Export Results
+
+```{r export}
+# Save full completeness report
+output_file <- here("data", "completeness_report_2000_2025.csv")
+write.csv(report_full, output_file, row.names = FALSE)
+cat("\nFull completeness report saved to:", output_file, "\n")
+
+# Save PhD monthly counts
+phd_output <- here("data", "phd_monthly_counts_2000_2025.csv")
+write.csv(phd_monthly, phd_output, row.names = FALSE)
+cat("PhD monthly counts saved to:", phd_output, "\n")
+```
+
+## Conclusion
+
+This comprehensive completeness check validates the full 2000-2025 CPS dataset, ensuring:
+
+1. **Temporal Coverage**: All expected year-month combinations from January 2000 through the latest 2025 data
+2. **Sample Quality**: Sufficient sample sizes for robust statistical inference
+3. **Variable Completeness**: Core variables (employment status, education, weights) have minimal missing data
+4. **PhD Subsample**: Adequate PhD observations for unemployment rate estimation across the full time series
+
+The dataset is ready for advanced time series modeling including:
+- GAMs with seasonal smooths
+- Multiple seasonal components (monthly + annual cycles)
+- Structural break detection
+- Recession impact analysis
+- Long-term trend estimation
+
+For methodology details, see:
+- [R/data-completeness.R](../R/data-completeness.R) - Validation functions
+- [tests/testthat/test-data-completeness-report.R](../tests/testthat/test-data-completeness-report.R) - Automated tests
+- [data-raw/DATA-REQUIREMENTS.md](../data-raw/DATA-REQUIREMENTS.md) - Data specifications
+
+---
+
+**Report Generated**: `r format(Sys.time(), '%Y-%m-%d %H:%M:%S %Z')`
+**Data File**: `data-raw/ipums_data.rds`
+**Dataset Size**: `r format(nrow(cps_data), big.mark = ",")` observations
+**Time Span**: `r min(cps_data$YEAR)`-`r max(cps_data$YEAR)` (`r max(cps_data$YEAR) - min(cps_data$YEAR) + 1` years)
