@@ -214,13 +214,6 @@ calculate_monthly_unemployment <- function(data) {
 
   dt <- data.table::as.data.table(data)
 
-  # Determine which weight variable to use
-  if ("ASECWT" %in% names(dt) && any(!is.na(dt$ASECWT))) {
-    weight_var <- "ASECWT"
-  } else {
-    weight_var <- "WTFINL"
-  }
-
   # Single-pass aggregation: calculate unemployment rate for all year-months at once
   # Define employed and unemployed status
   dt[, `:=`(
@@ -231,13 +224,25 @@ calculate_monthly_unemployment <- function(data) {
   # Filter to labor force only
   dt_lf <- dt[is_employed | is_unemployed]
 
+  # Check if ASECWT exists for use in March
+  has_asecwt <- "ASECWT" %in% names(dt_lf)
+
   # Calculate unemployment rate by year-month
+  # Use ASECWT for March (MONTH == 3) if available, WTFINL for all other months
   result_dt <- dt_lf[, {
-    weight_col <- get(weight_var)
+    # Select appropriate weight variable
+    # Use ASECWT for March (MONTH == 3) if available and has non-zero values
+    # Use WTFINL for all other months
+    if (has_asecwt && .BY$MONTH == 3 && any(!is.na(ASECWT) & ASECWT > 0)) {
+      weight_col <- ASECWT
+    } else {
+      weight_col <- WTFINL
+    }
+
     total_unemployed_weight <- sum(weight_col[is_unemployed], na.rm = TRUE)
     total_lf_weight <- sum(weight_col, na.rm = TRUE)
 
-    if (total_lf_weight == 0) {
+    if (total_lf_weight == 0 || is.na(total_lf_weight)) {
       list(
         unemployment_rate = NA_real_,
         n_obs = .N
