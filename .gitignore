@@ -148,3 +148,4 @@ renv/staging/
 # - plans/ (project planning)
 # - reports/ (Quarto HTML reports and support files - commit for easy viewing)
 
+tests/testthat/Rplots.pdf
