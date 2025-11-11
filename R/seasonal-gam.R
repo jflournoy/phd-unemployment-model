@@ -407,6 +407,218 @@ plot_seasonal_decomposition <- function(model, data) {
   invisible(NULL)
 }
 
+#' Plot Seasonal Decomposition using ggplot2
+#'
+#' Creates diagnostic plots showing observed vs fitted values, trend component,
+#' and seasonal pattern using ggplot2 for better customization and appearance.
+#'
+#' @param model mgcv GAM model object
+#' @param data Data frame. Original data used to fit model
+#'
+#' @return List of three ggplot objects:
+#'   \item{panel1}{Observed vs fitted values}
+#'   \item{panel2}{Trend component with confidence bands}
+#'   \item{panel3}{Seasonal pattern with error bars}
+#'
+#' @details
+#' This is the ggplot2 version of plot_seasonal_decomposition(). It returns
+#' a list of ggplot objects that can be combined with patchwork or gridExtra,
+#' or displayed individually for customization.
+#'
+#' @examples
+#' \dontrun{
+#' sim_data <- simulate_seasonal_unemployment(n_years = 5)
+#' model <- fit_seasonal_gam(sim_data)
+#' plots <- plot_seasonal_decomposition_ggplot(model, sim_data)
+#'
+#' # Display all three panels
+#' library(patchwork)
+#' plots[[1]] / plots[[2]] / plots[[3]]
+#' }
+#'
+#' @export
+plot_seasonal_decomposition_ggplot <- function(model, data) {
+  if (!inherits(model, "gam")) {
+    stop("model must be a GAM object from mgcv")
+  }
+
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("ggplot2 package required. Install with: install.packages('ggplot2')")
+  }
+
+  # Extract components
+  fitted_vals <- fitted(model)
+  trend <- extract_trend_component(model, data)
+  seasonal <- extract_seasonal_component(model, data)
+
+  # Panel 1: Observed vs fitted
+  panel1_data <- data.frame(
+    time_index = data$time_index,
+    observed = data$unemployment_rate,
+    fitted = fitted_vals
+  )
+
+  panel1 <- ggplot2::ggplot(panel1_data, ggplot2::aes(x = time_index)) +
+    ggplot2::geom_line(ggplot2::aes(y = observed, color = "Observed"), linewidth = 0.5) +
+    ggplot2::geom_line(ggplot2::aes(y = fitted, color = "Fitted"), linewidth = 1) +
+    ggplot2::scale_color_manual(values = c("Observed" = "gray50", "Fitted" = "blue")) +
+    ggplot2::labs(
+      title = "Observed vs Fitted Values",
+      x = "Time Index",
+      y = "Unemployment Rate",
+      color = NULL
+    ) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(legend.position = "top")
+
+  # Panel 2: Trend component
+  panel2_data <- data.frame(
+    time_index = trend$time_index,
+    trend_effect = trend$trend_effect,
+    lower = trend$trend_effect - 2 * trend$se,
+    upper = trend$trend_effect + 2 * trend$se
+  )
+
+  panel2 <- ggplot2::ggplot(panel2_data, ggplot2::aes(x = time_index, y = trend_effect)) +
+    ggplot2::geom_ribbon(ggplot2::aes(ymin = lower, ymax = upper),
+                        fill = "darkgreen", alpha = 0.2) +
+    ggplot2::geom_line(color = "darkgreen", linewidth = 1) +
+    ggplot2::labs(
+      title = "Estimated Time Trend",
+      x = "Time Index",
+      y = "Trend Effect"
+    ) +
+    ggplot2::theme_minimal()
+
+  # Panel 3: Seasonal component
+  panel3_data <- data.frame(
+    month = seasonal$month,
+    month_name = factor(month.abb[seasonal$month], levels = month.abb),
+    seasonal_effect = seasonal$seasonal_effect,
+    lower = seasonal$seasonal_effect - 2 * seasonal$se,
+    upper = seasonal$seasonal_effect + 2 * seasonal$se
+  )
+
+  panel3 <- ggplot2::ggplot(panel3_data, ggplot2::aes(x = month_name, y = seasonal_effect)) +
+    ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+    ggplot2::geom_errorbar(ggplot2::aes(ymin = lower, ymax = upper),
+                          width = 0.2, color = "red") +
+    ggplot2::geom_line(ggplot2::aes(group = 1), color = "red", linewidth = 1) +
+    ggplot2::geom_point(color = "red", size = 3) +
+    ggplot2::labs(
+      title = "Estimated Seasonal Pattern",
+      x = "Month",
+      y = "Seasonal Effect"
+    ) +
+    ggplot2::theme_minimal() +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+
+  # Return list of plots
+  list(
+    observed_fitted = panel1,
+    trend = panel2,
+    seasonal = panel3
+  )
+}
+
+#' Create Time Series ggplot Visualization
+#'
+#' Creates two-panel time series visualization showing observed vs fitted
+#' unemployment rates over time and the seasonal pattern across months.
+#'
+#' @param data Data frame with unemployment rates and fitted values
+#' @param seasonal_effects Data frame with seasonal effects by month
+#'
+#' @return List of two ggplot objects:
+#'   \item{timeseries}{Observed vs fitted time series}
+#'   \item{seasonal}{Seasonal pattern with confidence intervals}
+#'
+#' @details
+#' This function creates publication-quality time series plots using ggplot2.
+#' The data frame should have columns: date, unemployment_rate, fitted.
+#' The seasonal_effects frame should have: month, seasonal_effect, se.
+#'
+#' @examples
+#' \dontrun{
+#' # After fitting model and extracting components
+#' plots <- create_timeseries_ggplot(phd_monthly, seasonal_effects)
+#'
+#' # Display both panels
+#' library(patchwork)
+#' plots[[1]] / plots[[2]]
+#' }
+#'
+#' @export
+create_timeseries_ggplot <- function(data, seasonal_effects) {
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("ggplot2 package required. Install with: install.packages('ggplot2')")
+  }
+
+  # Check for required columns
+  if (!"date" %in% names(data)) {
+    stop("data must contain 'date' column")
+  }
+  if (!"unemployment_rate" %in% names(data)) {
+    stop("data must contain 'unemployment_rate' column")
+  }
+  if (!"fitted" %in% names(data)) {
+    stop("data must contain 'fitted' column")
+  }
+
+  # Panel 1: Time series with observed and fitted
+  ts_data <- data.frame(
+    date = data$date,
+    observed = data$unemployment_rate,
+    fitted = data$fitted
+  )
+
+  panel1 <- ggplot2::ggplot(ts_data, ggplot2::aes(x = date)) +
+    ggplot2::geom_line(ggplot2::aes(y = observed, color = "Observed"), linewidth = 0.8) +
+    ggplot2::geom_line(ggplot2::aes(y = fitted, color = "GAM Fitted"),
+                      linewidth = 0.8, linetype = "dashed") +
+    ggplot2::scale_color_manual(values = c("Observed" = "black", "GAM Fitted" = "red")) +
+    ggplot2::labs(
+      title = "PhD Unemployment Rate: Observed vs Fitted (Monthly Data 2000-2025)",
+      x = "Date",
+      y = "Unemployment Rate",
+      color = NULL
+    ) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(
+      legend.position = "top",
+      plot.title = ggplot2::element_text(size = 11)
+    )
+
+  # Panel 2: Seasonal pattern
+  seasonal_data <- data.frame(
+    month = seasonal_effects$month,
+    month_name = factor(month.abb[seasonal_effects$month], levels = month.abb),
+    seasonal_effect = seasonal_effects$seasonal_effect,
+    lower = seasonal_effects$seasonal_effect - 2 * seasonal_effects$se,
+    upper = seasonal_effects$seasonal_effect + 2 * seasonal_effects$se
+  )
+
+  panel2 <- ggplot2::ggplot(seasonal_data, ggplot2::aes(x = month_name, y = seasonal_effect)) +
+    ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+    ggplot2::geom_errorbar(ggplot2::aes(ymin = lower, ymax = upper),
+                          width = 0.2, color = "blue", linewidth = 0.5) +
+    ggplot2::geom_line(ggplot2::aes(group = 1), color = "blue", linewidth = 1) +
+    ggplot2::geom_point(color = "blue", size = 3) +
+    ggplot2::labs(
+      title = "Seasonal Pattern in PhD Unemployment",
+      x = "Month",
+      y = "Seasonal Effect"
+    ) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+
+  # Return list of plots
+  list(
+    timeseries = panel1,
+    seasonal = panel2
+  )
+}
+
 #' Validate Parameter Recovery
 #'
 #' Checks whether a fitted GAM model successfully recovers known parameters
