@@ -1,3 +1,39 @@
+#' Remove haven_labelled Classes from IPUMS Data
+#'
+#' Converts haven_labelled columns to base R types for compatibility with data.table.
+#'
+#' @param data Data frame with potential haven_labelled columns from IPUMS
+#'
+#' @return Data frame with haven_labelled classes removed
+#'
+#' @details
+#' IPUMS data loaded with ipumsr contains haven_labelled columns that can cause
+#' issues with data.table operations. This function strips the haven_labelled class
+#' while preserving the underlying integer/numeric values.
+#'
+#' @examples
+#' \dontrun{
+#' cps_data <- readRDS("data-raw/ipums_data.rds")
+#' cps_clean <- remove_haven_labels(cps_data)
+#' }
+#'
+#' @export
+remove_haven_labels <- function(data) {
+  if (!is.data.frame(data)) {
+    stop("data must be a data frame")
+  }
+
+  # Convert each column, removing haven_labelled class
+  for (col in names(data)) {
+    if (inherits(data[[col]], "haven_labelled")) {
+      # Strip haven_labelled class, keeping underlying integer/numeric
+      data[[col]] <- as.vector(data[[col]])
+    }
+  }
+
+  return(data)
+}
+
 #' Filter CPS Data to PhD Holders Only
 #'
 #' Extracts only respondents with doctoral degrees from CPS microdata.
@@ -28,6 +64,9 @@ filter_phd_holders <- function(cps_data) {
   if (!"EDUC" %in% names(cps_data)) {
     stop("cps_data must contain EDUC variable")
   }
+
+  # Remove haven_labelled classes for data.table compatibility
+  cps_data <- remove_haven_labels(cps_data)
 
   # Use data.table for efficient filtering
   if (!requireNamespace("data.table", quietly = TRUE)) {
