@@ -451,44 +451,88 @@ plot_seasonal_decomposition_ggplot <- function(model, data) {
   trend <- extract_trend_component(model, data)
   seasonal <- extract_seasonal_component(model, data)
 
-  # Panel 1: Observed vs fitted
-  panel1_data <- data.frame(
-    time_index = data$time_index,
-    observed = data$unemployment_rate,
-    fitted = fitted_vals
-  )
+  # Determine if we should use date or time_index for x-axis
+  use_date <- "date" %in% names(data)
 
-  panel1 <- ggplot2::ggplot(panel1_data, ggplot2::aes(x = time_index)) +
-    ggplot2::geom_line(ggplot2::aes(y = observed, color = "Observed"), linewidth = 0.5) +
-    ggplot2::geom_line(ggplot2::aes(y = fitted, color = "Fitted"), linewidth = 1) +
-    ggplot2::scale_color_manual(values = c("Observed" = "gray50", "Fitted" = "blue")) +
-    ggplot2::labs(
-      title = "Observed vs Fitted Values",
-      x = "Time Index",
-      y = "Unemployment Rate",
-      color = NULL
-    ) +
-    ggplot2::theme_minimal() +
-    ggplot2::theme(legend.position = "top")
+  # Panel 1: Observed vs fitted
+  if (use_date) {
+    panel1_data <- data.frame(
+      date = data$date,
+      time_index = data$time_index,
+      observed = data$unemployment_rate,
+      fitted = fitted_vals
+    )
+    panel1 <- ggplot2::ggplot(panel1_data, ggplot2::aes(x = date)) +
+      ggplot2::geom_line(ggplot2::aes(y = observed, color = "Observed"), linewidth = 0.5) +
+      ggplot2::geom_line(ggplot2::aes(y = fitted, color = "Fitted"), linewidth = 1) +
+      ggplot2::scale_color_manual(values = c("Observed" = "gray50", "Fitted" = "blue")) +
+      ggplot2::labs(
+        title = "Observed vs Fitted Values",
+        x = "Date",
+        y = "Unemployment Rate",
+        color = NULL
+      ) +
+      ggplot2::theme_minimal() +
+      ggplot2::theme(legend.position = "top")
+  } else {
+    panel1_data <- data.frame(
+      time_index = data$time_index,
+      observed = data$unemployment_rate,
+      fitted = fitted_vals
+    )
+    panel1 <- ggplot2::ggplot(panel1_data, ggplot2::aes(x = time_index)) +
+      ggplot2::geom_line(ggplot2::aes(y = observed, color = "Observed"), linewidth = 0.5) +
+      ggplot2::geom_line(ggplot2::aes(y = fitted, color = "Fitted"), linewidth = 1) +
+      ggplot2::scale_color_manual(values = c("Observed" = "gray50", "Fitted" = "blue")) +
+      ggplot2::labs(
+        title = "Observed vs Fitted Values",
+        x = "Time Index",
+        y = "Unemployment Rate",
+        color = NULL
+      ) +
+      ggplot2::theme_minimal() +
+      ggplot2::theme(legend.position = "top")
+  }
 
   # Panel 2: Trend component
-  panel2_data <- data.frame(
-    time_index = trend$time_index,
-    trend_effect = trend$trend_effect,
-    lower = trend$trend_effect - 2 * trend$se,
-    upper = trend$trend_effect + 2 * trend$se
-  )
-
-  panel2 <- ggplot2::ggplot(panel2_data, ggplot2::aes(x = time_index, y = trend_effect)) +
-    ggplot2::geom_ribbon(ggplot2::aes(ymin = lower, ymax = upper),
-                        fill = "darkgreen", alpha = 0.2) +
-    ggplot2::geom_line(color = "darkgreen", linewidth = 1) +
-    ggplot2::labs(
-      title = "Estimated Time Trend",
-      x = "Time Index",
-      y = "Trend Effect"
-    ) +
-    ggplot2::theme_minimal()
+  # Match date to trend data if available
+  if (use_date) {
+    trend_dates <- data$date[match(trend$time_index, data$time_index)]
+    panel2_data <- data.frame(
+      date = trend_dates,
+      time_index = trend$time_index,
+      trend_effect = trend$trend_effect,
+      lower = trend$trend_effect - 2 * trend$se,
+      upper = trend$trend_effect + 2 * trend$se
+    )
+    panel2 <- ggplot2::ggplot(panel2_data, ggplot2::aes(x = date, y = trend_effect)) +
+      ggplot2::geom_ribbon(ggplot2::aes(ymin = lower, ymax = upper),
+                          fill = "darkgreen", alpha = 0.2) +
+      ggplot2::geom_line(color = "darkgreen", linewidth = 1) +
+      ggplot2::labs(
+        title = "Estimated Time Trend",
+        x = "Date",
+        y = "Trend Effect"
+      ) +
+      ggplot2::theme_minimal()
+  } else {
+    panel2_data <- data.frame(
+      time_index = trend$time_index,
+      trend_effect = trend$trend_effect,
+      lower = trend$trend_effect - 2 * trend$se,
+      upper = trend$trend_effect + 2 * trend$se
+    )
+    panel2 <- ggplot2::ggplot(panel2_data, ggplot2::aes(x = time_index, y = trend_effect)) +
+      ggplot2::geom_ribbon(ggplot2::aes(ymin = lower, ymax = upper),
+                          fill = "darkgreen", alpha = 0.2) +
+      ggplot2::geom_line(color = "darkgreen", linewidth = 1) +
+      ggplot2::labs(
+        title = "Estimated Time Trend",
+        x = "Time Index",
+        y = "Trend Effect"
+      ) +
+      ggplot2::theme_minimal()
+  }
 
   # Panel 3: Seasonal component
   panel3_data <- data.frame(

@@ -154,3 +154,59 @@ test_that("ggplot functions use date column for x-axis when available", {
     expect_s3_class(panel1_data$date, "Date")
   }
 })
+
+test_that("plot_seasonal_decomposition_ggplot uses date for x-axis when available", {
+  # Load real data
+  cps_data <- readRDS(here::here("data-raw", "ipums_data.rds"))
+  phd_data <- filter_phd_holders(cps_data)
+  monthly_rates <- calculate_monthly_unemployment(phd_data)
+  monthly_rates$month <- monthly_rates$MONTH
+
+  # Fit model
+  model <- fit_seasonal_gam(monthly_rates, k_month = 10, k_trend = 20)
+
+  # Create decomposition plots
+  plots <- plot_seasonal_decomposition_ggplot(model, monthly_rates)
+
+  # Panel 1 (observed vs fitted) should use date when available
+  panel1_data <- plots$observed_fitted$data
+  if ("date" %in% names(monthly_rates)) {
+    expect_true("date" %in% names(panel1_data))
+    expect_s3_class(panel1_data$date, "Date")
+  }
+
+  # Panel 2 (trend) should use date when available
+  panel2_data <- plots$trend$data
+  if ("date" %in% names(monthly_rates)) {
+    expect_true("date" %in% names(panel2_data))
+    expect_s3_class(panel2_data$date, "Date")
+  }
+})
+
+test_that("decomposition plots show date labels not numeric index", {
+  # Create test data with date column
+  set.seed(789)
+  n <- 60
+  test_data <- data.frame(
+    time_index = 1:n,
+    date = seq.Date(as.Date("2020-01-01"), by = "month", length.out = n),
+    month = rep(1:12, length.out = n),
+    unemployment_rate = 0.025 + 0.001 * (1:n) / n +
+      0.006 * sin(2 * pi * (1:n) / 12) + rnorm(n, 0, 0.002)
+  )
+
+  # Fit model
+  model <- mgcv::gam(unemployment_rate ~ s(time_index, k = 10) + s(month, bs = "cc", k = 10),
+                     data = test_data, method = "REML")
+
+  # Create plots
+  plots <- plot_seasonal_decomposition_ggplot(model, test_data)
+
+  # Check that panel 1 uses date for x-axis
+  panel1_mapping <- plots$observed_fitted$mapping
+  expect_true("date" %in% names(plots$observed_fitted$data))
+
+  # Check that panel 2 uses date for x-axis
+  panel2_mapping <- plots$trend$mapping
+  expect_true("date" %in% names(plots$trend$data))
+})
