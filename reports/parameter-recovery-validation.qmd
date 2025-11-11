@@ -230,19 +230,33 @@ if (meets_target) {
 coverage_df <- data.frame(coverage = coverage_rates * 100)
 
 ggplot(coverage_df, aes(x = coverage)) +
-  geom_histogram(binwidth = 1, fill = "steelblue", color = "white", alpha = 0.8) +
-  geom_vline(xintercept = 95, color = "red", linetype = "dashed", linewidth = 1) +
-  geom_vline(xintercept = mean_coverage * 100, color = "darkgreen", linewidth = 1) +
+  # Acceptable range background
   annotate("rect", xmin = 85, xmax = 100, ymin = 0, ymax = Inf,
-           alpha = 0.1, fill = "green") +
+           alpha = 0.15, fill = "green") +
+  # Histogram
+  geom_histogram(binwidth = 1, fill = "steelblue", color = "white", alpha = 0.8) +
+  # Target line
+  geom_vline(xintercept = 95, color = "red", linetype = "dashed", linewidth = 1.2) +
+  # Observed mean line
+  geom_vline(xintercept = mean_coverage * 100, color = "darkgreen", linewidth = 1.2) +
+  # Text annotations for clarity
+  annotate("text", x = 95, y = Inf, label = sprintf("Target: 95%%"),
+           vjust = 1.5, hjust = -0.1, color = "red", size = 4, fontface = "bold") +
+  annotate("text", x = mean_coverage * 100, y = Inf,
+           label = sprintf("Observed: %.1f%%", mean_coverage * 100),
+           vjust = 1.5, hjust = ifelse(mean_coverage * 100 > 96, 1.1, -0.1),
+           color = "darkgreen", size = 4, fontface = "bold") +
+  scale_x_continuous(limits = c(85, 100), breaks = seq(85, 100, by = 5)) +
   labs(
     title = "Prediction Interval Coverage Distribution",
     subtitle = sprintf("%d Monte Carlo simulations - testing 95%% nominal coverage", n_sims),
     x = "Empirical Coverage (%)",
-    y = "Count",
-    caption = "Red dashed: Target (95%) | Green line: Observed mean | Green band: Acceptable range (85-100%)"
+    y = "Count"
   ) +
-  theme(plot.caption = element_text(hjust = 0, face = "italic"))
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 11)
+  )
 ```
 
 **Interpretation:** If empirical coverage is near 95%, the model's prediction intervals are honest - they contain new data at the rate they claim to.
