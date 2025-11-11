@@ -215,10 +215,15 @@ for (i in 1:n_sims) {
   # Fit model
   model <- fit_seasonal_gam(sim_data, k_month = 10, k_trend = 15)
 
-  # Estimate baseline and SE
-  fitted_vals <- fitted(model)
-  baseline_est <- mean(fitted_vals)
-  baseline_se <- sd(fitted_vals) / sqrt(length(fitted_vals))
+  # Estimate baseline using correct method
+  # GAM smooths are sum-to-zero, so we evaluate at t=min and average over months
+  pred_grid <- expand.grid(
+    time_index = min(sim_data$time_index),
+    month = 1:12
+  )
+  preds <- predict(model, newdata = pred_grid, se.fit = TRUE)
+  baseline_est <- mean(preds$fit)
+  baseline_se <- sqrt(sum(preds$se.fit^2)) / 12  # SE of mean
 
   # 95% CI
   baseline_lower <- baseline_est - 1.96 * baseline_se
@@ -265,9 +270,12 @@ for (i in 1:n_show) {
     noise_sd = 0.002, seed = 2000 + i
   )
   model <- fit_seasonal_gam(sim_data, k_month = 10, k_trend = 15)
-  fitted_vals <- fitted(model)
-  baseline_est <- mean(fitted_vals)
-  baseline_se <- sd(fitted_vals) / sqrt(length(fitted_vals))
+
+  # Correct baseline estimation
+  pred_grid <- expand.grid(time_index = min(sim_data$time_index), month = 1:12)
+  preds <- predict(model, newdata = pred_grid, se.fit = TRUE)
+  baseline_est <- mean(preds$fit)
+  baseline_se <- sqrt(sum(preds$se.fit^2)) / 12
 
   ci_data$est[i] <- baseline_est
   ci_data$lower[i] <- baseline_est - 1.96 * baseline_se

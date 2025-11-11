@@ -737,8 +737,17 @@ validate_parameter_recovery <- function(model, data, true_params) {
   # 1. Validate baseline recovery
   if ("baseline" %in% names(true_params)) {
     true_baseline <- true_params$baseline
-    fitted_vals <- fitted(model)
-    estimated_baseline <- mean(fitted_vals)
+
+    # CORRECT METHOD: Average predictions at t=min across all months
+    # This removes seasonal variation and evaluates at the start of the series
+    # (GAM smooths are sum-to-zero, so mean(fitted) includes trend at mean(t))
+    pred_grid <- expand.grid(
+      time_index = min(data$time_index),
+      month = 1:12
+    )
+    preds <- predict(model, newdata = pred_grid)
+    estimated_baseline <- mean(preds)
+
     error <- estimated_baseline - true_baseline
     rel_error <- abs(error / true_baseline) * 100
 
@@ -942,10 +951,15 @@ validate_parameter_recovery_coverage <- function(model, data, true_params,
 
       sim_model <- fit_seasonal_gam(sim_data, k_month = 10, k_trend = 15)
 
-      # Estimate baseline and its SE
-      fitted_vals <- fitted(sim_model)
-      baseline_est <- mean(fitted_vals)
-      baseline_se <- sd(fitted_vals) / sqrt(length(fitted_vals))
+      # Estimate baseline using correct method
+      # Average predictions at t=min across all months to remove seasonal variation
+      pred_grid <- expand.grid(
+        time_index = min(sim_data$time_index),
+        month = 1:12
+      )
+      preds <- predict(sim_model, newdata = pred_grid, se.fit = TRUE)
+      baseline_est <- mean(preds$fit)
+      baseline_se <- sqrt(sum(preds$se.fit^2)) / 12  # SE of mean
 
       # 95% CI
       baseline_lower <- baseline_est - 1.96 * baseline_se
