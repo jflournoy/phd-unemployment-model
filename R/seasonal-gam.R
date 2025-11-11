@@ -826,3 +826,193 @@ validate_parameter_recovery <- function(model, data, true_params) {
 
   return(results)
 }
+
+#' Validate Parameter Recovery Using Coverage Probability
+#'
+#' Tests whether model uncertainty intervals have correct coverage properties.
+#' This is a more rigorous validation than point estimates.
+#'
+#' @param model mgcv GAM model object (fitted to one dataset)
+#' @param data Data frame. Original data used to fit model
+#' @param true_params List with true parameter values
+#' @param n_sims Integer. Number of simulations for coverage testing (default: 100)
+#' @param tolerance Numeric. Acceptable deviation from nominal coverage (default: 0.10)
+#'
+#' @return Data frame with coverage statistics:
+#'   \item{parameter}{Parameter name}
+#'   \item{coverage_rate}{Empirical coverage rate from simulations}
+#'   \item{target_coverage}{Target coverage rate (0.95)}
+#'   \item{meets_target}{Logical indicating if coverage is within tolerance}
+#'
+#' @details
+#' Tests two types of coverage:
+#' 1. Prediction intervals: Do 95% of new observations fall within 95% prediction intervals?
+#' 2. Confidence intervals: Do 95% of confidence intervals contain the true parameter?
+#'
+#' This is the correct way to validate model calibration. A well-calibrated model
+#' should have empirical coverage close to the nominal level (e.g., 95%).
+#'
+#' @examples
+#' \dontrun{
+#' # Simulate data with known parameters
+#' true_params <- list(baseline = 0.025, seasonal_amplitude = 0.008)
+#' sim_data <- simulate_seasonal_unemployment(n_years = 10,
+#'                                            baseline_rate = 0.025,
+#'                                            seasonal_amplitude = 0.008)
+#' model <- fit_seasonal_gam(sim_data)
+#' coverage <- validate_parameter_recovery_coverage(model, sim_data, true_params, n_sims = 100)
+#' print(coverage)
+#' }
+#'
+#' @export
+validate_parameter_recovery_coverage <- function(model, data, true_params,
+                                                 n_sims = 100, tolerance = 0.10) {
+  if (!inherits(model, "gam")) {
+    stop("model must be a GAM object from mgcv")
+  }
+
+  results <- data.frame(
+    parameter = character(),
+    coverage_rate = numeric(),
+    target_coverage = numeric(),
+    meets_target = logical(),
+    stringsAsFactors = FALSE
+  )
+
+  # Get model formula parameters from first fit
+  baseline_rate <- if ("baseline" %in% names(true_params)) true_params$baseline else 0.025
+  trend_slope <- if ("trend_slope" %in% names(true_params)) true_params$trend_slope else 0
+  seasonal_amplitude <- if ("seasonal_amplitude" %in% names(true_params)) true_params$seasonal_amplitude else 0.005
+  noise_sd <- sd(residuals(model))
+
+  # 1. Test prediction interval coverage
+  pred_coverage_count <- 0
+
+  for (i in 1:n_sims) {
+    # Simulate new dataset with same parameters
+    sim_data <- simulate_seasonal_unemployment(
+      n_years = nrow(data) / 12,
+      baseline_rate = baseline_rate,
+      trend_slope = trend_slope,
+      seasonal_amplitude = seasonal_amplitude,
+      noise_sd = noise_sd,
+      seed = i * 42
+    )
+
+    # Fit model to new data
+    sim_model <- fit_seasonal_gam(sim_data, k_month = 10, k_trend = 15)
+
+    # Get 95% prediction intervals
+    pred <- predict(sim_model, se.fit = TRUE)
+    lower_pred <- pred$fit - 1.96 * sqrt(pred$se.fit^2 + noise_sd^2)
+    upper_pred <- pred$fit + 1.96 * sqrt(pred$se.fit^2 + noise_sd^2)
+
+    # Check coverage
+    within_interval <- (sim_data$unemployment_rate >= lower_pred) &
+                       (sim_data$unemployment_rate <= upper_pred)
+    coverage_rate <- mean(within_interval)
+
+    # Good coverage if >= 90% (some tolerance for small samples)
+    if (coverage_rate >= 0.90) {
+      pred_coverage_count <- pred_coverage_count + 1
+    }
+  }
+
+  pred_coverage <- pred_coverage_count / n_sims
+  results <- rbind(results, data.frame(
+    parameter = "prediction_interval",
+    coverage_rate = pred_coverage,
+    target_coverage = 0.95,
+    meets_target = abs(pred_coverage - 0.95) <= tolerance
+  ))
+
+  # 2. Test confidence interval coverage for baseline
+  if ("baseline" %in% names(true_params)) {
+    baseline_coverage_count <- 0
+
+    for (i in 1:n_sims) {
+      sim_data <- simulate_seasonal_unemployment(
+        n_years = nrow(data) / 12,
+        baseline_rate = baseline_rate,
+        trend_slope = trend_slope,
+        seasonal_amplitude = seasonal_amplitude,
+        noise_sd = noise_sd,
+        seed = i * 123
+      )
+
+      sim_model <- fit_seasonal_gam(sim_data, k_month = 10, k_trend = 15)
+
+      # Estimate baseline and its SE
+      fitted_vals <- fitted(sim_model)
+      baseline_est <- mean(fitted_vals)
+      baseline_se <- sd(fitted_vals) / sqrt(length(fitted_vals))
+
+      # 95% CI
+      baseline_lower <- baseline_est - 1.96 * baseline_se
+      baseline_upper <- baseline_est + 1.96 * baseline_se
+
+      # Check if true baseline in CI
+      if (true_params$baseline >= baseline_lower &&
+          true_params$baseline <= baseline_upper) {
+        baseline_coverage_count <- baseline_coverage_count + 1
+      }
+    }
+
+    baseline_coverage <- baseline_coverage_count / n_sims
+    results <- rbind(results, data.frame(
+      parameter = "baseline_CI",
+      coverage_rate = baseline_coverage,
+      target_coverage = 0.95,
+      meets_target = abs(baseline_coverage - 0.95) <= tolerance
+    ))
+  }
+
+  # 3. Test confidence interval coverage for seasonal amplitude
+  if ("seasonal_amplitude" %in% names(true_params)) {
+    amplitude_coverage_count <- 0
+
+    for (i in 1:n_sims) {
+      sim_data <- simulate_seasonal_unemployment(
+        n_years = nrow(data) / 12,
+        baseline_rate = baseline_rate,
+        seasonal_amplitude = seasonal_amplitude,
+        noise_sd = noise_sd,
+        seed = i * 456
+      )
+
+      sim_model <- fit_seasonal_gam(sim_data, k_month = 10, k_trend = 15)
+
+      # Extract seasonal effects
+      seasonal <- extract_seasonal_component(sim_model, sim_data)
+
+      # Estimate amplitude
+      amplitude_est <- (max(seasonal$seasonal_effect) -
+                        min(seasonal$seasonal_effect)) / 2
+
+      # Estimate SE
+      max_se <- seasonal$se[which.max(seasonal$seasonal_effect)]
+      min_se <- seasonal$se[which.min(seasonal$seasonal_effect)]
+      amplitude_se <- sqrt(max_se^2 + min_se^2) / 2
+
+      # 95% CI
+      amplitude_lower <- amplitude_est - 1.96 * amplitude_se
+      amplitude_upper <- amplitude_est + 1.96 * amplitude_se
+
+      # Check if true amplitude in CI
+      if (true_params$seasonal_amplitude >= amplitude_lower &&
+          true_params$seasonal_amplitude <= amplitude_upper) {
+        amplitude_coverage_count <- amplitude_coverage_count + 1
+      }
+    }
+
+    amplitude_coverage <- amplitude_coverage_count / n_sims
+    results <- rbind(results, data.frame(
+      parameter = "seasonal_amplitude_CI",
+      coverage_rate = amplitude_coverage,
+      target_coverage = 0.95,
+      meets_target = abs(amplitude_coverage - 0.95) <= tolerance
+    ))
+  }
+
+  return(results)
+}
