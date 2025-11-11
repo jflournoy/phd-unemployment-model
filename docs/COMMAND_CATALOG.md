@@ -2,10 +2,10 @@
 
 Complete list of all available Claude Code commands organized by category.
 
-Last updated: 2025-11-07  
-Total Commands: 14
+Last updated: 2025-11-11  
+Total Commands: 15
 
-## Core Workflow Commands (14)
+## Core Workflow Commands (15)
 
 ### /commit
 Atomic commits with quality checks - 1-3 files at a time  
@@ -18,6 +18,10 @@ Location: `.claude/commands/docs.md`
 ### /docs-explain
 Educational command showing how documentation works  
 Location: `.claude/commands/docs-explain.md`
+
+### /fix-permissions
+Fix Docker file ownership permissions  
+Location: `.claude/commands/fix-permissions.md`
 
 ### /hygiene
 Project health check - code quality, tests, dependencies, and git status  
@@ -69,6 +73,6 @@ Location: `.claude/commands/todo.md`
 
 | Category | Count | Purpose |
 |----------|-------|---------|
-| Core Workflow | 14 | Daily development tasks |
+| Core Workflow | 15 | Daily development tasks |
 | Maintenance | 0 | Repository maintenance |
 | Planning | 0 | Planning and ideation |
