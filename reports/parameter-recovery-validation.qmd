@@ -243,19 +243,36 @@ ggplot(coverage_df, aes(x = coverage)) +
   annotate("text", x = 95, y = Inf, label = sprintf("Target: 95%%"),
            vjust = 1.5, hjust = -0.1, color = "red", size = 4, fontface = "bold") +
   annotate("text", x = mean_coverage * 100, y = Inf,
-           label = sprintf("Observed: %.1f%%", mean_coverage * 100),
+           label = sprintf("Observed Mean: %.1f%%", mean_coverage * 100),
            vjust = 1.5, hjust = ifelse(mean_coverage * 100 > 96, 1.1, -0.1),
            color = "darkgreen", size = 4, fontface = "bold") +
+  # Add explanatory annotation box
+  annotate("rect", xmin = 85.5, xmax = 93, ymin = 28, ymax = 34,
+           fill = "white", color = "gray50", alpha = 0.95, linewidth = 0.5) +
+  annotate("text", x = 89.25, y = 32.5,
+           label = "Well-Calibrated Model:",
+           size = 3, fontface = "bold", hjust = 0.5) +
+  annotate("text", x = 89.25, y = 31,
+           label = "Each simulation generates new data",
+           size = 2.5, hjust = 0.5) +
+  annotate("text", x = 89.25, y = 29.8,
+           label = "from the true model. We count what %",
+           size = 2.5, hjust = 0.5) +
+  annotate("text", x = 89.25, y = 28.6,
+           label = "of points fall in the 95% PI. Distribution",
+           size = 2.5, hjust = 0.5) +
   scale_x_continuous(limits = c(85, 100), breaks = seq(85, 100, by = 5)) +
   labs(
-    title = "Prediction Interval Coverage Distribution",
-    subtitle = sprintf("%d Monte Carlo simulations - testing 95%% nominal coverage", n_sims),
-    x = "Empirical Coverage (%)",
-    y = "Count"
+    title = "Prediction Interval Calibration Test",
+    subtitle = sprintf("%d simulations × 120 data points each: Does 95%% PI capture ~95%% of new data?", n_sims),
+    x = "% of Data Points Within 95% Prediction Interval (per simulation)",
+    y = "Count",
+    caption = "Distribution should center near 95% for well-calibrated intervals"
   ) +
   theme(
     plot.title = element_text(size = 14, face = "bold"),
-    plot.subtitle = element_text(size = 11)
+    plot.subtitle = element_text(size = 10.5),
+    plot.caption = element_text(hjust = 0.5, face = "italic", size = 9)
   )
 ```
 
