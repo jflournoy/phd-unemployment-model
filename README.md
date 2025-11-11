@@ -29,7 +29,8 @@ This project aims to model PhD unemployment patterns using advanced time series 
 
 - **R** (≥ 4.0.0) - Data processing and analysis
   - **Base R** - Core operations (subsetting, transformations)
-  - **data.table** - Efficient operations on large CPS datasets (millions of rows)
+  - **data.table** - Efficient operations on large CPS datasets (40M+ rows, 50-100x speedup)
+  - **fst** - Fast file I/O (15x faster loading than RDS for 674MB datasets)
   - Avoids tidyverse for fewer dependencies and better performance
 - **Stan** - Bayesian statistical modeling via:
   - [brms](https://paul-buerkner.github.io/brms/) - High-level modeling interface
