@@ -181,3 +181,213 @@ test_that("plot_seasonal_decomposition creates diagnostic plot", {
   # This should create a plot (we'll just check it doesn't error)
   expect_no_error(plot_seasonal_decomposition(model, sim_data))
 })
+
+# === PARAMETER RECOVERY TESTS ===
+# These tests verify the model can recover known parameters from simulated data
+
+test_that("model recovers true baseline unemployment rate", {
+  # Simulate data with known baseline, no trend, no seasonality
+  true_baseline <- 0.025
+  sim_data <- simulate_seasonal_unemployment(
+    n_years = 10,
+    baseline_rate = true_baseline,
+    trend_slope = 0,  # No trend
+    seasonal_amplitude = 0,  # No seasonality
+    noise_sd = 0.001,  # Low noise
+    seed = 201
+  )
+
+  # Fit model
+  model <- fit_seasonal_gam(sim_data)
+
+  # Extract fitted values (should be close to baseline)
+  fitted_vals <- fitted(model)
+  mean_fitted <- mean(fitted_vals)
+
+  # Mean fitted value should recover true baseline within 10%
+  expect_lt(abs(mean_fitted - true_baseline), 0.0025)
+})
+
+test_that("model recovers true linear trend", {
+  # Simulate data with known trend, no seasonality
+  true_baseline <- 0.02
+  true_slope <- 0.0005  # 0.05 percentage point increase per month
+  sim_data <- simulate_seasonal_unemployment(
+    n_years = 10,
+    baseline_rate = true_baseline,
+    trend_slope = true_slope,
+    seasonal_amplitude = 0,  # No seasonality
+    noise_sd = 0.001,
+    seed = 202
+  )
+
+  # Fit model
+  model <- fit_seasonal_gam(sim_data)
+
+  # Extract trend component
+  trend <- extract_trend_component(model, sim_data)
+
+  # Calculate estimated slope from trend
+  time_points <- trend$time_index
+  trend_effects <- trend$trend_effect
+  estimated_slope <- lm(trend_effects ~ time_points)$coefficients[2]
+
+  # Estimated slope should be close to true slope
+  # (within 20% for nonlinear smooth, may not be exactly linear)
+  expect_lt(abs(estimated_slope - true_slope), 0.0001)
+})
+
+test_that("model recovers true seasonal amplitude", {
+  # Simulate data with known seasonality, no trend
+  true_amplitude <- 0.008
+  sim_data <- simulate_seasonal_unemployment(
+    n_years = 10,
+    baseline_rate = 0.02,
+    trend_slope = 0,
+    seasonal_amplitude = true_amplitude,
+    noise_sd = 0.001,
+    seed = 203
+  )
+
+  # Fit model
+  model <- fit_seasonal_gam(sim_data)
+
+  # Extract seasonal component
+  seasonal <- extract_seasonal_component(model, sim_data)
+
+  # Calculate amplitude as half the peak-to-trough range
+  estimated_amplitude <- (max(seasonal$seasonal_effect) - min(seasonal$seasonal_effect)) / 2
+
+  # Estimated amplitude should be close to true amplitude (within 20%)
+  expect_lt(abs(estimated_amplitude - true_amplitude), 0.002)
+})
+
+test_that("model recovers seasonal peak timing", {
+  # Simulate data with summer peak (June-July, months 6-7)
+  sim_data <- simulate_seasonal_unemployment(
+    n_years = 10,
+    baseline_rate = 0.02,
+    trend_slope = 0,
+    seasonal_amplitude = 0.008,
+    noise_sd = 0.001,
+    seed = 204
+  )
+
+  # Fit model
+  model <- fit_seasonal_gam(sim_data)
+
+  # Extract seasonal component
+  seasonal <- extract_seasonal_component(model, sim_data)
+
+  # Find month with maximum seasonal effect
+  peak_month <- seasonal$month[which.max(seasonal$seasonal_effect)]
+
+  # Peak should be in summer months (May-August: 5-8)
+  expect_true(peak_month %in% 5:8)
+})
+
+test_that("validate_parameter_recovery checks all components", {
+  # Simulate data with known parameters
+  true_params <- list(
+    baseline = 0.025,
+    trend_slope = 0.0005,
+    seasonal_amplitude = 0.008
+  )
+
+  sim_data <- simulate_seasonal_unemployment(
+    n_years = 10,
+    baseline_rate = true_params$baseline,
+    trend_slope = true_params$trend_slope,
+    seasonal_amplitude = true_params$seasonal_amplitude,
+    noise_sd = 0.001,
+    seed = 205
+  )
+
+  # Fit model
+  model <- fit_seasonal_gam(sim_data)
+
+  # Validate recovery - this function doesn't exist yet
+  recovery_check <- validate_parameter_recovery(model, sim_data, true_params)
+
+  # Should return a data frame with validation results
+  expect_s3_class(recovery_check, "data.frame")
+  expect_true(all(c("parameter", "true_value", "estimated_value", "error", "recovered") %in% names(recovery_check)))
+
+  # Most parameters should be successfully recovered
+  # (allow 1 parameter to fail due to statistical variation)
+  expect_gte(sum(recovery_check$recovered), 2)
+})
+
+test_that("validate_parameter_recovery detects poor recovery", {
+  # Simulate complex data that may not fit linear+cyclic model well
+  # (e.g., with autocorrelation or non-sinusoidal seasonality)
+  sim_data <- simulate_seasonal_unemployment(
+    n_years = 3,  # Too short for good estimation
+    baseline_rate = 0.02,
+    trend_slope = 0.001,
+    seasonal_amplitude = 0.005,
+    noise_sd = 0.01,  # High noise
+    seed = 206
+  )
+
+  true_params <- list(
+    baseline = 0.02,
+    trend_slope = 0.001,
+    seasonal_amplitude = 0.005
+  )
+
+  model <- fit_seasonal_gam(sim_data)
+  recovery_check <- validate_parameter_recovery(model, sim_data, true_params)
+
+  # With high noise and short series, some parameters may not recover well
+  # (This test just verifies the function reports the failure)
+  expect_true(any(!recovery_check$recovered))
+})
+
+test_that("parameter recovery improves with more data", {
+  # Test that recovery quality improves with sample size
+  true_params <- list(
+    baseline = 0.025,
+    trend_slope = 0.0005,
+    seasonal_amplitude = 0.008
+  )
+
+  # Small dataset
+  sim_small <- simulate_seasonal_unemployment(
+    n_years = 3,
+    baseline_rate = true_params$baseline,
+    trend_slope = true_params$trend_slope,
+    seasonal_amplitude = true_params$seasonal_amplitude,
+    noise_sd = 0.002,
+    seed = 207
+  )
+  model_small <- fit_seasonal_gam(sim_small)
+  recovery_small <- validate_parameter_recovery(model_small, sim_small, true_params)
+
+  # Large dataset
+  sim_large <- simulate_seasonal_unemployment(
+    n_years = 15,
+    baseline_rate = true_params$baseline,
+    trend_slope = true_params$trend_slope,
+    seasonal_amplitude = true_params$seasonal_amplitude,
+    noise_sd = 0.002,
+    seed = 208
+  )
+  model_large <- fit_seasonal_gam(sim_large)
+  recovery_large <- validate_parameter_recovery(model_large, sim_large, true_params)
+
+  # Large dataset should have smaller errors (on average)
+  # Use median to be robust to outliers
+  median_error_small <- median(abs(recovery_small$error))
+  median_error_large <- median(abs(recovery_large$error))
+
+  # Or check that more parameters are recovered correctly
+  sum_recovered_small <- sum(recovery_small$recovered)
+  sum_recovered_large <- sum(recovery_large$recovered)
+
+  # At least one metric should show improvement with more data
+  improved_error <- median_error_large < median_error_small
+  improved_recovery <- sum_recovered_large >= sum_recovered_small
+
+  expect_true(improved_error || improved_recovery)
+})

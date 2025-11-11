@@ -406,3 +406,167 @@ plot_seasonal_decomposition <- function(model, data) {
 
   invisible(NULL)
 }
+
+#' Validate Parameter Recovery
+#'
+#' Checks whether a fitted GAM model successfully recovers known parameters
+#' from simulated data. This is critical for model validation.
+#'
+#' @param model mgcv GAM model object
+#' @param data Data frame. Original data used to fit model
+#' @param true_params List with true parameter values:
+#'   \item{baseline}{True baseline unemployment rate}
+#'   \item{trend_slope}{True linear trend slope (optional)}
+#'   \item{seasonal_amplitude}{True seasonal amplitude (optional)}
+#'
+#' @return Data frame with validation results for each parameter:
+#'   \item{parameter}{Parameter name}
+#'   \item{true_value}{True parameter value}
+#'   \item{estimated_value}{Estimated parameter value from model}
+#'   \item{error}{Absolute error (estimated - true)}
+#'   \item{relative_error}{Relative error as percentage}
+#'   \item{recovered}{Logical indicating if parameter was successfully recovered}
+#'
+#' @details
+#' Recovery criteria:
+#' - Baseline: within 10% of true value
+#' - Trend slope: within 20% of true value (allows for nonlinear smooths)
+#' - Seasonal amplitude: within 25% of true value (peak-to-trough / 2)
+#'
+#' Use this function to validate that your model can recover known parameters
+#' before applying it to real data where true values are unknown.
+#'
+#' @examples
+#' \dontrun{
+#' # Simulate data with known parameters
+#' true_params <- list(
+#'   baseline = 0.025,
+#'   trend_slope = 0.0005,
+#'   seasonal_amplitude = 0.008
+#' )
+#'
+#' sim_data <- simulate_seasonal_unemployment(
+#'   n_years = 10,
+#'   baseline_rate = true_params$baseline,
+#'   trend_slope = true_params$trend_slope,
+#'   seasonal_amplitude = true_params$seasonal_amplitude
+#' )
+#'
+#' model <- fit_seasonal_gam(sim_data)
+#' recovery <- validate_parameter_recovery(model, sim_data, true_params)
+#' print(recovery)
+#'
+#' # Check if all parameters recovered successfully
+#' if (all(recovery$recovered)) {
+#'   cat("✓ All parameters successfully recovered!\n")
+#' }
+#' }
+#'
+#' @export
+validate_parameter_recovery <- function(model, data, true_params) {
+  if (!inherits(model, "gam")) {
+    stop("model must be a GAM object from mgcv")
+  }
+
+  results <- data.frame(
+    parameter = character(),
+    true_value = numeric(),
+    estimated_value = numeric(),
+    error = numeric(),
+    relative_error = numeric(),
+    recovered = logical(),
+    stringsAsFactors = FALSE
+  )
+
+  # 1. Validate baseline recovery
+  if ("baseline" %in% names(true_params)) {
+    true_baseline <- true_params$baseline
+    fitted_vals <- fitted(model)
+    estimated_baseline <- mean(fitted_vals)
+    error <- estimated_baseline - true_baseline
+    rel_error <- abs(error / true_baseline) * 100
+
+    # Recovery criterion: within 10%
+    recovered <- rel_error < 10
+
+    results <- rbind(results, data.frame(
+      parameter = "baseline",
+      true_value = true_baseline,
+      estimated_value = estimated_baseline,
+      error = error,
+      relative_error = rel_error,
+      recovered = recovered
+    ))
+  }
+
+  # 2. Validate trend slope recovery
+  if ("trend_slope" %in% names(true_params)) {
+    true_slope <- true_params$trend_slope
+
+    # Extract trend component
+    trend <- extract_trend_component(model, data)
+
+    # Estimate slope from trend (may not be exactly linear)
+    time_points <- trend$time_index
+    trend_effects <- trend$trend_effect
+    fit_lm <- lm(trend_effects ~ time_points)
+    estimated_slope <- coef(fit_lm)[2]
+
+    error <- estimated_slope - true_slope
+
+    # Handle zero slope case
+    if (true_slope == 0) {
+      # For zero slope, use absolute error criterion
+      recovered <- abs(error) < 0.0001
+      rel_error <- NA  # Relative error undefined for zero
+    } else {
+      rel_error <- abs(error / true_slope) * 100
+      # Recovery criterion: within 20% (allows for nonlinear smooths)
+      recovered <- rel_error < 20
+    }
+
+    results <- rbind(results, data.frame(
+      parameter = "trend_slope",
+      true_value = true_slope,
+      estimated_value = estimated_slope,
+      error = error,
+      relative_error = rel_error,
+      recovered = recovered
+    ))
+  }
+
+  # 3. Validate seasonal amplitude recovery
+  if ("seasonal_amplitude" %in% names(true_params)) {
+    true_amplitude <- true_params$seasonal_amplitude
+
+    # Extract seasonal component
+    seasonal <- extract_seasonal_component(model, data)
+
+    # Calculate amplitude as half the peak-to-trough range
+    estimated_amplitude <- (max(seasonal$seasonal_effect) - min(seasonal$seasonal_effect)) / 2
+
+    error <- estimated_amplitude - true_amplitude
+
+    # Handle zero amplitude case
+    if (true_amplitude == 0) {
+      # For zero amplitude, use absolute error criterion
+      recovered <- abs(error) < 0.001
+      rel_error <- NA  # Relative error undefined for zero
+    } else {
+      rel_error <- abs(error / true_amplitude) * 100
+      # Recovery criterion: within 25% (seasonal patterns can be complex)
+      recovered <- rel_error < 25
+    }
+
+    results <- rbind(results, data.frame(
+      parameter = "seasonal_amplitude",
+      true_value = true_amplitude,
+      estimated_value = estimated_amplitude,
+      error = error,
+      relative_error = rel_error,
+      recovered = recovered
+    ))
+  }
+
+  return(results)
+}
