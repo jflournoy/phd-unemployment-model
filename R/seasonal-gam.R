@@ -210,48 +210,79 @@ extract_seasonal_component <- function(model, data) {
 #'
 #' @param model mgcv GAM model object from fit_seasonal_gam()
 #' @param data Data frame. Original data used to fit model
+#' @param absolute Logical. If TRUE (default), returns absolute trend values
+#'   (intercept + trend component). If FALSE, returns centered trend component
+#'   (deviations from intercept).
 #'
 #' @return Data frame with columns:
 #'   \item{time_index}{Time index}
-#'   \item{trend_effect}{Estimated trend effect}
+#'   \item{trend_effect}{Estimated trend effect (absolute or centered)}
 #'   \item{se}{Standard error of the effect}
 #'
 #' @details
-#' Uses mgcv::predict.gam() with type = "terms" to extract the smooth
-#' component corresponding to the time trend.
+#' Uses mgcv::predict.gam() to extract the smooth component corresponding to
+#' the time trend. By default, returns absolute values (intercept + trend)
+#' which are easier to interpret and compare with true values.
+#'
+#' GAM smooths are sum-to-zero constrained, so the centered trend component
+#' oscillates around 0. The absolute trend shows the actual predicted values
+#' over time (averaged over seasonal variation).
 #'
 #' @examples
 #' \dontrun{
 #' sim_data <- simulate_seasonal_unemployment(n_years = 5)
 #' model <- fit_seasonal_gam(sim_data)
-#' trend <- extract_trend_component(model, sim_data)
-#' plot(trend$time_index, trend$trend_effect, type = "l")
+#'
+#' # Absolute trend (default) - easier to interpret
+#' trend_abs <- extract_trend_component(model, sim_data)
+#' plot(trend_abs$time_index, trend_abs$trend_effect, type = "l")
+#'
+#' # Centered trend - shows deviations from intercept
+#' trend_centered <- extract_trend_component(model, sim_data, absolute = FALSE)
 #' }
 #'
 #' @export
-extract_trend_component <- function(model, data) {
+extract_trend_component <- function(model, data, absolute = TRUE) {
   if (!inherits(model, "gam")) {
     stop("model must be a GAM object from mgcv")
   }
 
-  # Create prediction grid for all time points
-  # Use representative month (e.g., June = 6) to isolate trend
-  pred_data <- data.frame(
-    time_index = unique(data$time_index),
-    month = 6  # Mid-year month to avoid seasonal extremes
-  )
+  time_points <- unique(data$time_index)
 
-  # Get predictions with standard errors
-  preds <- predict(model, newdata = pred_data, type = "terms", se.fit = TRUE)
+  if (absolute) {
+    # Get absolute trend by averaging predictions over all months
+    # This removes seasonal variation and gives baseline + trend
+    trend_effect <- numeric(length(time_points))
+    se_squared_sum <- numeric(length(time_points))
 
-  # Extract trend component (first smooth term)
-  trend_idx <- which(grepl("time_index", colnames(preds$fit)))
-  trend_effect <- preds$fit[, trend_idx]
-  se <- preds$se.fit[, trend_idx]
+    for (i in seq_along(time_points)) {
+      pred_grid <- data.frame(
+        time_index = time_points[i],
+        month = 1:12
+      )
+      preds <- predict(model, newdata = pred_grid, se.fit = TRUE)
+      trend_effect[i] <- mean(preds$fit)
+      # SE of mean: sqrt(sum(se^2)) / n
+      se_squared_sum[i] <- sum(preds$se.fit^2)
+    }
+
+    se <- sqrt(se_squared_sum) / 12
+  } else {
+    # Get centered trend component only (deviations from intercept)
+    # Use representative month to isolate trend
+    pred_data <- data.frame(
+      time_index = time_points,
+      month = 6  # Mid-year month
+    )
+    preds <- predict(model, newdata = pred_data, type = "terms", se.fit = TRUE)
+    trend_idx <- which(grepl("time_index", colnames(preds$fit)))
+    trend_effect <- preds$fit[, trend_idx]
+    se <- preds$se.fit[, trend_idx]
+  }
 
   # Return as data frame
   data.frame(
-    time_index = unique(data$time_index),
+    time_index = time_points,
     trend_effect = trend_effect,
     se = se
   )
@@ -414,16 +445,24 @@ plot_seasonal_decomposition <- function(model, data) {
 #'
 #' @param model mgcv GAM model object
 #' @param data Data frame. Original data used to fit model
+#' @param true_params Optional list with true parameter values for comparison:
+#'   \item{baseline}{True baseline unemployment rate}
+#'   \item{trend_slope}{True linear trend slope}
+#'   \item{seasonal_amplitude}{True seasonal amplitude}
 #'
 #' @return List of three ggplot objects:
-#'   \item{panel1}{Observed vs fitted values}
-#'   \item{panel2}{Trend component with confidence bands}
-#'   \item{panel3}{Seasonal pattern with error bars}
+#'   \item{observed_fitted}{Observed vs fitted values}
+#'   \item{trend}{Trend component with confidence bands (absolute values)}
+#'   \item{seasonal}{Seasonal pattern with error bars}
 #'
 #' @details
 #' This is the ggplot2 version of plot_seasonal_decomposition(). It returns
 #' a list of ggplot objects that can be combined with patchwork or gridExtra,
 #' or displayed individually for customization.
+#'
+#' The trend plot now shows ABSOLUTE values (intercept + trend component) by
+#' default, making it easier to compare with true values and interpret results.
+#' If true_params are provided, they will be overlaid for visual comparison.
 #'
 #' @examples
 #' \dontrun{
@@ -434,10 +473,14 @@ plot_seasonal_decomposition <- function(model, data) {
 #' # Display all three panels
 #' library(patchwork)
 #' plots[[1]] / plots[[2]] / plots[[3]]
+#'
+#' # With true parameters for validation
+#' true_params <- list(baseline = 0.02, trend_slope = 0.001, seasonal_amplitude = 0.005)
+#' plots <- plot_seasonal_decomposition_ggplot(model, sim_data, true_params)
 #' }
 #'
 #' @export
-plot_seasonal_decomposition_ggplot <- function(model, data) {
+plot_seasonal_decomposition_ggplot <- function(model, data, true_params = NULL) {
   if (!inherits(model, "gam")) {
     stop("model must be a GAM object from mgcv")
   }
@@ -494,7 +537,7 @@ plot_seasonal_decomposition_ggplot <- function(model, data) {
       ggplot2::theme(legend.position = "top")
   }
 
-  # Panel 2: Trend component
+  # Panel 2: Trend component (absolute values for clarity)
   # Match date to trend data if available
   if (use_date) {
     trend_dates <- data$date[match(trend$time_index, data$time_index)]
@@ -505,16 +548,36 @@ plot_seasonal_decomposition_ggplot <- function(model, data) {
       lower = trend$trend_effect - 2 * trend$se,
       upper = trend$trend_effect + 2 * trend$se
     )
+
     panel2 <- ggplot2::ggplot(panel2_data, ggplot2::aes(x = date, y = trend_effect)) +
       ggplot2::geom_ribbon(ggplot2::aes(ymin = lower, ymax = upper),
                           fill = "darkgreen", alpha = 0.2) +
-      ggplot2::geom_line(color = "darkgreen", linewidth = 1) +
+      ggplot2::geom_line(ggplot2::aes(color = "Estimated"), linewidth = 1)
+
+    # Add true trend if provided
+    if (!is.null(true_params) && "trend_slope" %in% names(true_params) &&
+        "baseline" %in% names(true_params)) {
+      true_trend_data <- data.frame(
+        date = trend_dates,
+        time_index = trend$time_index,
+        true_trend = true_params$baseline + true_params$trend_slope * trend$time_index
+      )
+      panel2 <- panel2 +
+        ggplot2::geom_line(data = true_trend_data,
+                          ggplot2::aes(x = date, y = true_trend, color = "True"),
+                          linewidth = 1, linetype = "dashed")
+    }
+
+    panel2 <- panel2 +
+      ggplot2::scale_color_manual(values = c("Estimated" = "darkgreen", "True" = "red")) +
       ggplot2::labs(
-        title = "Estimated Time Trend",
+        title = "Estimated Time Trend (Absolute Values)",
         x = "Date",
-        y = "Trend Effect"
+        y = "Unemployment Rate",
+        color = NULL
       ) +
-      ggplot2::theme_minimal()
+      ggplot2::theme_minimal() +
+      ggplot2::theme(legend.position = "top")
   } else {
     panel2_data <- data.frame(
       time_index = trend$time_index,
@@ -522,16 +585,35 @@ plot_seasonal_decomposition_ggplot <- function(model, data) {
       lower = trend$trend_effect - 2 * trend$se,
       upper = trend$trend_effect + 2 * trend$se
     )
+
     panel2 <- ggplot2::ggplot(panel2_data, ggplot2::aes(x = time_index, y = trend_effect)) +
       ggplot2::geom_ribbon(ggplot2::aes(ymin = lower, ymax = upper),
                           fill = "darkgreen", alpha = 0.2) +
-      ggplot2::geom_line(color = "darkgreen", linewidth = 1) +
+      ggplot2::geom_line(ggplot2::aes(color = "Estimated"), linewidth = 1)
+
+    # Add true trend if provided
+    if (!is.null(true_params) && "trend_slope" %in% names(true_params) &&
+        "baseline" %in% names(true_params)) {
+      true_trend_data <- data.frame(
+        time_index = trend$time_index,
+        true_trend = true_params$baseline + true_params$trend_slope * trend$time_index
+      )
+      panel2 <- panel2 +
+        ggplot2::geom_line(data = true_trend_data,
+                          ggplot2::aes(x = time_index, y = true_trend, color = "True"),
+                          linewidth = 1, linetype = "dashed")
+    }
+
+    panel2 <- panel2 +
+      ggplot2::scale_color_manual(values = c("Estimated" = "darkgreen", "True" = "red")) +
       ggplot2::labs(
-        title = "Estimated Time Trend",
+        title = "Estimated Time Trend (Absolute Values)",
         x = "Time Index",
-        y = "Trend Effect"
+        y = "Unemployment Rate",
+        color = NULL
       ) +
-      ggplot2::theme_minimal()
+      ggplot2::theme_minimal() +
+      ggplot2::theme(legend.position = "top")
   }
 
   # Panel 3: Seasonal component
@@ -548,7 +630,19 @@ plot_seasonal_decomposition_ggplot <- function(model, data) {
     ggplot2::geom_errorbar(ggplot2::aes(ymin = lower, ymax = upper),
                           width = 0.2, color = "red") +
     ggplot2::geom_line(ggplot2::aes(group = 1), color = "red", linewidth = 1) +
-    ggplot2::geom_point(color = "red", size = 3) +
+    ggplot2::geom_point(color = "red", size = 3)
+
+  # Add true amplitude bounds if provided
+  if (!is.null(true_params) && "seasonal_amplitude" %in% names(true_params)) {
+    true_amp <- true_params$seasonal_amplitude
+    panel3 <- panel3 +
+      ggplot2::geom_hline(yintercept = c(-true_amp, true_amp),
+                         linetype = "dotted", color = "blue", linewidth = 0.8) +
+      ggplot2::annotate("text", x = 1, y = true_amp, label = "True amplitude",
+                       vjust = -0.5, hjust = 0, color = "blue", size = 3)
+  }
+
+  panel3 <- panel3 +
     ggplot2::labs(
       title = "Estimated Seasonal Pattern",
       x = "Month",
@@ -768,8 +862,8 @@ validate_parameter_recovery <- function(model, data, true_params) {
   if ("trend_slope" %in% names(true_params)) {
     true_slope <- true_params$trend_slope
 
-    # Extract trend component
-    trend <- extract_trend_component(model, data)
+    # Extract trend component (use centered for slope estimation)
+    trend <- extract_trend_component(model, data, absolute = FALSE)
 
     # Estimate slope from trend (may not be exactly linear)
     time_points <- trend$time_index
