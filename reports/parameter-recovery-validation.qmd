@@ -358,16 +358,34 @@ for (i in 1:n_show) {
   ci_data$covered[i] <- (true_baseline >= ci_data$lower[i]) & (true_baseline <= ci_data$upper[i])
 }
 
+# Calculate coverage proportions for the shown simulations
+n_contains <- sum(ci_data$covered)
+n_misses <- sum(!ci_data$covered)
+pct_contains <- n_contains / n_show * 100
+pct_misses <- n_misses / n_show * 100
+
 ggplot(ci_data, aes(x = sim, y = est, color = covered)) +
   geom_hline(yintercept = true_baseline, color = "red", linewidth = 1) +
   geom_pointrange(aes(ymin = lower, ymax = upper), size = 0.3) +
+  # Add summary annotation box
+  annotate("rect", xmin = 1, xmax = 15, ymin = 0.0258, ymax = 0.0262,
+           fill = "white", color = "gray50", alpha = 0.9, linewidth = 0.5) +
+  annotate("text", x = 8, y = 0.02605,
+           label = sprintf("Coverage Summary (n=%d):", n_show),
+           size = 3.5, fontface = "bold") +
+  annotate("text", x = 8, y = 0.026,
+           label = sprintf("Contains: %d (%.0f%%)", n_contains, pct_contains),
+           size = 3, color = "steelblue") +
+  annotate("text", x = 8, y = 0.02595,
+           label = sprintf("Misses: %d (%.0f%%)", n_misses, pct_misses),
+           size = 3, color = "orange") +
   scale_color_manual(
     values = c("TRUE" = "steelblue", "FALSE" = "orange"),
     labels = c("TRUE" = "CI contains true value", "FALSE" = "CI misses true value")
   ) +
   labs(
     title = "Baseline Confidence Intervals Across Simulations",
-    subtitle = sprintf("Showing first %d of %d simulations - %.0f%% coverage",
+    subtitle = sprintf("Showing first %d of %d simulations - overall coverage: %.0f%%",
                        n_show, n_sims, baseline_coverage * 100),
     x = "Simulation Number",
     y = "Baseline Unemployment Rate",
