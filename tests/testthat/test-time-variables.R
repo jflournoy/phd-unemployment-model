@@ -1,0 +1,77 @@
+test_that("monthly unemployment data has proper time variables", {
+  # Load real CPS data
+  cps_data <- readRDS(here::here("data-raw", "ipums_data.rds"))
+  phd_data <- filter_phd_holders(cps_data)
+  monthly_rates <- calculate_monthly_unemployment(phd_data)
+
+  # Should have YEAR and MONTH columns
+  expect_true("YEAR" %in% names(monthly_rates))
+  expect_true("MONTH" %in% names(monthly_rates))
+
+  # Should have date column (Date class)
+  expect_true("date" %in% names(monthly_rates))
+  expect_s3_class(monthly_rates$date, "Date")
+
+  # Should have time_index (sequential 1, 2, 3, ...)
+  expect_true("time_index" %in% names(monthly_rates))
+  expect_equal(monthly_rates$time_index, seq_len(nrow(monthly_rates)))
+
+  # Date should be first day of each month
+  # Extract month and year from date column
+  date_months <- as.numeric(format(monthly_rates$date, "%m"))
+  date_years <- as.numeric(format(monthly_rates$date, "%Y"))
+  date_days <- as.numeric(format(monthly_rates$date, "%d"))
+
+  # All dates should be first of month
+  expect_true(all(date_days == 1))
+
+  # Dates should match YEAR and MONTH columns
+  expect_equal(date_months, monthly_rates$MONTH)
+  expect_equal(date_years, as.numeric(monthly_rates$YEAR))  # Strip attributes
+})
+
+test_that("time variables are in correct sequence", {
+  cps_data <- readRDS(here::here("data-raw", "ipums_data.rds"))
+  phd_data <- filter_phd_holders(cps_data)
+  monthly_rates <- calculate_monthly_unemployment(phd_data)
+
+  # Dates should be in chronological order
+  expect_true(all(diff(monthly_rates$date) > 0))
+
+  # Time index should be sequential with no gaps
+  expect_equal(monthly_rates$time_index, 1:nrow(monthly_rates))
+
+  # First observation should be January 2000
+  expect_equal(monthly_rates$YEAR[1], 2000)
+  expect_equal(monthly_rates$MONTH[1], 1)
+  expect_equal(monthly_rates$date[1], as.Date("2000-01-01"))
+  expect_equal(monthly_rates$time_index[1], 1)
+
+  # Last observation should be August 2025
+  last_row <- nrow(monthly_rates)
+  expect_equal(monthly_rates$YEAR[last_row], 2025)
+  expect_equal(monthly_rates$MONTH[last_row], 8)
+  expect_equal(monthly_rates$date[last_row], as.Date("2025-08-01"))
+  expect_equal(monthly_rates$time_index[last_row], 308)
+})
+
+test_that("date column enables proper time series plotting", {
+  cps_data <- readRDS(here::here("data-raw", "ipums_data.rds"))
+  phd_data <- filter_phd_holders(cps_data)
+  monthly_rates <- calculate_monthly_unemployment(phd_data)
+
+  # Date range should span full dataset
+  date_range <- range(monthly_rates$date)
+  expect_equal(date_range[1], as.Date("2000-01-01"))
+  expect_equal(date_range[2], as.Date("2025-08-01"))
+
+  # Number of months between first and last date
+  months_elapsed <- as.numeric(difftime(date_range[2], date_range[1], units = "days")) / 30.44
+  expect_gt(months_elapsed, 300)
+  expect_lt(months_elapsed, 310)
+
+  # Can calculate year fractions for plotting
+  year_fraction <- monthly_rates$YEAR + (monthly_rates$MONTH - 0.5) / 12
+  expect_gte(min(year_fraction), 2000)
+  expect_lte(max(year_fraction), 2025.7)
+})

@@ -258,6 +258,12 @@ calculate_monthly_unemployment <- function(data) {
   # Sort chronologically
   data.table::setorder(result_dt, YEAR, MONTH)
 
+  # Add time_index (sequential: 1, 2, 3, ...)
+  result_dt[, time_index := seq_len(.N)]
+
+  # Add date column (first day of each month)
+  result_dt[, date := as.Date(paste(YEAR, MONTH, "01", sep = "-"))]
+
   # Convert back to data.frame for compatibility
   as.data.frame(result_dt)
 }
