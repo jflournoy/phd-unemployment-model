@@ -140,9 +140,16 @@ All parameters recovered with < 5% relative error, demonstrating the model corre
 
 ## Test 1: Prediction Interval Coverage
 
-**Goal:** Verify that 95% prediction intervals contain 95% of new observations.
+**Goal:** Verify that 95% prediction intervals contain 95% of new observations generated from the true model.
 
-**Method:** Simulate many datasets from the same data-generating process, fit model to each, check what proportion of observations fall within prediction intervals.
+**Method:**
+1. Fit a GAM model to training data
+2. Calculate 95% prediction intervals from the fitted model
+3. Generate many new datasets from the true data-generating process
+4. Count what proportion of new data points fall within the fitted model's prediction intervals
+5. Repeat for several different model fits to assess variability
+
+This tests whether the model's prediction intervals are honest about uncertainty when predicting truly new data.
 
 ```{r prediction-coverage}
 set.seed(2024)
@@ -154,67 +161,82 @@ true_params <- list(
   seasonal_amplitude = 0.008
 )
 
-# Simulate reference dataset
-sim_data_ref <- simulate_seasonal_unemployment(
-  n_years = 10,
-  baseline_rate = true_params$baseline,
-  trend_slope = true_params$trend_slope,
-  seasonal_amplitude = true_params$seasonal_amplitude,
-  noise_sd = 0.002,
-  seed = 101
+# CORRECT PROCEDURE:
+# 1. Fit a model to training data
+# 2. Generate MANY new datasets from true model
+# 3. Check how often new data falls in fitted model's PIs
+# 4. Repeat for several model fits to assess variability
+
+n_model_fits <- 6  # Number of different model fits to test
+n_new_datasets_per_fit <- 500  # New datasets to test each model
+
+# Store results for visualization
+coverage_results <- data.frame(
+  model_id = integer(),
+  coverage_rate = numeric(),
+  new_dataset_id = integer()
 )
 
-# Fit reference model
-model_ref <- fit_seasonal_gam(sim_data_ref, k_month = 10, k_trend = 15)
+coverage_by_model <- numeric(n_model_fits)
 
-# Estimate noise standard deviation
-noise_sd <- sd(residuals(model_ref))
+cat("Testing", n_model_fits, "different model fits...\n")
+cat("Each model will be tested on", n_new_datasets_per_fit, "new datasets\n\n")
 
-# Monte Carlo simulation: check coverage across multiple new datasets
-n_sims <- 100
-coverage_rates <- numeric(n_sims)
-
-cat("Running", n_sims, "Monte Carlo simulations...\n")
-cat("This tests whether 95% prediction intervals contain 95% of data\n\n")
-
-for (i in 1:n_sims) {
-  # Generate new dataset with same parameters
-  new_data <- simulate_seasonal_unemployment(
+for (model_idx in 1:n_model_fits) {
+  # Simulate training data and fit model
+  train_data <- simulate_seasonal_unemployment(
     n_years = 10,
     baseline_rate = true_params$baseline,
     trend_slope = true_params$trend_slope,
     seasonal_amplitude = true_params$seasonal_amplitude,
-    noise_sd = noise_sd,
-    seed = 1000 + i
+    noise_sd = 0.002,
+    seed = 100 + model_idx
   )
 
-  # Fit model to new data
-  new_model <- fit_seasonal_gam(new_data, k_month = 10, k_trend = 15)
+  fitted_model <- fit_seasonal_gam(train_data, k_month = 10, k_trend = 15)
+  noise_sd <- sd(residuals(fitted_model))
 
-  # Calculate 95% prediction intervals
-  # CRITICAL: Must include both model uncertainty AND residual variability
-  pred <- predict(new_model, se.fit = TRUE)
+  # Calculate 95% prediction intervals from fitted model
+  pred <- predict(fitted_model, se.fit = TRUE)
   pred_sd <- sqrt(pred$se.fit^2 + noise_sd^2)
-  lower_pred <- pred$fit - 1.96 * pred_sd
-  upper_pred <- pred$fit + 1.96 * pred_sd
+  lower_pi <- pred$fit - 1.96 * pred_sd
+  upper_pi <- pred$fit + 1.96 * pred_sd
 
-  # Check coverage
-  within_interval <- (new_data$unemployment_rate >= lower_pred) &
-                     (new_data$unemployment_rate <= upper_pred)
-  coverage_rates[i] <- mean(within_interval)
+  # Test on many new datasets
+  coverage_count <- 0
+  for (new_idx in 1:n_new_datasets_per_fit) {
+    # Generate completely new data from true model
+    new_data <- simulate_seasonal_unemployment(
+      n_years = 10,
+      baseline_rate = true_params$baseline,
+      trend_slope = true_params$trend_slope,
+      seasonal_amplitude = true_params$seasonal_amplitude,
+      noise_sd = 0.002,
+      seed = 10000 + model_idx * 1000 + new_idx
+    )
+
+    # Check if new data falls within PI
+    within_interval <- (new_data$unemployment_rate >= lower_pi) &
+                       (new_data$unemployment_rate <= upper_pi)
+    coverage_count <- coverage_count + sum(within_interval)
+  }
+
+  # Calculate coverage rate for this model
+  total_points <- n_new_datasets_per_fit * nrow(train_data)
+  coverage_by_model[model_idx] <- coverage_count / total_points
 }
 
-# Calculate overall coverage
-mean_coverage <- mean(coverage_rates)
-se_coverage <- sd(coverage_rates) / sqrt(n_sims)
+# Overall statistics
+mean_coverage <- mean(coverage_by_model)
+se_coverage <- sd(coverage_by_model) / sqrt(n_model_fits)
 
 # Results
 cat("=== Prediction Interval Coverage ===\n")
 cat("Target coverage:    95.0%\n")
-cat("Empirical coverage:", sprintf("%.1f%%", mean_coverage * 100), "\n")
+cat("Mean coverage:     ", sprintf("%.1f%%", mean_coverage * 100), "\n")
 cat("Standard error:    ", sprintf("%.1f%%", se_coverage * 100), "\n")
-cat("95% CI for coverage: [", sprintf("%.1f%%", (mean_coverage - 1.96*se_coverage) * 100),
-    ", ", sprintf("%.1f%%", (mean_coverage + 1.96*se_coverage) * 100), "]\n", sep="")
+cat("Range:             ", sprintf("[%.1f%%, %.1f%%]",
+    min(coverage_by_model) * 100, max(coverage_by_model) * 100), "\n")
 
 # Tolerance check (within 10%)
 tolerance <- 0.10
@@ -226,53 +248,40 @@ if (meets_target) {
   cat("\n⚠️  WARNING: Prediction intervals may be miscalibrated\n")
 }
 
-# Visualization
-coverage_df <- data.frame(coverage = coverage_rates * 100)
+# Visualization: Simple bar chart showing coverage for each model
+coverage_df <- data.frame(
+  model_id = factor(1:n_model_fits),
+  coverage = coverage_by_model * 100
+)
 
-ggplot(coverage_df, aes(x = coverage)) +
-  # Acceptable range background
-  annotate("rect", xmin = 85, xmax = 100, ymin = 0, ymax = Inf,
-           alpha = 0.15, fill = "green") +
-  # Histogram
-  geom_histogram(binwidth = 1, fill = "steelblue", color = "white", alpha = 0.8) +
+ggplot(coverage_df, aes(x = model_id, y = coverage)) +
   # Target line
-  geom_vline(xintercept = 95, color = "red", linetype = "dashed", linewidth = 1.2) +
-  # Observed mean line
-  geom_vline(xintercept = mean_coverage * 100, color = "darkgreen", linewidth = 1.2) +
-  # Text annotations for clarity
-  annotate("text", x = 95, y = Inf, label = sprintf("Target: 95%%"),
-           vjust = 1.5, hjust = -0.1, color = "red", size = 4, fontface = "bold") +
-  annotate("text", x = mean_coverage * 100, y = Inf,
-           label = sprintf("Observed Mean: %.1f%%", mean_coverage * 100),
-           vjust = 1.5, hjust = ifelse(mean_coverage * 100 > 96, 1.1, -0.1),
-           color = "darkgreen", size = 4, fontface = "bold") +
-  # Add explanatory annotation box
-  annotate("rect", xmin = 85.5, xmax = 93, ymin = 28, ymax = 34,
-           fill = "white", color = "gray50", alpha = 0.95, linewidth = 0.5) +
-  annotate("text", x = 89.25, y = 32.5,
-           label = "Well-Calibrated Model:",
-           size = 3, fontface = "bold", hjust = 0.5) +
-  annotate("text", x = 89.25, y = 31,
-           label = "Each simulation generates new data",
-           size = 2.5, hjust = 0.5) +
-  annotate("text", x = 89.25, y = 29.8,
-           label = "from the true model. We count what %",
-           size = 2.5, hjust = 0.5) +
-  annotate("text", x = 89.25, y = 28.6,
-           label = "of points fall in the 95% PI. Distribution",
-           size = 2.5, hjust = 0.5) +
-  scale_x_continuous(limits = c(85, 100), breaks = seq(85, 100, by = 5)) +
+  geom_hline(yintercept = 95, color = "red", linetype = "dashed", linewidth = 1) +
+  # Acceptable range
+  annotate("rect", xmin = -Inf, xmax = Inf, ymin = 85, ymax = 100,
+           alpha = 0.1, fill = "green") +
+  # Coverage bars
+  geom_col(fill = "steelblue", width = 0.7) +
+  # Add coverage percentage labels
+  geom_text(aes(label = sprintf("%.1f%%", coverage)),
+            vjust = -0.5, size = 3.5, fontface = "bold") +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, by = 10)) +
   labs(
-    title = "Prediction Interval Calibration Test",
-    subtitle = sprintf("%d simulations × 120 data points each: Does 95%% PI capture ~95%% of new data?", n_sims),
-    x = "% of Data Points Within 95% Prediction Interval (per simulation)",
-    y = "Count",
-    caption = "Distribution should center near 95% for well-calibrated intervals"
+    title = "Prediction Interval Coverage Across Different Model Fits",
+    subtitle = sprintf("Each model tested on %d new datasets (%.0fK total points per model)",
+                       n_new_datasets_per_fit,
+                       n_new_datasets_per_fit * 120 / 1000),
+    x = "Model Fit",
+    y = "Coverage (%)",
+    caption = sprintf("Mean coverage: %.1f%% | Target: 95%% | Green band: Acceptable range (85-100%%)",
+                     mean_coverage * 100)
   ) +
+  theme_minimal() +
   theme(
-    plot.title = element_text(size = 14, face = "bold"),
-    plot.subtitle = element_text(size = 10.5),
-    plot.caption = element_text(hjust = 0.5, face = "italic", size = 9)
+    plot.title = element_text(size = 13, face = "bold"),
+    plot.subtitle = element_text(size = 10),
+    plot.caption = element_text(hjust = 0.5, face = "italic", size = 9),
+    panel.grid.major.x = element_blank()
   )
 ```
 
