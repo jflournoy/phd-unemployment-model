@@ -1,6 +1,13 @@
 import js from '@eslint/js';
 
 export default [
+  {
+    ignores: [
+      'reports/*_files/**',
+      'reports/*.html',
+      'node_modules/**'
+    ]
+  },
   js.configs.recommended,
   {
     languageOptions: {
