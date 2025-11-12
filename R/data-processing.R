@@ -34,6 +34,61 @@ remove_haven_labels <- function(data) {
   return(data)
 }
 
+#' Filter CPS Data by Education Level
+#'
+#' Generic function to filter CPS data by any education code.
+#'
+#' @param cps_data Data frame. CPS microdata with EDUC variable
+#' @param educ_code Numeric. IPUMS education code to filter by
+#'
+#' @return Data frame containing only respondents with specified education level
+#'
+#' @details
+#' Common IPUMS CPS education codes:
+#' - 125: Doctorate degree
+#' - 123: Master's degree
+#' - 111: Bachelor's degree
+#' - 91-110: Some college or Associate's degree
+#' - 73: High school diploma
+#'
+#' Uses data.table for efficient filtering of large datasets.
+#'
+#' @examples
+#' \dontrun{
+#' cps_data <- readRDS("data-raw/ipums_data.rds")
+#' masters_data <- filter_education_level(cps_data, educ_code = 123)
+#' }
+#'
+#' @export
+filter_education_level <- function(cps_data, educ_code) {
+  # Validate input
+  if (!is.data.frame(cps_data)) {
+    stop("cps_data must be a data frame")
+  }
+
+  if (!"EDUC" %in% names(cps_data)) {
+    stop("cps_data must contain EDUC variable")
+  }
+
+  if (!is.numeric(educ_code) || length(educ_code) != 1) {
+    stop("educ_code must be a single numeric value")
+  }
+
+  # Remove haven_labelled classes for data.table compatibility
+  cps_data <- remove_haven_labels(cps_data)
+
+  # Use data.table for efficient filtering
+  if (!requireNamespace("data.table", quietly = TRUE)) {
+    # Fallback to base R if data.table not available
+    filtered_data <- cps_data[cps_data$EDUC == educ_code, ]
+  } else {
+    dt <- data.table::as.data.table(cps_data)
+    filtered_data <- as.data.frame(dt[EDUC == educ_code])
+  }
+
+  return(filtered_data)
+}
+
 #' Filter CPS Data to PhD Holders Only
 #'
 #' Extracts only respondents with doctoral degrees from CPS microdata.
@@ -46,7 +101,7 @@ remove_haven_labels <- function(data) {
 #' In CPS, EDUC codes education levels. Code 125 = Doctorate degree.
 #' This function is typically the first step in analyzing PhD-specific unemployment.
 #'
-#' Uses data.table for efficient filtering of large datasets.
+#' This is a convenience wrapper around filter_education_level() for PhD analysis.
 #'
 #' @examples
 #' \dontrun{
@@ -56,28 +111,7 @@ remove_haven_labels <- function(data) {
 #'
 #' @export
 filter_phd_holders <- function(cps_data) {
-  # Validate input
-  if (!is.data.frame(cps_data)) {
-    stop("cps_data must be a data frame")
-  }
-
-  if (!"EDUC" %in% names(cps_data)) {
-    stop("cps_data must contain EDUC variable")
-  }
-
-  # Remove haven_labelled classes for data.table compatibility
-  cps_data <- remove_haven_labels(cps_data)
-
-  # Use data.table for efficient filtering
-  if (!requireNamespace("data.table", quietly = TRUE)) {
-    # Fallback to base R if data.table not available
-    phd_data <- cps_data[cps_data$EDUC == 125, ]
-  } else {
-    dt <- data.table::as.data.table(cps_data)
-    phd_data <- as.data.frame(dt[EDUC == 125])
-  }
-
-  return(phd_data)
+  filter_education_level(cps_data, educ_code = 125)
 }
 
 #' Calculate Weighted Unemployment Rate

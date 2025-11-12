@@ -238,3 +238,58 @@ test_that("process_cps_data runs complete pipeline", {
   expect_equal(feb$unemployment_rate, 1/3, tolerance = 0.01)
   expect_equal(feb$n_obs, 3)
 })
+
+test_that("filter_education_level function exists for generic education filtering", {
+  source(here::here("R", "data-processing.R"))
+  expect_true(exists("filter_education_level", mode = "function"))
+})
+
+test_that("filter_education_level filters to specified education code", {
+  source(here::here("R", "data-processing.R"))
+
+  # Create test data with multiple education levels
+  test_data <- data.frame(
+    YEAR = rep(2024, 6),
+    MONTH = rep(1, 6),
+    EDUC = c(125, 123, 111, 125, 123, 73),  # PhD, Masters, Bachelors, PhD, Masters, HS
+    EMPSTAT = c(10, 10, 10, 20, 20, 20),
+    WTFINL = rep(1000, 6)
+  )
+
+  # Filter to Masters (123)
+  result <- filter_education_level(test_data, educ_code = 123)
+
+  expect_equal(nrow(result), 2)
+  expect_true(all(result$EDUC == 123))
+
+  # Filter to Bachelors (111)
+  result_ba <- filter_education_level(test_data, educ_code = 111)
+  expect_equal(nrow(result_ba), 1)
+  expect_equal(result_ba$EDUC[1], 111)
+})
+
+test_that("calculate_monthly_unemployment works with education-filtered data", {
+  source(here::here("R", "data-processing.R"))
+
+  # Create test data for Masters degree holders
+  test_data <- data.frame(
+    YEAR = c(2024, 2024, 2024, 2024),
+    MONTH = c(1, 1, 2, 2),
+    EDUC = c(123, 123, 123, 123),  # All Masters
+    EMPSTAT = c(10, 20, 10, 10),
+    WTFINL = c(1000, 1000, 1000, 1000)
+  )
+
+  result <- calculate_monthly_unemployment(test_data)
+
+  # Should work with any education level data
+  expect_equal(nrow(result), 2)
+
+  # January: 50% unemployed
+  jan <- result[result$MONTH == 1, ]
+  expect_equal(jan$unemployment_rate, 0.5, tolerance = 0.01)
+
+  # February: 0% unemployed
+  feb <- result[result$MONTH == 2, ]
+  expect_equal(feb$unemployment_rate, 0, tolerance = 0.01)
+})
