@@ -1053,7 +1053,15 @@ validate_parameter_recovery_coverage <- function(model, data, true_params,
       )
       preds <- predict(sim_model, newdata = pred_grid, se.fit = TRUE)
       baseline_est <- mean(preds$fit)
-      baseline_se <- sqrt(sum(preds$se.fit^2)) / 12  # SE of mean
+
+      # Proper SE calculation using variance-covariance matrix
+      # Get linear predictor matrix for computing SE of mean
+      Xp <- predict(sim_model, newdata = pred_grid, type = "lpmatrix")
+      # Mean is a linear combination with weights 1/12
+      weights <- rep(1/12, nrow(pred_grid))
+      mean_Xp <- colSums(Xp * weights)
+      # SE: sqrt(mean_Xp^T %*% Vcov %*% mean_Xp)
+      baseline_se <- sqrt(mean_Xp %*% vcov(sim_model) %*% mean_Xp)[1, 1]
 
       # 95% CI
       baseline_lower <- baseline_est - 1.96 * baseline_se
