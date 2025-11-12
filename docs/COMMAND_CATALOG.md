@@ -2,7 +2,7 @@
 
 Complete list of all available Claude Code commands organized by category.
 
-Last updated: 2025-11-11  
+Last updated: 2025-11-12  
 Total Commands: 15
 
 ## Core Workflow Commands (15)
