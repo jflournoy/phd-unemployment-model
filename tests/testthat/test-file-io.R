@@ -1,3 +1,8 @@
+library(testthat)
+
+# Load the file-io functions
+source(here::here("R", "file-io.R"))
+
 test_that("save_cps_data saves data in fst format", {
   # Create test data
   test_data <- data.frame(
