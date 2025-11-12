@@ -1167,3 +1167,511 @@ validate_parameter_recovery_coverage <- function(model, data, true_params,
 
   return(results)
 }
+
+
+# ==============================================================================
+# FACTOR SMOOTH MODELS FOR MULTI-EDUCATION COMPARISON
+# ==============================================================================
+
+#' Fit GAM with Factor Smooths for Multiple Education Levels
+#'
+#' Fits a joint Generalized Additive Model for multiple education levels using
+#' factor smooths. This allows estimation of education-specific seasonal patterns
+#' and trends while properly accounting for shared structure and correlation.
+#'
+#' @param data Data frame with columns: unemployment_rate, time_index, month, and education
+#' @param formula_type Character. Type of model specification:
+#'   \itemize{
+#'     \item{"shared"}{Shared trend and seasonality (different intercepts only)}
+#'     \item{"seasonal_by_education"}{Education-specific seasonality, shared trend}
+#'     \item{"trend_by_education"}{Education-specific trends, shared seasonality}
+#'     \item{"full"}{Education-specific trends and seasonality (most flexible)}
+#'   }
+#' @param education_var Character. Name of education factor variable (default: "education")
+#' @param k_month Integer. Basis dimension for month smooth (default: 10)
+#' @param k_trend Integer. Basis dimension for time_index smooth (default: 20)
+#'
+#' @return mgcv GAM model object with additional attributes:
+#'   \item{formula_type}{The model specification used}
+#'   \item{education_var}{Name of the education variable}
+#'
+#' @details
+#' This function fits a joint model for all education levels, which has several
+#' advantages over fitting separate models:
+#' \itemize{
+#'   \item{Borrows strength across education levels (partial pooling)}
+#'   \item{Properly quantifies uncertainty in differences}
+#'   \item{Allows formal hypothesis testing}
+#'   \item{More efficient (fewer parameters)}
+#' }
+#'
+#' The factor smooth approach uses mgcv's \code{by=} argument to create
+#' education-specific smooths that share a common smoothness penalty structure.
+#'
+#' Model selection should compare nested specifications using AIC or
+#' cross-validation to determine the appropriate level of complexity.
+#'
+#' @examples
+#' \dontrun{
+#' # Prepare multi-education dataset
+#' combined_data <- prepare_multi_education_data(
+#'   cps_data,
+#'   education_levels = c(phd = 125, masters = 123, bachelors = 111)
+#' )
+#'
+#' # Fit full model
+#' model_full <- fit_factor_smooth_gam(combined_data, formula_type = "full")
+#'
+#' # Fit more parsimonious model
+#' model_shared <- fit_factor_smooth_gam(combined_data, formula_type = "shared")
+#'
+#' # Compare
+#' AIC(model_full, model_shared)
+#' }
+#'
+#' @seealso \code{\link{fit_nested_model_sequence}}, \code{\link{compute_trend_differences}}
+#'
+#' @export
+fit_factor_smooth_gam <- function(data,
+                                   formula_type = "full",
+                                   education_var = "education",
+                                   k_month = 10,
+                                   k_trend = 20) {
+
+  # Validate inputs
+  if (!formula_type %in% c("shared", "seasonal_by_education", "trend_by_education", "full")) {
+    stop("formula_type must be one of: 'shared', 'seasonal_by_education', 'trend_by_education', 'full'")
+  }
+
+  required_cols <- c("unemployment_rate", "time_index", "month", education_var)
+  missing_cols <- setdiff(required_cols, names(data))
+  if (length(missing_cols) > 0) {
+    stop(paste("Missing required columns:", paste(missing_cols, collapse = ", ")))
+  }
+
+  # Ensure education variable is a factor
+  data[[education_var]] <- as.factor(data[[education_var]])
+
+  # Build formula based on type
+  formula <- switch(formula_type,
+    "shared" = as.formula(paste0(
+      "unemployment_rate ~ ", education_var, " + ",
+      "s(time_index, bs='cr', k=", k_trend, ") + ",
+      "s(month, bs='cc', k=", k_month, ")"
+    )),
+
+    "seasonal_by_education" = as.formula(paste0(
+      "unemployment_rate ~ ",
+      "s(time_index, bs='cr', k=", k_trend, ") + ",
+      "s(month, by=", education_var, ", bs='cc', k=", k_month, ")"
+    )),
+
+    "trend_by_education" = as.formula(paste0(
+      "unemployment_rate ~ ",
+      "s(time_index, by=", education_var, ", bs='cr', k=", k_trend, ") + ",
+      "s(month, bs='cc', k=", k_month, ")"
+    )),
+
+    "full" = as.formula(paste0(
+      "unemployment_rate ~ ",
+      "s(time_index, by=", education_var, ", bs='cr', k=", k_trend, ") + ",
+      "s(month, by=", education_var, ", bs='cc', k=", k_month, ")"
+    ))
+  )
+
+  # Fit model using REML for smoothness selection
+  model <- mgcv::gam(formula, data = data, method = "REML")
+
+  # Store metadata as attributes
+  attr(model, "formula_type") <- formula_type
+  attr(model, "education_var") <- education_var
+
+  return(model)
+}
+
+
+#' Fit Sequence of Nested Joint Models
+#'
+#' Fits a sequence of nested GAM models for multiple education levels,
+#' from simplest (null model) to most complex (fully saturated).
+#' Used for model selection and comparison.
+#'
+#' @param data Combined data frame with all education levels
+#'
+#' @return Named list of gam objects (m0 through m6):
+#'   \item{m0}{Null model (intercept only)}
+#'   \item{m1}{Education-specific intercepts}
+#'   \item{m2}{Education + shared time trend}
+#'   \item{m3}{Education + shared trend + shared seasonality}
+#'   \item{m4}{Education-specific trends + shared seasonality}
+#'   \item{m5}{Shared trend + education-specific seasonality}
+#'   \item{m6}{Fully saturated (education-specific trends and seasonality)}
+#'
+#' @details
+#' This sequence of models allows systematic testing of which components
+#' vary by education level. Models can be compared using AIC, BIC, or
+#' likelihood ratio tests (since they are nested).
+#'
+#' @examples
+#' \dontrun{
+#' models <- fit_nested_model_sequence(combined_data)
+#' comparison <- compare_nested_models(models)
+#' print(comparison)
+#' }
+#'
+#' @seealso \code{\link{compare_nested_models}}
+#'
+#' @export
+fit_nested_model_sequence <- function(data) {
+  list(
+    m0 = mgcv::gam(unemployment_rate ~ 1, data = data, method = "REML"),
+
+    m1 = mgcv::gam(unemployment_rate ~ education, data = data, method = "REML"),
+
+    m2 = mgcv::gam(unemployment_rate ~ education + s(time_index),
+                   data = data, method = "REML"),
+
+    m3 = mgcv::gam(unemployment_rate ~ education +
+                     s(time_index) +
+                     s(month, bs = "cc"),
+                   data = data, method = "REML"),
+
+    m4 = mgcv::gam(unemployment_rate ~
+                     s(time_index, by = education) +
+                     s(month, bs = "cc"),
+                   data = data, method = "REML"),
+
+    m5 = mgcv::gam(unemployment_rate ~
+                     s(time_index) +
+                     s(month, by = education, bs = "cc"),
+                   data = data, method = "REML"),
+
+    m6 = mgcv::gam(unemployment_rate ~
+                     s(time_index, by = education) +
+                     s(month, by = education, bs = "cc"),
+                   data = data, method = "REML")
+  )
+}
+
+
+#' Compare Nested GAM Models
+#'
+#' Creates a comparison table for nested GAM models showing AIC, deviance,
+#' effective degrees of freedom, and R-squared.
+#'
+#' @param models Named list of gam objects (typically from \code{fit_nested_model_sequence})
+#'
+#' @return Data frame with one row per model, sorted by AIC (best first), containing:
+#'   \item{model}{Model name}
+#'   \item{AIC}{Akaike Information Criterion}
+#'   \item{deviance}{Model deviance}
+#'   \item{df_residual}{Residual degrees of freedom}
+#'   \item{edf}{Effective degrees of freedom (sum of all smooths)}
+#'   \item{r_squared}{Proportion of variance explained}
+#'   \item{delta_AIC}{Difference from best model's AIC}
+#'
+#' @details
+#' Models are compared using AIC, which balances fit and complexity.
+#' Delta AIC interpretation:
+#' \itemize{
+#'   \item{< 2: Essentially equivalent to best model}
+#'   \item{4-7: Considerably less support}
+#'   \item{> 10: Essentially no support}
+#' }
+#'
+#' @examples
+#' \dontrun{
+#' models <- fit_nested_model_sequence(data)
+#' comparison <- compare_nested_models(models)
+#' print(comparison)
+#' }
+#'
+#' @export
+compare_nested_models <- function(models) {
+  df <- data.frame(
+    model = names(models),
+    AIC = sapply(models, AIC),
+    deviance = sapply(models, deviance),
+    df_residual = sapply(models, function(m) m$df.residual),
+    edf = sapply(models, function(m) sum(m$edf)),
+    r_squared = sapply(models, function(m) summary(m)$r.sq),
+    stringsAsFactors = FALSE
+  )
+
+  # Calculate delta AIC
+  df$delta_AIC <- df$AIC - min(df$AIC)
+
+  # Sort by AIC (best first)
+  df <- df[order(df$AIC), ]
+  rownames(df) <- NULL
+
+  return(df)
+}
+
+
+#' Extract Education-Specific Seasonal Component
+#'
+#' Extracts the seasonal component for a specific education level from a
+#' factor smooth GAM model.
+#'
+#' @param model gam object from \code{fit_factor_smooth_gam}
+#' @param education_level Character. Which education level to extract
+#'
+#' @return Data frame with columns:
+#'   \item{month}{Month (1-12)}
+#'   \item{seasonal_effect}{Estimated seasonal effect (centered)}
+#'   \item{se}{Standard error of the seasonal effect}
+#'
+#' @details
+#' The seasonal component is extracted at the median time_index value to
+#' isolate the month effect from the trend component.
+#'
+#' @examples
+#' \dontrun{
+#' model <- fit_factor_smooth_gam(data, formula_type = "full")
+#' seasonal_phd <- extract_education_specific_seasonal(model, "phd")
+#' plot(seasonal_phd$month, seasonal_phd$seasonal_effect, type = "b")
+#' }
+#'
+#' @export
+extract_education_specific_seasonal <- function(model, education_level) {
+  education_var <- attr(model, "education_var")
+  if (is.null(education_var)) {
+    education_var <- "education"
+  }
+
+  # Create prediction data at median time for all months
+  median_time <- median(model$model$time_index)
+
+  newdata <- data.frame(
+    month = 1:12,
+    time_index = median_time
+  )
+  newdata[[education_var]] <- education_level
+
+  # Get predictions with SE
+  pred <- predict(model, newdata = newdata, type = "terms", se.fit = TRUE)
+
+  # Find the month smooth column
+  month_col_idx <- grep("month", colnames(pred$fit))
+
+  if (length(month_col_idx) == 0) {
+    # No month smooth - return zeros
+    return(data.frame(
+      month = 1:12,
+      seasonal_effect = 0,
+      se = 0
+    ))
+  }
+
+  # Extract seasonal effects and SE
+  seasonal_effect <- pred$fit[, month_col_idx[1]]
+  se <- pred$se.fit[, month_col_idx[1]]
+
+  data.frame(
+    month = 1:12,
+    seasonal_effect = seasonal_effect,
+    se = se
+  )
+}
+
+
+#' Extract Education-Specific Trend Component
+#'
+#' Extracts the trend component for a specific education level from a
+#' factor smooth GAM model.
+#'
+#' @param model gam object from \code{fit_factor_smooth_gam}
+#' @param education_level Character. Which education level to extract
+#'
+#' @return Data frame with columns:
+#'   \item{time_index}{Time index values}
+#'   \item{trend_effect}{Estimated trend effect}
+#'   \item{se}{Standard error of the trend effect}
+#'
+#' @details
+#' The trend component is extracted at a fixed month (June) to isolate
+#' the time effect from seasonal variation.
+#'
+#' @examples
+#' \dontrun{
+#' model <- fit_factor_smooth_gam(data, formula_type = "full")
+#' trend_phd <- extract_education_specific_trend(model, "phd")
+#' plot(trend_phd$time_index, trend_phd$trend_effect, type = "l")
+#' }
+#'
+#' @export
+extract_education_specific_trend <- function(model, education_level) {
+  education_var <- attr(model, "education_var")
+  if (is.null(education_var)) {
+    education_var <- "education"
+  }
+
+  # Get all unique time points
+  time_points <- sort(unique(model$model$time_index))
+
+  # Create prediction data at fixed month (June = 6)
+  newdata <- data.frame(
+    time_index = time_points,
+    month = 6
+  )
+  newdata[[education_var]] <- education_level
+
+  # Get predictions with SE
+  pred <- predict(model, newdata = newdata, type = "terms", se.fit = TRUE)
+
+  # Find the time_index smooth column
+  trend_col_idx <- grep("time_index", colnames(pred$fit))
+
+  if (length(trend_col_idx) == 0) {
+    # No trend smooth - return zeros
+    return(data.frame(
+      time_index = time_points,
+      trend_effect = 0,
+      se = 0
+    ))
+  }
+
+  # Extract trend effects and SE
+  trend_effect <- pred$fit[, trend_col_idx[1]]
+  se <- pred$se.fit[, trend_col_idx[1]]
+
+  data.frame(
+    time_index = time_points,
+    trend_effect = trend_effect,
+    se = se
+  )
+}
+
+
+#' Compute Differences Between Education-Specific Trends
+#'
+#' Computes pairwise differences between education-specific trends with
+#' proper uncertainty quantification using the joint model's variance-covariance matrix.
+#'
+#' @param model gam object from \code{fit_factor_smooth_gam}
+#' @param education_pairs List of character vectors. Each element is a pair of
+#'   education levels to compare (e.g., \code{list(c("phd", "masters"))})
+#' @param time_points Numeric vector. Time index values to evaluate differences at.
+#'   If NULL, uses all unique time points from the model.
+#' @param simultaneous Logical. Use simultaneous confidence bands? (default: FALSE)
+#' @param alpha Numeric. Significance level (default: 0.05)
+#'
+#' @return Data frame with columns:
+#'   \item{time_index}{Time index}
+#'   \item{comparison}{Character describing the comparison (e.g., "phd - masters")}
+#'   \item{difference}{Estimated difference in unemployment rate}
+#'   \item{se}{Standard error of the difference}
+#'   \item{lower}{Lower confidence limit}
+#'   \item{upper}{Upper confidence limit}
+#'   \item{significant}{Logical. Is difference significant at level alpha?}
+#'
+#' @details
+#' This function properly accounts for the correlation between predictions
+#' for different education levels by using the full variance-covariance matrix
+#' from the joint model. This gives correct uncertainty quantification for
+#' differences, unlike taking differences of predictions from separate models.
+#'
+#' When \code{simultaneous = TRUE}, confidence bands are adjusted for multiple
+#' comparisons across time points using a Bonferroni correction. This controls
+#' the family-wise error rate.
+#'
+#' @examples
+#' \dontrun{
+#' model <- fit_factor_smooth_gam(data, formula_type = "full")
+#'
+#' # Compare PhD to Bachelor's at yearly intervals
+#' diff_results <- compute_trend_differences(
+#'   model,
+#'   education_pairs = list(c("phd", "bachelors")),
+#'   time_points = seq(1, 300, by = 12)
+#' )
+#'
+#' # Plot differences with confidence bands
+#' plot(diff_results$time_index, diff_results$difference, type = "l")
+#' lines(diff_results$time_index, diff_results$lower, lty = 2)
+#' lines(diff_results$time_index, diff_results$upper, lty = 2)
+#' abline(h = 0, col = "red")
+#' }
+#'
+#' @export
+compute_trend_differences <- function(model,
+                                      education_pairs,
+                                      time_points = NULL,
+                                      simultaneous = FALSE,
+                                      alpha = 0.05) {
+
+  education_var <- attr(model, "education_var")
+  if (is.null(education_var)) {
+    education_var <- "education"
+  }
+
+  # Use all time points if not specified
+  if (is.null(time_points)) {
+    time_points <- sort(unique(model$model$time_index))
+  }
+
+  # Process each education pair
+  results_list <- lapply(education_pairs, function(pair) {
+    # Create prediction data for both education levels
+    # Fix month at June (6) to isolate trend differences
+    newdata <- rbind(
+      data.frame(
+        time_index = time_points,
+        month = 6,
+        education = pair[1],
+        stringsAsFactors = FALSE
+      ),
+      data.frame(
+        time_index = time_points,
+        month = 6,
+        education = pair[2],
+        stringsAsFactors = FALSE
+      )
+    )
+    names(newdata)[3] <- education_var
+
+    # Get linear predictor matrix
+    X <- predict(model, newdata = newdata, type = "lpmatrix")
+
+    # Compute difference: first education - second education
+    n <- length(time_points)
+    C <- X[1:n, , drop = FALSE] - X[(n + 1):(2 * n), , drop = FALSE]
+
+    # Get predictions and SE
+    diff <- as.numeric(C %*% coef(model))
+
+    # Variance of difference using full variance-covariance matrix
+    V <- vcov(model)
+    se <- sqrt(rowSums((C %*% V) * C))
+
+    # Compute confidence intervals
+    if (simultaneous) {
+      # Bonferroni correction for multiple comparisons
+      # Adjust for number of time points × number of pairs
+      n_comparisons <- n * length(education_pairs)
+      crit <- qnorm(1 - alpha / (2 * n_comparisons))
+    } else {
+      # Point wise confidence intervals
+      crit <- qnorm(1 - alpha / 2)
+    }
+
+    lower <- diff - crit * se
+    upper <- diff + crit * se
+    significant <- abs(diff) > crit * se
+
+    data.frame(
+      time_index = time_points,
+      comparison = paste(pair[1], "-", pair[2]),
+      difference = diff,
+      se = se,
+      lower = lower,
+      upper = upper,
+      significant = significant,
+      stringsAsFactors = FALSE
+    )
+  })
+
+  # Combine all pairs
+  do.call(rbind, results_list)
+}
