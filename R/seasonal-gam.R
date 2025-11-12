@@ -1105,10 +1105,27 @@ validate_parameter_recovery_coverage <- function(model, data, true_params,
       amplitude_est <- (max(seasonal$seasonal_effect) -
                         min(seasonal$seasonal_effect)) / 2
 
-      # Estimate SE
-      max_se <- seasonal$se[which.max(seasonal$seasonal_effect)]
-      min_se <- seasonal$se[which.min(seasonal$seasonal_effect)]
-      amplitude_se <- sqrt(max_se^2 + min_se^2) / 2
+      # Proper SE calculation using variance-covariance matrix
+      # Need to get linear predictor matrix for the two months
+      max_month <- seasonal$month[which.max(seasonal$seasonal_effect)]
+      min_month <- seasonal$month[which.min(seasonal$seasonal_effect)]
+
+      # Create prediction grid for these two months at mean time
+      pred_grid_amplitude <- data.frame(
+        time_index = mean(sim_data$time_index),
+        month = c(max_month, min_month)
+      )
+
+      # Get linear predictor matrix
+      Xp <- predict(sim_model, newdata = pred_grid_amplitude, type = "lpmatrix")
+
+      # Amplitude = (max - min) / 2, so we want SE of: 0.5 * (pred1 - pred2)
+      # This is a linear combination with weights [0.5, -0.5]
+      contrast_weights <- c(0.5, -0.5)
+      contrast_Xp <- colSums(Xp * contrast_weights)
+
+      # SE: sqrt(contrast_Xp^T %*% Vcov %*% contrast_Xp)
+      amplitude_se <- sqrt(contrast_Xp %*% vcov(sim_model) %*% contrast_Xp)[1, 1]
 
       # 95% CI
       amplitude_lower <- amplitude_est - 1.96 * amplitude_se
