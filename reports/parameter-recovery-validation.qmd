@@ -771,7 +771,7 @@ p_amp2 + p_amp3
 
 ## Test 4: Comprehensive Coverage Validation
 
-**Goal:** Use the `validate_parameter_recovery_coverage()` function to test all coverage properties simultaneously.
+**Goal:** Use the `validate_parameter_recovery_coverage()` function to test all three coverage properties simultaneously in a single call.
 
 **What We're Comparing:**
 
@@ -783,14 +783,29 @@ p_amp2 + p_amp3
 
 - **Reference Model:** GAM fitted to ONE dataset from this DGP
 
-- **The Test:** The `validate_parameter_recovery_coverage()` function:
-  1. Takes the reference model and extracts its estimated parameters
-  2. Generates 100 NEW datasets using the DGP parameters specified in `true_params`
-  3. For each new dataset, fits a NEW GAM and checks:
-     - Does the reference model's prediction interval contain new observations?
-     - Does the new model's baseline CI contain the true baseline?
-     - Does the new model's amplitude CI contain the true amplitude?
-  4. Computes coverage rates across all 100 simulations
+- **The Test:** The `validate_parameter_recovery_coverage()` function runs ALL THREE tests above:
+
+  1. **Prediction Interval Coverage (like Test 1):**
+     - Uses REFERENCE model's prediction intervals (computed once)
+     - Generates 100 NEW datasets from the same DGP
+     - Checks if reference model's PIs contain new observations
+     - Expected: ~95% of all new observations should be within PIs
+
+  2. **Baseline CI Coverage (like Test 2):**
+     - For each of 100 simulations:
+       * Generate NEW dataset from DGP
+       * Fit NEW model to this dataset
+       * Check if NEW model's baseline CI contains true baseline (0.025)
+     - Expected: ~95% of the 100 CIs should contain true baseline
+
+  3. **Amplitude CI Coverage (like Test 3):**
+     - For each of 100 simulations:
+       * Generate NEW dataset from DGP
+       * Fit NEW model to this dataset
+       * Check if NEW model's amplitude CI contains true amplitude (0.008)
+     - Expected: ~95% of the 100 CIs should contain true amplitude
+
+**Why This Matters:** This comprehensive test ensures all three types of uncertainty quantification (prediction intervals and two parameter CIs) are properly calibrated. It's a single-function wrapper that performs the same tests as Tests 1-3.
 
 **CRITICAL:** The DGP used to create reference data MUST match the DGP used in the validation function. Here, both use `trend_slope = 0`. Any mismatch causes systematic bias and miscalibrated coverage.
 

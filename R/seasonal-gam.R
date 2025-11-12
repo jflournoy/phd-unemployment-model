@@ -935,9 +935,9 @@ validate_parameter_recovery <- function(model, data, true_params) {
 #' Tests whether model uncertainty intervals have correct coverage properties.
 #' This is a more rigorous validation than point estimates.
 #'
-#' @param model mgcv GAM model object (fitted to one dataset)
-#' @param data Data frame. Original data used to fit model
-#' @param true_params List with true parameter values
+#' @param model mgcv GAM model object (fitted to ONE reference dataset)
+#' @param data Data frame. Original data used to fit the reference model
+#' @param true_params List with true parameter values used to generate data
 #' @param n_sims Integer. Number of simulations for coverage testing (default: 100)
 #' @param tolerance Numeric. Acceptable deviation from nominal coverage (default: 0.10)
 #'
@@ -948,19 +948,35 @@ validate_parameter_recovery <- function(model, data, true_params) {
 #'   \item{meets_target}{Logical indicating if coverage is within tolerance}
 #'
 #' @details
-#' Tests two types of coverage:
-#' 1. Prediction intervals: Do 95% of new observations fall within 95% prediction intervals?
-#' 2. Confidence intervals: Do 95% of confidence intervals contain the true parameter?
+#' Tests three types of coverage using the CORRECT procedure:
+#'
+#' 1. **Prediction Intervals (Test 1 approach):**
+#'    - Uses the REFERENCE model (fitted once to reference data)
+#'    - Generates n_sims NEW datasets from the same DGP
+#'    - Checks if reference model's prediction intervals contain new observations
+#'
+#' 2. **Baseline CI (Test 2 approach):**
+#'    - For each of n_sims experiments:
+#'      * Generate NEW dataset from DGP
+#'      * Fit NEW model to this dataset
+#'      * Check if NEW model's baseline CI contains true baseline
+#'
+#' 3. **Amplitude CI (Test 3 approach):**
+#'    - For each of n_sims experiments:
+#'      * Generate NEW dataset from DGP
+#'      * Fit NEW model to this dataset
+#'      * Check if NEW model's amplitude CI contains true amplitude
 #'
 #' This is the correct way to validate model calibration. A well-calibrated model
 #' should have empirical coverage close to the nominal level (e.g., 95%).
 #'
 #' @examples
 #' \dontrun{
-#' # Simulate data with known parameters
+#' # Simulate reference data with known parameters
 #' true_params <- list(baseline = 0.025, seasonal_amplitude = 0.008)
 #' sim_data <- simulate_seasonal_unemployment(n_years = 10,
 #'                                            baseline_rate = 0.025,
+#'                                            trend_slope = 0,  # MUST match defaults
 #'                                            seasonal_amplitude = 0.008)
 #' model <- fit_seasonal_gam(sim_data)
 #' coverage <- validate_parameter_recovery_coverage(model, sim_data, true_params, n_sims = 100)
@@ -982,46 +998,45 @@ validate_parameter_recovery_coverage <- function(model, data, true_params,
     stringsAsFactors = FALSE
   )
 
-  # Get model formula parameters from first fit
+  # Get DGP parameters (with defaults matching function expectations)
   baseline_rate <- if ("baseline" %in% names(true_params)) true_params$baseline else 0.025
   trend_slope <- if ("trend_slope" %in% names(true_params)) true_params$trend_slope else 0
   seasonal_amplitude <- if ("seasonal_amplitude" %in% names(true_params)) true_params$seasonal_amplitude else 0.005
   noise_sd <- sd(residuals(model))
 
-  # 1. Test prediction interval coverage
-  pred_coverage_count <- 0
+  # ===== TEST 1: PREDICTION INTERVAL COVERAGE =====
+  # Use REFERENCE model's intervals, generate NEW data from same DGP
+  # This tests: "Do the reference model's 95% PIs contain 95% of new observations?"
+
+  # Calculate prediction intervals from REFERENCE model (once)
+  pred_ref <- predict(model, se.fit = TRUE)
+  pred_sd <- sqrt(pred_ref$se.fit^2 + noise_sd^2)
+  lower_pi <- pred_ref$fit - 1.96 * pred_sd
+  upper_pi <- pred_ref$fit + 1.96 * pred_sd
+
+  # Test on many new datasets
+  total_coverage_count <- 0
+  total_observations <- 0
 
   for (i in 1:n_sims) {
-    # Simulate new dataset with same parameters
-    sim_data <- simulate_seasonal_unemployment(
+    # Generate NEW dataset from same DGP
+    new_data <- simulate_seasonal_unemployment(
       n_years = nrow(data) / 12,
       baseline_rate = baseline_rate,
       trend_slope = trend_slope,
       seasonal_amplitude = seasonal_amplitude,
       noise_sd = noise_sd,
-      seed = i * 42
+      seed = i * 12345
     )
 
-    # Fit model to new data
-    sim_model <- fit_seasonal_gam(sim_data, k_month = 10, k_trend = 15)
-
-    # Get 95% prediction intervals
-    pred <- predict(sim_model, se.fit = TRUE)
-    lower_pred <- pred$fit - 1.96 * sqrt(pred$se.fit^2 + noise_sd^2)
-    upper_pred <- pred$fit + 1.96 * sqrt(pred$se.fit^2 + noise_sd^2)
-
-    # Check coverage
-    within_interval <- (sim_data$unemployment_rate >= lower_pred) &
-                       (sim_data$unemployment_rate <= upper_pred)
-    coverage_rate <- mean(within_interval)
-
-    # Good coverage if >= 90% (some tolerance for small samples)
-    if (coverage_rate >= 0.90) {
-      pred_coverage_count <- pred_coverage_count + 1
-    }
+    # Check if reference model's PIs contain new observations
+    within_interval <- (new_data$unemployment_rate >= lower_pi) &
+                       (new_data$unemployment_rate <= upper_pi)
+    total_coverage_count <- total_coverage_count + sum(within_interval)
+    total_observations <- total_observations + nrow(new_data)
   }
 
-  pred_coverage <- pred_coverage_count / n_sims
+  pred_coverage <- total_coverage_count / total_observations
   results <- rbind(results, data.frame(
     parameter = "prediction_interval",
     coverage_rate = pred_coverage,
@@ -1029,7 +1044,8 @@ validate_parameter_recovery_coverage <- function(model, data, true_params,
     meets_target = abs(pred_coverage - 0.95) <= tolerance
   ))
 
-  # 2. Test confidence interval coverage for baseline
+  # ===== TEST 2: BASELINE CI COVERAGE =====
+  # For each simulation: fit NEW model, check if NEW model's CI contains true baseline
   if ("baseline" %in% names(true_params)) {
     baseline_coverage_count <- 0
 
@@ -1083,7 +1099,8 @@ validate_parameter_recovery_coverage <- function(model, data, true_params,
     ))
   }
 
-  # 3. Test confidence interval coverage for seasonal amplitude
+  # ===== TEST 3: SEASONAL AMPLITUDE CI COVERAGE =====
+  # For each simulation: fit NEW model, check if CI contains true amplitude
   if ("seasonal_amplitude" %in% names(true_params)) {
     amplitude_coverage_count <- 0
 
@@ -1091,6 +1108,7 @@ validate_parameter_recovery_coverage <- function(model, data, true_params,
       sim_data <- simulate_seasonal_unemployment(
         n_years = nrow(data) / 12,
         baseline_rate = baseline_rate,
+        trend_slope = trend_slope,  # Must include trend for consistency
         seasonal_amplitude = seasonal_amplitude,
         noise_sd = noise_sd,
         seed = i * 456
