@@ -454,7 +454,178 @@ test_that("model selection prefers full model when both differ", {
 
 
 # ==============================================================================
-# Test Suite 6: Integration with Existing Functions
+# Test Suite 6: Multi-Education Simulation Function
+# ==============================================================================
+
+test_that("simulate_multi_education_unemployment is exported from package", {
+  # Should be accessible as exported function
+  expect_true(exists("simulate_multi_education_unemployment"))
+  expect_type(simulate_multi_education_unemployment, "closure")
+})
+
+test_that("simulate_multi_education_unemployment generates correct data structure", {
+  # Generate data for 3 education levels
+  sim_data <- simulate_multi_education_unemployment(
+    n_years = 5,
+    education_levels = c("phd", "masters", "bachelors"),
+    baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+    seasonal_amplitudes = c(phd = 0.005, masters = 0.010, bachelors = 0.015),
+    trend_slopes = c(phd = -0.0001, masters = -0.0002, bachelors = -0.0003),
+    seed = 123
+  )
+
+  # Should return a data frame
+  expect_s3_class(sim_data, "data.frame")
+
+  # Should have correct number of rows (3 education levels × 5 years × 12 months)
+  expect_equal(nrow(sim_data), 3 * 5 * 12)
+
+  # Should have required columns
+  required_cols <- c("time_index", "month", "unemployment_rate", "education")
+  expect_true(all(required_cols %in% names(sim_data)))
+
+  # education should be a factor
+  expect_true(is.factor(sim_data$education))
+  expect_equal(levels(sim_data$education), c("phd", "masters", "bachelors"))
+
+  # time_index should run from 1 to 60 for each education level
+  expect_true(all(sim_data$time_index >= 1 & sim_data$time_index <= 60))
+
+  # month should be 1-12
+  expect_true(all(sim_data$month >= 1 & sim_data$month <= 12))
+})
+
+test_that("simulate_multi_education_unemployment stores true parameters as attributes", {
+  true_baseline <- c(phd = 0.03, masters = 0.04, bachelors = 0.05)
+  true_amplitude <- c(phd = 0.008, masters = 0.012, bachelors = 0.016)
+  true_slope <- c(phd = -0.0002, masters = -0.0003, bachelors = -0.0004)
+
+  sim_data <- simulate_multi_education_unemployment(
+    n_years = 3,
+    education_levels = names(true_baseline),
+    baseline_rates = true_baseline,
+    seasonal_amplitudes = true_amplitude,
+    trend_slopes = true_slope
+  )
+
+  # Should store true parameters as attributes
+  expect_equal(attr(sim_data, "true_baseline"), true_baseline)
+  expect_equal(attr(sim_data, "true_seasonal_amplitude"), true_amplitude)
+  expect_equal(attr(sim_data, "true_trend_slope"), true_slope)
+})
+
+test_that("simulate_multi_education_unemployment respects seed for reproducibility", {
+  params <- list(
+    n_years = 3,
+    education_levels = c("phd", "masters"),
+    baseline_rates = c(phd = 0.03, masters = 0.04),
+    seasonal_amplitudes = c(phd = 0.01, masters = 0.015),
+    trend_slopes = c(phd = 0, masters = -0.0001)
+  )
+
+  # Generate twice with same seed
+  sim1 <- simulate_multi_education_unemployment(seed = 42, n_years = params$n_years,
+                                                education_levels = params$education_levels,
+                                                baseline_rates = params$baseline_rates,
+                                                seasonal_amplitudes = params$seasonal_amplitudes,
+                                                trend_slopes = params$trend_slopes)
+  sim2 <- simulate_multi_education_unemployment(seed = 42, n_years = params$n_years,
+                                                education_levels = params$education_levels,
+                                                baseline_rates = params$baseline_rates,
+                                                seasonal_amplitudes = params$seasonal_amplitudes,
+                                                trend_slopes = params$trend_slopes)
+
+  # Should be identical
+  expect_equal(sim1$unemployment_rate, sim2$unemployment_rate)
+
+  # Different seed should give different results
+  sim3 <- simulate_multi_education_unemployment(seed = 999, n_years = params$n_years,
+                                                education_levels = params$education_levels,
+                                                baseline_rates = params$baseline_rates,
+                                                seasonal_amplitudes = params$seasonal_amplitudes,
+                                                trend_slopes = params$trend_slopes)
+
+  expect_false(identical(sim1$unemployment_rate, sim3$unemployment_rate))
+})
+
+test_that("simulate_multi_education_unemployment validates parameter vectors", {
+  # Should error if parameter vectors don't match education_levels
+  expect_error(
+    simulate_multi_education_unemployment(
+      n_years = 3,
+      education_levels = c("phd", "masters", "bachelors"),
+      baseline_rates = c(phd = 0.03, masters = 0.04),  # Missing bachelors!
+      seasonal_amplitudes = c(phd = 0.01, masters = 0.015, bachelors = 0.02),
+      trend_slopes = c(phd = 0, masters = -0.0001, bachelors = -0.0002)
+    ),
+    "missing values for: bachelors"
+  )
+
+  # Should error if names don't match
+  expect_error(
+    simulate_multi_education_unemployment(
+      n_years = 3,
+      education_levels = c("phd", "masters"),
+      baseline_rates = c(doctoral = 0.03, masters = 0.04),  # Wrong name!
+      seasonal_amplitudes = c(phd = 0.01, masters = 0.015),
+      trend_slopes = c(phd = 0, masters = -0.0001)
+    ),
+    "missing values for: phd"
+  )
+})
+
+test_that("simulate_multi_education_unemployment generates education-specific patterns", {
+  # Simulate with very different parameters
+  sim_data <- simulate_multi_education_unemployment(
+    n_years = 15,
+    education_levels = c("low", "high"),
+    baseline_rates = c(low = 0.08, high = 0.02),  # Large difference
+    seasonal_amplitudes = c(low = 0.002, high = 0.030),  # Large difference
+    trend_slopes = c(low = 0.0005, high = -0.001),  # Opposite directions
+    noise_sd = 0.001,  # Low noise to see patterns clearly
+    seed = 123
+  )
+
+  # Split by education
+  low_data <- sim_data[sim_data$education == "low", ]
+  high_data <- sim_data[sim_data$education == "high", ]
+
+  # Check that baselines are approximately correct
+  # (mean over all time should be close to baseline + half the trend effect)
+  expect_gt(mean(low_data$unemployment_rate), mean(high_data$unemployment_rate))
+
+  # Check seasonality differences using detrended data
+  # Fit linear trend and extract residuals for seasonal analysis
+  low_lm <- lm(unemployment_rate ~ time_index, data = low_data)
+  high_lm <- lm(unemployment_rate ~ time_index, data = high_data)
+
+  low_data$detrended <- residuals(low_lm) + mean(low_data$unemployment_rate)
+  high_data$detrended <- residuals(high_lm) + mean(high_data$unemployment_rate)
+
+  # Compute range (peak-to-trough) for each education level from detrended data
+  low_monthly <- aggregate(detrended ~ month, data = low_data, FUN = mean)
+  high_monthly <- aggregate(detrended ~ month, data = high_data, FUN = mean)
+
+  low_range <- max(low_monthly$detrended) - min(low_monthly$detrended)
+  high_range <- max(high_monthly$detrended) - min(high_monthly$detrended)
+
+  # high should have much larger seasonal range (15x larger by design)
+  # Allow for noise affecting estimates
+  expect_gt(high_range, low_range)  # Should be larger
+
+  # Check trend directions
+  # Use the fitted slopes from linear models
+  low_slope <- coef(low_lm)["time_index"]
+  high_slope <- coef(high_lm)["time_index"]
+
+  # low should have positive slope, high should have negative slope
+  expect_gt(low_slope, 0)
+  expect_lt(high_slope, 0)
+})
+
+
+# ==============================================================================
+# Test Suite 7: Integration with Existing Functions
 # ==============================================================================
 
 test_that("compare_unemployment_factor_smooth integrates with data processing", {

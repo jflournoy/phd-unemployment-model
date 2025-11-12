@@ -83,6 +83,146 @@ simulate_seasonal_unemployment <- function(n_years = 5,
   )
 }
 
+#' Simulate Multi-Education Unemployment Data
+#'
+#' Generates synthetic unemployment time series data for multiple education levels
+#' with education-specific seasonal patterns, trends, and baseline rates.
+#'
+#' @param n_years Integer. Number of years to simulate (default: 5)
+#' @param education_levels Character vector. Names of education levels (e.g., c("phd", "masters", "bachelors"))
+#' @param baseline_rates Named numeric vector. Baseline unemployment rate for each education level
+#' @param seasonal_amplitudes Named numeric vector. Seasonal amplitude for each education level
+#' @param trend_slopes Named numeric vector. Linear trend slope for each education level
+#' @param noise_sd Numeric. Standard deviation of random noise (default: 0.002)
+#' @param seed Integer. Random seed for reproducibility (default: NULL)
+#'
+#' @return Data frame with columns:
+#' \itemize{
+#'   \item \code{time_index}: Sequential time index (1 to n_months)
+#'   \item \code{month}: Month of year (1-12)
+#'   \item \code{unemployment_rate}: Simulated unemployment rate
+#'   \item \code{education}: Factor variable indicating education level
+#' }
+#'
+#' The returned data frame also has attributes storing the true parameter values:
+#' \itemize{
+#'   \item \code{attr(., "true_baseline")}: True baseline rates
+#'   \item \code{attr(., "true_seasonal_amplitude")}: True seasonal amplitudes
+#'   \item \code{attr(., "true_trend_slope")}: True trend slopes
+#' }
+#'
+#' @details
+#' This function generates unemployment data where each education level can have:
+#' \itemize{
+#'   \item Different baseline unemployment rates
+#'   \item Different seasonal patterns (varying amplitudes)
+#'   \item Different time trends (varying slopes)
+#' }
+#'
+#' The seasonal component uses a sinusoidal pattern with peak around June-July.
+#' All parameter vectors (baseline_rates, seasonal_amplitudes, trend_slopes)
+#' must be named vectors with names matching \code{education_levels}.
+#'
+#' @examples
+#' \dontrun{
+#' # Simulate data for 3 education levels with different patterns
+#' sim_data <- simulate_multi_education_unemployment(
+#'   n_years = 5,
+#'   education_levels = c("phd", "masters", "bachelors"),
+#'   baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+#'   seasonal_amplitudes = c(phd = 0.005, masters = 0.010, bachelors = 0.015),
+#'   trend_slopes = c(phd = -0.0001, masters = -0.0002, bachelors = -0.0003),
+#'   seed = 123
+#' )
+#'
+#' # Extract true parameters
+#' true_baseline <- attr(sim_data, "true_baseline")
+#' }
+#'
+#' @export
+simulate_multi_education_unemployment <- function(n_years = 5,
+                                                  education_levels,
+                                                  baseline_rates,
+                                                  seasonal_amplitudes,
+                                                  trend_slopes,
+                                                  noise_sd = 0.002,
+                                                  seed = NULL) {
+  # Input validation
+  if (!is.character(education_levels)) {
+    stop("education_levels must be a character vector")
+  }
+
+  # Validate that all parameter vectors are named and match education_levels
+  validate_param_vector <- function(param, param_name) {
+    if (is.null(names(param))) {
+      stop(param_name, " must be a named vector")
+    }
+    if (!all(education_levels %in% names(param))) {
+      missing <- setdiff(education_levels, names(param))
+      stop(param_name, " missing values for: ", paste(missing, collapse = ", "))
+    }
+    if (!all(names(param) %in% education_levels)) {
+      extra <- setdiff(names(param), education_levels)
+      stop(param_name, " has extra names not in education_levels: ", paste(extra, collapse = ", "))
+    }
+  }
+
+  validate_param_vector(baseline_rates, "baseline_rates")
+  validate_param_vector(seasonal_amplitudes, "seasonal_amplitudes")
+  validate_param_vector(trend_slopes, "trend_slopes")
+
+  # Set seed if provided
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
+
+  # Generate data for each education level
+  data_list <- lapply(education_levels, function(educ) {
+    # Create time grid
+    n_months <- n_years * 12
+    time_index <- seq_len(n_months)
+    month <- ((time_index - 1) %% 12) + 1
+
+    # Seasonal component (sinusoidal with peak around June-July)
+    # Phase shift to put peak around month 6-7
+    seasonal_component <- seasonal_amplitudes[[educ]] * sin(2 * pi * (month - 3) / 12)
+
+    # Trend component
+    trend_component <- trend_slopes[[educ]] * time_index
+
+    # Combined rate
+    unemployment_rate <- baseline_rates[[educ]] + seasonal_component + trend_component
+
+    # Add noise
+    unemployment_rate <- unemployment_rate + rnorm(n_months, 0, noise_sd)
+
+    # Ensure rates are in valid range [0, 1]
+    unemployment_rate <- pmax(0, pmin(1, unemployment_rate))
+
+    # Create data frame
+    data.frame(
+      time_index = time_index,
+      month = month,
+      unemployment_rate = unemployment_rate,
+      education = educ,
+      stringsAsFactors = FALSE
+    )
+  })
+
+  # Combine all education levels
+  combined_data <- do.call(rbind, data_list)
+
+  # Convert education to factor with specified levels
+  combined_data$education <- factor(combined_data$education, levels = education_levels)
+
+  # Add metadata as attributes
+  attr(combined_data, "true_baseline") <- baseline_rates
+  attr(combined_data, "true_seasonal_amplitude") <- seasonal_amplitudes
+  attr(combined_data, "true_trend_slope") <- trend_slopes
+
+  return(combined_data)
+}
+
 #' Fit Seasonal GAM with Cyclic Splines
 #'
 #' Fits a Generalized Additive Model for seasonal unemployment data using
