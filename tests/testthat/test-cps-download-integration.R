@@ -30,6 +30,8 @@ test_that("download_ipums_data integrates with generate_cps_samples", {
 
 test_that("downloaded CPS data has required variables for unemployment analysis", {
   skip_if(Sys.getenv("IPUMS_API_KEY") == "", "IPUMS_API_KEY not set")
+  skip_if(Sys.getenv("RUN_INTEGRATION_TESTS") != "true",
+          "Integration tests disabled (set RUN_INTEGRATION_TESTS=true to enable)")
 
   temp_dir <- tempfile()
   on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
@@ -67,6 +69,8 @@ test_that("downloaded CPS data has required variables for unemployment analysis"
 
 test_that("CPS data has MONTH variable for seasonal adjustment", {
   skip_if(Sys.getenv("IPUMS_API_KEY") == "", "IPUMS_API_KEY not set")
+  skip_if(Sys.getenv("RUN_INTEGRATION_TESTS") != "true",
+          "Integration tests disabled (set RUN_INTEGRATION_TESTS=true to enable)")
 
   temp_dir <- tempfile()
   on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
@@ -93,6 +97,8 @@ test_that("CPS data has MONTH variable for seasonal adjustment", {
 
 test_that("CPS data includes sufficient observations for PhD analysis", {
   skip_if(Sys.getenv("IPUMS_API_KEY") == "", "IPUMS_API_KEY not set")
+  skip_if(Sys.getenv("RUN_INTEGRATION_TESTS") != "true",
+          "Integration tests disabled (set RUN_INTEGRATION_TESTS=true to enable)")
 
   temp_dir <- tempfile()
   on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)

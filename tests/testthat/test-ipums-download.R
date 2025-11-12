@@ -61,6 +61,8 @@ test_that("download_ipums_data handles missing output_dir parameter", {
 test_that("download_ipums_data can accept CPS sample specifications", {
   # Skip if no API key is set (for CI/development without credentials)
   skip_if(Sys.getenv("IPUMS_API_KEY") == "", "IPUMS_API_KEY not set")
+  skip_if(Sys.getenv("RUN_INTEGRATION_TESTS") != "true",
+          "Integration tests disabled (set RUN_INTEGRATION_TESTS=true to enable)")
 
   temp_dir <- tempfile()
   on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
@@ -80,6 +82,8 @@ test_that("download_ipums_data can accept CPS sample specifications", {
 
 test_that("download_ipums_data can accept CPS variable specifications", {
   skip_if(Sys.getenv("IPUMS_API_KEY") == "", "IPUMS_API_KEY not set")
+  skip_if(Sys.getenv("RUN_INTEGRATION_TESTS") != "true",
+          "Integration tests disabled (set RUN_INTEGRATION_TESTS=true to enable)")
 
   temp_dir <- tempfile()
   on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)

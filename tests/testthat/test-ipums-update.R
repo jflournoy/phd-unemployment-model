@@ -144,6 +144,8 @@ test_that("update_ipums_data uses default max_age_days of 30", {
 
 test_that("update_ipums_data passes through CPS API parameters", {
   skip_if(Sys.getenv("IPUMS_API_KEY") == "", "IPUMS_API_KEY not set")
+  skip_if(Sys.getenv("RUN_INTEGRATION_TESTS") != "true",
+          "Integration tests disabled (set RUN_INTEGRATION_TESTS=true to enable)")
 
   temp_dir <- tempfile()
   on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
