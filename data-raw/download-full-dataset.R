@@ -76,7 +76,55 @@ main <- function() {
     return(invisible(NULL))
   }
 
-  # Download the data
+  # Check if data already exists and is recent
+  data_file <- here("data-raw", "ipums_data.rds")
+  if (file.exists(data_file)) {
+    file_info <- file.info(data_file)
+    age_days <- as.numeric(difftime(Sys.time(), file_info$mtime, units = "days"))
+    size_mb <- file_info$size / 1024^2
+
+    cat("\n📁 Existing data file found:\n")
+    cat("  Path:", data_file, "\n")
+    cat("  Size:", sprintf("%.1f MB", size_mb), "\n")
+    cat("  Age:", sprintf("%.1f days old", age_days), "\n")
+
+    if (age_days < 30) {
+      cat("\n✓ Data is recent (< 30 days old)\n")
+      cat("  Using existing file to avoid unnecessary IPUMS API request\n")
+      cat("  To force re-download, delete the file and re-run this script\n\n")
+
+      # Load and summarize existing data
+      cat("Loading existing data to verify...\n")
+      data <- readRDS(data_file)
+
+      cat("\nDataset Summary:\n")
+      cat("  Total observations:", format(nrow(data), big.mark = ","), "\n")
+      cat("  Years:", min(data$YEAR), "-", max(data$YEAR), "\n")
+      cat("  Months per year:", length(unique(data$MONTH)), "\n")
+
+      # PhD subset
+      phd_data <- data[data$EDUC == 125, ]
+      cat("\n  PhD observations:", format(nrow(phd_data), big.mark = ","), "\n")
+      cat("  PhD percentage:", format(100 * nrow(phd_data) / nrow(data), digits = 2), "%\n")
+
+      cat("\n✅ Full dataset ready for analysis!\n")
+      cat("\nNext steps:\n")
+      cat("  1. Run data completeness checks\n")
+      cat("  2. Process data for time series modeling\n")
+      cat("  3. Calculate unemployment rates by month\n\n")
+
+      return(invisible(list(
+        file_path = normalizePath(data_file),
+        skipped = TRUE,
+        reason = "data_recent",
+        age_days = age_days
+      )))
+    } else {
+      cat("\n⚠ Data is stale (>= 30 days old), will re-download\n\n")
+    }
+  }
+
+  # Download the data (only if we got here - no recent data exists)
   cat("\nStarting download...\n")
   cat("Progress will be shown by IPUMS API\n\n")
 
