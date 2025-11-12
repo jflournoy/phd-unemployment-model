@@ -3256,11 +3256,11 @@ window.Quarto = {
   <li><a href="#next-steps" id="toc-next-steps" class="nav-link" data-scroll-target="#next-steps">Next Steps</a></li>
   <li><a href="#technical-specifications" id="toc-technical-specifications" class="nav-link" data-scroll-target="#technical-specifications">Technical Specifications</a></li>
   </ul></li>
-  <li><a href="#technical-note-baseline-calculation-in-gams" id="toc-technical-note-baseline-calculation-in-gams" class="nav-link" data-scroll-target="#technical-note-baseline-calculation-in-gams">Technical Note: Baseline Calculation in GAMs</a>
+  <li><a href="#technical-notes" id="toc-technical-notes" class="nav-link" data-scroll-target="#technical-notes">Technical Notes</a>
   <ul class="collapse">
-  <li><a href="#the-challenge-with-gam-splines" id="toc-the-challenge-with-gam-splines" class="nav-link" data-scroll-target="#the-challenge-with-gam-splines">The Challenge with GAM Splines</a></li>
-  <li><a href="#why-this-matters-for-baseline-estimation" id="toc-why-this-matters-for-baseline-estimation" class="nav-link" data-scroll-target="#why-this-matters-for-baseline-estimation">Why This Matters for Baseline Estimation</a></li>
-  <li><a href="#impact-on-parameter-recovery" id="toc-impact-on-parameter-recovery" class="nav-link" data-scroll-target="#impact-on-parameter-recovery">Impact on Parameter Recovery</a></li>
+  <li><a href="#baseline-estimation-in-gams" id="toc-baseline-estimation-in-gams" class="nav-link" data-scroll-target="#baseline-estimation-in-gams">Baseline Estimation in GAMs</a></li>
+  <li><a href="#variance-calculation-for-derived-parameters" id="toc-variance-calculation-for-derived-parameters" class="nav-link" data-scroll-target="#variance-calculation-for-derived-parameters">Variance Calculation for Derived Parameters</a></li>
+  <li><a href="#critical-validation-requirement" id="toc-critical-validation-requirement" class="nav-link" data-scroll-target="#critical-validation-requirement">Critical Validation Requirement</a></li>
   </ul></li>
   </ul>
 </nav>
@@ -3595,8 +3595,20 @@ y_t = \beta_{\text{baseline}} + \beta_{\text{trend}} \cdot t + A \cdot \sin\left
 <section id="test-1-prediction-interval-coverage" class="level2">
 <h2 class="anchored" data-anchor-id="test-1-prediction-interval-coverage">Test 1: Prediction Interval Coverage</h2>
 <p><strong>Goal:</strong> Verify that 95% prediction intervals contain 95% of new observations generated from the true model.</p>
-<p><strong>Method:</strong> 1. Fit a GAM model to training data 2. Calculate 95% prediction intervals from the fitted model 3. Generate many new datasets from the true data-generating process 4. Count what proportion of new data points fall within the fitted model’s prediction intervals 5. Repeat for several different model fits to assess variability</p>
-<p>This tests whether the model’s prediction intervals are honest about uncertainty when predicting truly new data.</p>
+<p><strong>What We’re Comparing:</strong></p>
+<ul>
+<li><p><strong>Data Generating Process (DGP):</strong> Linear trend + sinusoidal seasonality with known parameters:</p>
+<ul>
+<li>Baseline: 0.025 (2.5%)</li>
+<li>Trend slope: 0.0003 (0.03 percentage points per month)</li>
+<li>Seasonal amplitude: 0.008 (0.8 percentage points)</li>
+<li>Noise SD: 0.002 (0.2 percentage points)</li>
+</ul></li>
+<li><p><strong>Fitted Model:</strong> GAM with flexible smooths (cubic regression spline for trend, cyclic spline for seasonality)</p></li>
+<li><p><strong>The Test:</strong> Fit GAM to one training dataset from the DGP, then generate many NEW datasets from the SAME DGP. Do the fitted model’s prediction intervals (calculated once from training data) contain the new observations at the claimed 95% rate?</p></li>
+</ul>
+<p><strong>Why This Matters:</strong> This tests whether the model’s prediction intervals are honest about uncertainty when predicting truly new data from the same data-generating process.</p>
+<p><strong>Method:</strong> 1. Fit a GAM model to training data from the DGP 2. Calculate 95% prediction intervals from the fitted model 3. Generate many new datasets from the true DGP (same parameters) 4. Count what proportion of new data points fall within the fitted model’s prediction intervals 5. Repeat for several different model fits to assess variability</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Show code</summary>
@@ -3791,7 +3803,26 @@ y_t = \beta_{\text{baseline}} + \beta_{\text{trend}} \cdot t + A \cdot \sin\left
 <section id="test-2-baseline-confidence-interval-coverage" class="level2">
 <h2 class="anchored" data-anchor-id="test-2-baseline-confidence-interval-coverage">Test 2: Baseline Confidence Interval Coverage</h2>
 <p><strong>Goal:</strong> Verify that 95% confidence intervals for baseline parameter contain the true baseline in 95% of experiments.</p>
-<p><strong>Method:</strong> Repeatedly simulate data with known baseline, fit model, check if true baseline falls within estimated CI.</p>
+<p><strong>What We’re Comparing:</strong></p>
+<ul>
+<li><p><strong>Data Generating Process (DGP):</strong> Simple model with NO trend, just baseline + seasonality:</p>
+<ul>
+<li>True baseline: 0.025 (2.5%)</li>
+<li>Trend slope: 0 (no trend to avoid contamination)</li>
+<li>Seasonal amplitude: 0.006 (0.6 percentage points)</li>
+<li>Noise SD: 0.002 (0.2 percentage points)</li>
+</ul></li>
+<li><p><strong>Fitted Model:</strong> GAM with trend and seasonal smooths</p></li>
+<li><p><strong>The Test:</strong> For each of 100 simulations:</p>
+<ol type="1">
+<li>Generate NEW dataset from DGP with known baseline = 0.025</li>
+<li>Fit GAM to this dataset</li>
+<li>Extract baseline estimate and compute 95% CI using variance-covariance matrix</li>
+<li>Check if TRUE baseline (0.025) falls within THIS model’s CI</li>
+<li>Across 100 experiments, ~95% of CIs should contain the true baseline</li>
+</ol></li>
+</ul>
+<p><strong>Why This Matters:</strong> This tests whether the model’s confidence intervals for the baseline parameter are statistically honest - they should bracket the true value at the claimed rate across repeated experiments.</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Show code</summary>
@@ -4059,6 +4090,27 @@ y_t = \beta_{\text{baseline}} + \beta_{\text{trend}} \cdot t + A \cdot \sin\left
 <section id="test-3-seasonal-amplitude-ci-coverage" class="level2">
 <h2 class="anchored" data-anchor-id="test-3-seasonal-amplitude-ci-coverage">Test 3: Seasonal Amplitude CI Coverage</h2>
 <p><strong>Goal:</strong> Verify confidence intervals for seasonal amplitude are properly calibrated.</p>
+<p><strong>What We’re Comparing:</strong></p>
+<ul>
+<li><p><strong>Data Generating Process (DGP):</strong> Simple model with NO trend, just baseline + seasonality:</p>
+<ul>
+<li>Baseline: 0.025 (2.5%)</li>
+<li>Trend slope: 0 (no trend)</li>
+<li>True seasonal amplitude: 0.008 (0.8 percentage points)</li>
+<li>Noise SD: 0.002 (0.2 percentage points)</li>
+</ul></li>
+<li><p><strong>Fitted Model:</strong> GAM with trend and seasonal smooths</p></li>
+<li><p><strong>The Test:</strong> For each of 100 simulations:</p>
+<ol type="1">
+<li>Generate NEW dataset from DGP with known amplitude = 0.008</li>
+<li>Fit GAM to this dataset</li>
+<li>Extract seasonal component and estimate amplitude as (max - min)/2</li>
+<li>Compute 95% CI for amplitude using variance-covariance matrix (accounting for correlation between max and min month estimates)</li>
+<li>Check if TRUE amplitude (0.008) falls within THIS model’s CI</li>
+<li>Across 100 experiments, ~95% of CIs should contain the true amplitude</li>
+</ol></li>
+</ul>
+<p><strong>Why This Matters:</strong> Seasonal amplitude is a derived parameter (not directly estimated), so its CI requires careful computation of the variance of a nonlinear function. This tests whether we’re correctly propagating uncertainty.</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Show code</summary>
@@ -4267,6 +4319,30 @@ y_t = \beta_{\text{baseline}} + \beta_{\text{trend}} \cdot t + A \cdot \sin\left
 <section id="test-4-comprehensive-coverage-validation" class="level2">
 <h2 class="anchored" data-anchor-id="test-4-comprehensive-coverage-validation">Test 4: Comprehensive Coverage Validation</h2>
 <p><strong>Goal:</strong> Use the <code>validate_parameter_recovery_coverage()</code> function to test all coverage properties simultaneously.</p>
+<p><strong>What We’re Comparing:</strong></p>
+<ul>
+<li><p><strong>Reference Data DGP:</strong> Simple model with NO trend (to match validation function defaults):</p>
+<ul>
+<li>Baseline: 0.025 (2.5%)</li>
+<li>Trend slope: 0 (NO TREND - critical for avoiding parameter mismatch!)</li>
+<li>Seasonal amplitude: 0.008 (0.8 percentage points)</li>
+<li>Noise SD: 0.002 (0.2 percentage points)</li>
+</ul></li>
+<li><p><strong>Reference Model:</strong> GAM fitted to ONE dataset from this DGP</p></li>
+<li><p><strong>The Test:</strong> The <code>validate_parameter_recovery_coverage()</code> function:</p>
+<ol type="1">
+<li>Takes the reference model and extracts its estimated parameters</li>
+<li>Generates 100 NEW datasets using the DGP parameters specified in <code>true_params</code></li>
+<li>For each new dataset, fits a NEW GAM and checks:
+<ul>
+<li>Does the reference model’s prediction interval contain new observations?</li>
+<li>Does the new model’s baseline CI contain the true baseline?</li>
+<li>Does the new model’s amplitude CI contain the true amplitude?</li>
+</ul></li>
+<li>Computes coverage rates across all 100 simulations</li>
+</ol></li>
+</ul>
+<p><strong>CRITICAL:</strong> The DGP used to create reference data MUST match the DGP used in the validation function. Here, both use <code>trend_slope = 0</code>. Any mismatch causes systematic bias and miscalibrated coverage.</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Show code</summary>
@@ -4916,174 +4992,23 @@ Testing n = 15 years ( 180 months)...</code></pre>
 <p><strong>Key Insight:</strong> Properly includes both model uncertainty (SE_fit) and residual variability (sigma_residual).</p>
 </section>
 </section>
-<section id="technical-note-baseline-calculation-in-gams" class="level2">
-<h2 class="anchored" data-anchor-id="technical-note-baseline-calculation-in-gams">Technical Note: Baseline Calculation in GAMs</h2>
-<section id="the-challenge-with-gam-splines" class="level3">
-<h3 class="anchored" data-anchor-id="the-challenge-with-gam-splines">The Challenge with GAM Splines</h3>
-<p>GAM smooth terms use <strong>sum-to-zero constraints</strong>, meaning they’re centered around 0. This has important implications for parameter extraction:</p>
-<div class="cell">
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb125"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb125-1"><a href="#cb125-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Demonstrate the sum-to-zero constraint</span></span>
-<span id="cb125-2"><a href="#cb125-2" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>)</span>
-<span id="cb125-3"><a href="#cb125-3" aria-hidden="true" tabindex="-1"></a>demo_data <span class="ot">&lt;-</span> <span class="fu">simulate_seasonal_unemployment</span>(</span>
-<span id="cb125-4"><a href="#cb125-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_years =</span> <span class="dv">10</span>, <span class="at">baseline_rate =</span> <span class="fl">0.020</span>, <span class="at">trend_slope =</span> <span class="fl">0.0005</span>,</span>
-<span id="cb125-5"><a href="#cb125-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">seasonal_amplitude =</span> <span class="fl">0.008</span>, <span class="at">noise_sd =</span> <span class="fl">0.001</span>, <span class="at">seed =</span> <span class="dv">42</span></span>
-<span id="cb125-6"><a href="#cb125-6" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb125-7"><a href="#cb125-7" aria-hidden="true" tabindex="-1"></a>demo_model <span class="ot">&lt;-</span> <span class="fu">fit_seasonal_gam</span>(demo_data, <span class="at">k_month =</span> <span class="dv">10</span>, <span class="at">k_trend =</span> <span class="dv">15</span>)</span>
-<span id="cb125-8"><a href="#cb125-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb125-9"><a href="#cb125-9" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;=== Understanding GAM Component Centering ===</span><span class="sc">\n\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>=== Understanding GAM Component Centering ===</code></pre>
-</div>
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb127"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb127-1"><a href="#cb127-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Model intercept (baseline at mean time):&quot;</span>, <span class="fu">coef</span>(demo_model)[<span class="dv">1</span>], <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>Model intercept (baseline at mean time): 0.05027965 </code></pre>
-</div>
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb129"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb129-1"><a href="#cb129-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Mean of fitted values:&quot;</span>, <span class="fu">mean</span>(<span class="fu">fitted</span>(demo_model)), <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>Mean of fitted values: 0.05027965 </code></pre>
-</div>
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb131"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb131-1"><a href="#cb131-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Mean time index:&quot;</span>, <span class="fu">mean</span>(demo_data<span class="sc">$</span>time_index), <span class="st">&quot;</span><span class="sc">\n\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>Mean time index: 60.5 </code></pre>
-</div>
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb133"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb133-1"><a href="#cb133-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Extract centered vs absolute trend</span></span>
-<span id="cb133-2"><a href="#cb133-2" aria-hidden="true" tabindex="-1"></a>trend_centered <span class="ot">&lt;-</span> <span class="fu">extract_trend_component</span>(demo_model, demo_data, <span class="at">absolute =</span> <span class="cn">FALSE</span>)</span>
-<span id="cb133-3"><a href="#cb133-3" aria-hidden="true" tabindex="-1"></a>trend_absolute <span class="ot">&lt;-</span> <span class="fu">extract_trend_component</span>(demo_model, demo_data, <span class="at">absolute =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb133-4"><a href="#cb133-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb133-5"><a href="#cb133-5" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Centered trend component:</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>Centered trend component:</code></pre>
-</div>
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb135"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb135-1"><a href="#cb135-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;  Mean:&quot;</span>, <span class="fu">mean</span>(trend_centered<span class="sc">$</span>trend_effect), <span class="st">&quot;(should be ~0)</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>  Mean: 8.131516e-19 (should be ~0)</code></pre>
-</div>
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb137"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb137-1"><a href="#cb137-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;  Range:&quot;</span>, <span class="fu">range</span>(trend_centered<span class="sc">$</span>trend_effect), <span class="st">&quot;</span><span class="sc">\n\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>  Range: -0.02967667 0.02967687 </code></pre>
-</div>
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb139"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb139-1"><a href="#cb139-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Absolute trend (baseline + trend):</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>Absolute trend (baseline + trend):</code></pre>
-</div>
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb141"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb141-1"><a href="#cb141-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;  At t=1:&quot;</span>, trend_absolute<span class="sc">$</span>trend_effect[<span class="dv">1</span>], <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>  At t=1: 0.02060298 </code></pre>
-</div>
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb143"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb143-1"><a href="#cb143-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;  At t=120:&quot;</span>, trend_absolute<span class="sc">$</span>trend_effect[<span class="dv">120</span>], <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>  At t=120: 0.07995652 </code></pre>
-</div>
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb145"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb145-1"><a href="#cb145-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;  Expected: 0.020 to&quot;</span>, <span class="fl">0.020</span> <span class="sc">+</span> <span class="fl">0.0005</span> <span class="sc">*</span> <span class="dv">120</span>, <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>  Expected: 0.020 to 0.08 </code></pre>
-</div>
-</div>
+<section id="technical-notes" class="level2">
+<h2 class="anchored" data-anchor-id="technical-notes">Technical Notes</h2>
+<section id="baseline-estimation-in-gams" class="level3">
+<h3 class="anchored" data-anchor-id="baseline-estimation-in-gams">Baseline Estimation in GAMs</h3>
+<p>Due to GAM sum-to-zero constraints on smooth terms, baseline is estimated by: 1. Evaluating predictions at t=min (start of series) 2. Averaging over all 12 months to remove seasonal variation 3. This gives pure baseline without trend or seasonal contamination</p>
 </section>
-<section id="why-this-matters-for-baseline-estimation" class="level3">
-<h3 class="anchored" data-anchor-id="why-this-matters-for-baseline-estimation">Why This Matters for Baseline Estimation</h3>
-<p><strong>Incorrect approach</strong> (used in earlier versions):</p>
-<div class="sourceCode" id="cb147"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb147-1"><a href="#cb147-1" aria-hidden="true" tabindex="-1"></a><span class="co"># WRONG: Includes trend at mean(t)</span></span>
-<span id="cb147-2"><a href="#cb147-2" aria-hidden="true" tabindex="-1"></a>baseline_wrong <span class="ot">&lt;-</span> <span class="fu">mean</span>(<span class="fu">fitted</span>(model))</span>
-<span id="cb147-3"><a href="#cb147-3" aria-hidden="true" tabindex="-1"></a><span class="co"># For data with trend: baseline + trend * mean(t)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-<p><strong>Correct approach</strong> (current implementation):</p>
-<div class="sourceCode" id="cb148"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb148-1"><a href="#cb148-1" aria-hidden="true" tabindex="-1"></a><span class="co"># RIGHT: Evaluate at t=min, average over all months</span></span>
-<span id="cb148-2"><a href="#cb148-2" aria-hidden="true" tabindex="-1"></a>pred_grid <span class="ot">&lt;-</span> <span class="fu">expand.grid</span>(<span class="at">time_index =</span> <span class="fu">min</span>(data<span class="sc">$</span>time_index), <span class="at">month =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">12</span>)</span>
-<span id="cb148-3"><a href="#cb148-3" aria-hidden="true" tabindex="-1"></a>baseline_correct <span class="ot">&lt;-</span> <span class="fu">mean</span>(<span class="fu">predict</span>(model, <span class="at">newdata =</span> pred_grid))</span>
-<span id="cb148-4"><a href="#cb148-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Pure baseline, no trend or seasonal contamination</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<section id="variance-calculation-for-derived-parameters" class="level3">
+<h3 class="anchored" data-anchor-id="variance-calculation-for-derived-parameters">Variance Calculation for Derived Parameters</h3>
+<ul>
+<li><strong>Baseline CI:</strong> Uses variance-covariance matrix for mean of 12 predictions</li>
+<li><strong>Amplitude CI:</strong> Uses variance-covariance matrix for contrast (max_month - min_month)/2</li>
+<li><strong>Prediction Intervals:</strong> Includes both model uncertainty (SE) and residual variance</li>
+</ul>
 </section>
-<section id="impact-on-parameter-recovery" class="level3">
-<h3 class="anchored" data-anchor-id="impact-on-parameter-recovery">Impact on Parameter Recovery</h3>
-<p>The fix reduced baseline estimation error from <strong>24%</strong> to <strong>&lt; 1%</strong> when trends are present:</p>
-<div class="cell">
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb149"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb149-1"><a href="#cb149-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compare methods on data with trend</span></span>
-<span id="cb149-2"><a href="#cb149-2" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">123</span>)</span>
-<span id="cb149-3"><a href="#cb149-3" aria-hidden="true" tabindex="-1"></a>test_data <span class="ot">&lt;-</span> <span class="fu">simulate_seasonal_unemployment</span>(</span>
-<span id="cb149-4"><a href="#cb149-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_years =</span> <span class="dv">10</span>, <span class="at">baseline_rate =</span> <span class="fl">0.020</span>, <span class="at">trend_slope =</span> <span class="fl">0.0005</span>,</span>
-<span id="cb149-5"><a href="#cb149-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">seasonal_amplitude =</span> <span class="fl">0.008</span>, <span class="at">noise_sd =</span> <span class="fl">0.001</span>, <span class="at">seed =</span> <span class="dv">123</span></span>
-<span id="cb149-6"><a href="#cb149-6" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb149-7"><a href="#cb149-7" aria-hidden="true" tabindex="-1"></a>test_model <span class="ot">&lt;-</span> <span class="fu">fit_seasonal_gam</span>(test_data, <span class="at">k_month =</span> <span class="dv">10</span>, <span class="at">k_trend =</span> <span class="dv">15</span>)</span>
-<span id="cb149-8"><a href="#cb149-8" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb149-9"><a href="#cb149-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Old method</span></span>
-<span id="cb149-10"><a href="#cb149-10" aria-hidden="true" tabindex="-1"></a>baseline_old <span class="ot">&lt;-</span> <span class="fu">mean</span>(<span class="fu">fitted</span>(test_model))</span>
-<span id="cb149-11"><a href="#cb149-11" aria-hidden="true" tabindex="-1"></a>error_old <span class="ot">&lt;-</span> <span class="fu">abs</span>(baseline_old <span class="sc">-</span> <span class="fl">0.020</span>) <span class="sc">/</span> <span class="fl">0.020</span> <span class="sc">*</span> <span class="dv">100</span></span>
-<span id="cb149-12"><a href="#cb149-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb149-13"><a href="#cb149-13" aria-hidden="true" tabindex="-1"></a><span class="co"># New method</span></span>
-<span id="cb149-14"><a href="#cb149-14" aria-hidden="true" tabindex="-1"></a>pred_grid <span class="ot">&lt;-</span> <span class="fu">expand.grid</span>(<span class="at">time_index =</span> <span class="dv">1</span>, <span class="at">month =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">12</span>)</span>
-<span id="cb149-15"><a href="#cb149-15" aria-hidden="true" tabindex="-1"></a>baseline_new <span class="ot">&lt;-</span> <span class="fu">mean</span>(<span class="fu">predict</span>(test_model, <span class="at">newdata =</span> pred_grid))</span>
-<span id="cb149-16"><a href="#cb149-16" aria-hidden="true" tabindex="-1"></a>error_new <span class="ot">&lt;-</span> <span class="fu">abs</span>(baseline_new <span class="sc">-</span> <span class="fl">0.020</span>) <span class="sc">/</span> <span class="fl">0.020</span> <span class="sc">*</span> <span class="dv">100</span></span>
-<span id="cb149-17"><a href="#cb149-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb149-18"><a href="#cb149-18" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Baseline Estimation Comparison:</span><span class="sc">\n\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>Baseline Estimation Comparison:</code></pre>
-</div>
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb151"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb151-1"><a href="#cb151-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;True baseline:&quot;</span>, <span class="fl">0.020</span>, <span class="st">&quot;</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>True baseline: 0.02 </code></pre>
-</div>
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb153"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb153-1"><a href="#cb153-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;Old method (mean of fitted):&quot;</span>, baseline_old, <span class="st">&quot;| Error:&quot;</span>, <span class="fu">round</span>(error_old, <span class="dv">2</span>), <span class="st">&quot;%</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>Old method (mean of fitted): 0.05026544 | Error: 151.33 %</code></pre>
-</div>
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb155"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb155-1"><a href="#cb155-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;New method (t=1, avg months):&quot;</span>, baseline_new, <span class="st">&quot;| Error:&quot;</span>, <span class="fu">round</span>(error_new, <span class="dv">2</span>), <span class="st">&quot;%</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>New method (t=1, avg months): 0.02064244 | Error: 3.21 %</code></pre>
-</div>
-<details class="code-fold">
-<summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb157"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb157-1"><a href="#cb157-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">&quot;</span><span class="sc">\n</span><span class="st">Error reduction:&quot;</span>, <span class="fu">round</span>((error_old <span class="sc">-</span> error_new) <span class="sc">/</span> error_old <span class="sc">*</span> <span class="dv">100</span>, <span class="dv">1</span>), <span class="st">&quot;%</span><span class="sc">\n</span><span class="st">&quot;</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
-</details>
-<div class="cell-output cell-output-stdout">
-<pre><code>
-Error reduction: 97.9 %</code></pre>
-</div>
-</div>
-<p>This fix ensures that baseline recovery tests and coverage validation accurately reflect model performance.</p>
+<section id="critical-validation-requirement" class="level3">
+<h3 class="anchored" data-anchor-id="critical-validation-requirement">Critical Validation Requirement</h3>
+<p><strong>DGP Consistency:</strong> The data-generating process used for reference data MUST exactly match the DGP used in coverage validation simulations. Any parameter mismatch creates systematic bias and miscalibrated coverage. This is why Test 4 uses <code>trend_slope = 0</code> for both reference data and validation function.</p>
 <hr>
 <p><em>Report generated: 2025-11-12</em></p>
 <p><em>All coverage tests passing (6/6 tests)</em></p>

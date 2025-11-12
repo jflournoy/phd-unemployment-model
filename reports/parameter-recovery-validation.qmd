@@ -218,14 +218,26 @@ All parameters recovered with < 5% relative error, demonstrating the model corre
 
 **Goal:** Verify that 95% prediction intervals contain 95% of new observations generated from the true model.
 
+**What We're Comparing:**
+
+- **Data Generating Process (DGP):** Linear trend + sinusoidal seasonality with known parameters:
+  - Baseline: 0.025 (2.5%)
+  - Trend slope: 0.0003 (0.03 percentage points per month)
+  - Seasonal amplitude: 0.008 (0.8 percentage points)
+  - Noise SD: 0.002 (0.2 percentage points)
+
+- **Fitted Model:** GAM with flexible smooths (cubic regression spline for trend, cyclic spline for seasonality)
+
+- **The Test:** Fit GAM to one training dataset from the DGP, then generate many NEW datasets from the SAME DGP. Do the fitted model's prediction intervals (calculated once from training data) contain the new observations at the claimed 95% rate?
+
+**Why This Matters:** This tests whether the model's prediction intervals are honest about uncertainty when predicting truly new data from the same data-generating process.
+
 **Method:**
-1. Fit a GAM model to training data
+1. Fit a GAM model to training data from the DGP
 2. Calculate 95% prediction intervals from the fitted model
-3. Generate many new datasets from the true data-generating process
+3. Generate many new datasets from the true DGP (same parameters)
 4. Count what proportion of new data points fall within the fitted model's prediction intervals
 5. Repeat for several different model fits to assess variability
-
-This tests whether the model's prediction intervals are honest about uncertainty when predicting truly new data.
 
 ```{r prediction-coverage}
 set.seed(2024)
@@ -367,7 +379,24 @@ ggplot(coverage_df, aes(x = model_id, y = coverage)) +
 
 **Goal:** Verify that 95% confidence intervals for baseline parameter contain the true baseline in 95% of experiments.
 
-**Method:** Repeatedly simulate data with known baseline, fit model, check if true baseline falls within estimated CI.
+**What We're Comparing:**
+
+- **Data Generating Process (DGP):** Simple model with NO trend, just baseline + seasonality:
+  - True baseline: 0.025 (2.5%)
+  - Trend slope: 0 (no trend to avoid contamination)
+  - Seasonal amplitude: 0.006 (0.6 percentage points)
+  - Noise SD: 0.002 (0.2 percentage points)
+
+- **Fitted Model:** GAM with trend and seasonal smooths
+
+- **The Test:** For each of 100 simulations:
+  1. Generate NEW dataset from DGP with known baseline = 0.025
+  2. Fit GAM to this dataset
+  3. Extract baseline estimate and compute 95% CI using variance-covariance matrix
+  4. Check if TRUE baseline (0.025) falls within THIS model's CI
+  5. Across 100 experiments, ~95% of CIs should contain the true baseline
+
+**Why This Matters:** This tests whether the model's confidence intervals for the baseline parameter are statistically honest - they should bracket the true value at the claimed rate across repeated experiments.
 
 ```{r baseline-ci-coverage}
 set.seed(2025)
@@ -574,6 +603,26 @@ The distribution of estimates should be centered near the true value, and CI wid
 
 **Goal:** Verify confidence intervals for seasonal amplitude are properly calibrated.
 
+**What We're Comparing:**
+
+- **Data Generating Process (DGP):** Simple model with NO trend, just baseline + seasonality:
+  - Baseline: 0.025 (2.5%)
+  - Trend slope: 0 (no trend)
+  - True seasonal amplitude: 0.008 (0.8 percentage points)
+  - Noise SD: 0.002 (0.2 percentage points)
+
+- **Fitted Model:** GAM with trend and seasonal smooths
+
+- **The Test:** For each of 100 simulations:
+  1. Generate NEW dataset from DGP with known amplitude = 0.008
+  2. Fit GAM to this dataset
+  3. Extract seasonal component and estimate amplitude as (max - min)/2
+  4. Compute 95% CI for amplitude using variance-covariance matrix (accounting for correlation between max and min month estimates)
+  5. Check if TRUE amplitude (0.008) falls within THIS model's CI
+  6. Across 100 experiments, ~95% of CIs should contain the true amplitude
+
+**Why This Matters:** Seasonal amplitude is a derived parameter (not directly estimated), so its CI requires careful computation of the variance of a nonlinear function. This tests whether we're correctly propagating uncertainty.
+
 ```{r amplitude-ci-coverage}
 set.seed(2026)
 
@@ -723,6 +772,27 @@ p_amp2 + p_amp3
 ## Test 4: Comprehensive Coverage Validation
 
 **Goal:** Use the `validate_parameter_recovery_coverage()` function to test all coverage properties simultaneously.
+
+**What We're Comparing:**
+
+- **Reference Data DGP:** Simple model with NO trend (to match validation function defaults):
+  - Baseline: 0.025 (2.5%)
+  - Trend slope: 0 (NO TREND - critical for avoiding parameter mismatch!)
+  - Seasonal amplitude: 0.008 (0.8 percentage points)
+  - Noise SD: 0.002 (0.2 percentage points)
+
+- **Reference Model:** GAM fitted to ONE dataset from this DGP
+
+- **The Test:** The `validate_parameter_recovery_coverage()` function:
+  1. Takes the reference model and extracts its estimated parameters
+  2. Generates 100 NEW datasets using the DGP parameters specified in `true_params`
+  3. For each new dataset, fits a NEW GAM and checks:
+     - Does the reference model's prediction interval contain new observations?
+     - Does the new model's baseline CI contain the true baseline?
+     - Does the new model's amplitude CI contain the true amplitude?
+  4. Computes coverage rates across all 100 simulations
+
+**CRITICAL:** The DGP used to create reference data MUST match the DGP used in the validation function. Here, both use `trend_slope = 0`. Any mismatch causes systematic bias and miscalibrated coverage.
 
 ```{r comprehensive-coverage}
 set.seed(2027)
@@ -1064,87 +1134,24 @@ PI = fitted ± 1.96 * sqrt(SE_fit^2 + sigma_residual^2)
 
 **Key Insight:** Properly includes both model uncertainty (SE_fit) and residual variability (sigma_residual).
 
-## Technical Note: Baseline Calculation in GAMs
+## Technical Notes
 
-### The Challenge with GAM Splines
+### Baseline Estimation in GAMs
 
-GAM smooth terms use **sum-to-zero constraints**, meaning they're centered around 0. This has important implications for parameter extraction:
+Due to GAM sum-to-zero constraints on smooth terms, baseline is estimated by:
+1. Evaluating predictions at t=min (start of series)
+2. Averaging over all 12 months to remove seasonal variation
+3. This gives pure baseline without trend or seasonal contamination
 
-```{r gam-constraint-demo, echo=TRUE}
-# Demonstrate the sum-to-zero constraint
-set.seed(42)
-demo_data <- simulate_seasonal_unemployment(
-  n_years = 10, baseline_rate = 0.020, trend_slope = 0.0005,
-  seasonal_amplitude = 0.008, noise_sd = 0.001, seed = 42
-)
-demo_model <- fit_seasonal_gam(demo_data, k_month = 10, k_trend = 15)
+### Variance Calculation for Derived Parameters
 
-cat("=== Understanding GAM Component Centering ===\n\n")
-cat("Model intercept (baseline at mean time):", coef(demo_model)[1], "\n")
-cat("Mean of fitted values:", mean(fitted(demo_model)), "\n")
-cat("Mean time index:", mean(demo_data$time_index), "\n\n")
+- **Baseline CI:** Uses variance-covariance matrix for mean of 12 predictions
+- **Amplitude CI:** Uses variance-covariance matrix for contrast (max_month - min_month)/2
+- **Prediction Intervals:** Includes both model uncertainty (SE) and residual variance
 
-# Extract centered vs absolute trend
-trend_centered <- extract_trend_component(demo_model, demo_data, absolute = FALSE)
-trend_absolute <- extract_trend_component(demo_model, demo_data, absolute = TRUE)
+### Critical Validation Requirement
 
-cat("Centered trend component:\n")
-cat("  Mean:", mean(trend_centered$trend_effect), "(should be ~0)\n")
-cat("  Range:", range(trend_centered$trend_effect), "\n\n")
-
-cat("Absolute trend (baseline + trend):\n")
-cat("  At t=1:", trend_absolute$trend_effect[1], "\n")
-cat("  At t=120:", trend_absolute$trend_effect[120], "\n")
-cat("  Expected: 0.020 to", 0.020 + 0.0005 * 120, "\n")
-```
-
-### Why This Matters for Baseline Estimation
-
-**Incorrect approach** (used in earlier versions):
-```r
-# WRONG: Includes trend at mean(t)
-baseline_wrong <- mean(fitted(model))
-# For data with trend: baseline + trend * mean(t)
-```
-
-**Correct approach** (current implementation):
-```r
-# RIGHT: Evaluate at t=min, average over all months
-pred_grid <- expand.grid(time_index = min(data$time_index), month = 1:12)
-baseline_correct <- mean(predict(model, newdata = pred_grid))
-# Pure baseline, no trend or seasonal contamination
-```
-
-### Impact on Parameter Recovery
-
-The fix reduced baseline estimation error from **24%** to **< 1%** when trends are present:
-
-```{r baseline-fix-impact, echo=TRUE}
-# Compare methods on data with trend
-set.seed(123)
-test_data <- simulate_seasonal_unemployment(
-  n_years = 10, baseline_rate = 0.020, trend_slope = 0.0005,
-  seasonal_amplitude = 0.008, noise_sd = 0.001, seed = 123
-)
-test_model <- fit_seasonal_gam(test_data, k_month = 10, k_trend = 15)
-
-# Old method
-baseline_old <- mean(fitted(test_model))
-error_old <- abs(baseline_old - 0.020) / 0.020 * 100
-
-# New method
-pred_grid <- expand.grid(time_index = 1, month = 1:12)
-baseline_new <- mean(predict(test_model, newdata = pred_grid))
-error_new <- abs(baseline_new - 0.020) / 0.020 * 100
-
-cat("Baseline Estimation Comparison:\n\n")
-cat("True baseline:", 0.020, "\n")
-cat("Old method (mean of fitted):", baseline_old, "| Error:", round(error_old, 2), "%\n")
-cat("New method (t=1, avg months):", baseline_new, "| Error:", round(error_new, 2), "%\n")
-cat("\nError reduction:", round((error_old - error_new) / error_old * 100, 1), "%\n")
-```
-
-This fix ensures that baseline recovery tests and coverage validation accurately reflect model performance.
+**DGP Consistency:** The data-generating process used for reference data MUST exactly match the DGP used in coverage validation simulations. Any parameter mismatch creates systematic bias and miscalibrated coverage. This is why Test 4 uses `trend_slope = 0` for both reference data and validation function.
 
 ---
 
