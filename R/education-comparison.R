@@ -208,7 +208,9 @@ plot_education_comparison <- function(comparison_data, palette = NULL) {
 
   # Extract data for plotting
   educ_names <- names(comparison_data)
-  colors <- setNames(palette[1:n_levels], educ_names)
+  # Map colors to education LABELS, not internal names
+  educ_labels <- sapply(comparison_data, function(x) x$education_label)
+  colors <- setNames(palette[1:n_levels], educ_labels)
 
   # ===== PLOT 1: Time Series =====
   ts_data_list <- lapply(educ_names, function(name) {

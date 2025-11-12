@@ -142,3 +142,56 @@ test_that("compare_unemployment_by_education uses proper CPS weights", {
   expect_true(all(monthly_data$unemployment_rate >= 0))
   expect_true(all(monthly_data$unemployment_rate <= 1))
 })
+
+test_that("plot_education_comparison uses colors keyed to education labels, not internal names", {
+  # TDD REFACTOR: Failing test to catch color mapping bug
+  # Bug: colors are keyed to "phd", "masters", "bachelors" but plots use
+  # "Doctorate Degree", "Master's Degree", "Bachelor's Degree"
+
+  cps_data <- readRDS(here::here("data-raw", "ipums_data.rds"))
+
+  comparison_result <- compare_unemployment_by_education(
+    data = cps_data,
+    education_levels = c(phd = 125, masters = 123, bachelors = 111)
+  )
+
+  # Custom palette - distinct colors to track if mapping works
+  test_palette <- c("#FF0000", "#00FF00", "#0000FF")
+
+  plots <- plot_education_comparison(comparison_result, palette = test_palette)
+
+  # Verify all three plots use education labels in data
+  for (plot_name in c("timeseries", "seasonal", "trend")) {
+    plot_obj <- plots[[plot_name]]
+    expect_true(inherits(plot_obj, "gg"), info = paste(plot_name, "should be a ggplot object"))
+
+    # Check data uses education labels
+    plot_data <- plot_obj$data
+    if ("education" %in% names(plot_data)) {
+      unique_education <- unique(plot_data$education)
+
+      # Should use full labels, not internal names
+      expect_true(all(unique_education %in% c("Doctorate Degree", "Master's Degree", "Bachelor's Degree")),
+                  info = paste(plot_name, "should use education labels like 'Doctorate Degree', not 'phd'"))
+
+      expect_false(any(unique_education %in% c("phd", "masters", "bachelors")),
+                   info = paste(plot_name, "should not use internal names like 'phd'"))
+    }
+  }
+
+  # Test that colors are actually being applied
+  # Build the timeseries plot to ensure layers are generated
+  ts_plot <- plots$timeseries
+  built_plot <- ggplot2::ggplot_build(ts_plot)
+
+  # Check that the plot has data with colors assigned
+  expect_true(length(built_plot$data) > 0, info = "Plot should have data layers")
+
+  # The first layer should have color aesthetic mapped
+  layer_data <- built_plot$data[[1]]
+  expect_true("colour" %in% names(layer_data), info = "Plot should have color aesthetic")
+
+  # Verify that multiple distinct colors are used (one per education level)
+  unique_colors <- unique(layer_data$colour)
+  expect_equal(length(unique_colors), 3, info = "Should have 3 distinct colors for 3 education levels")
+})
