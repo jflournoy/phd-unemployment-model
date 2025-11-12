@@ -353,9 +353,9 @@ if (meets_target) {
   cat("\n⚠️  WARNING: Baseline CIs may be miscalibrated\n")
 }
 
-# Visualization: Show some CIs
+# Visualization: Show all CIs
 set.seed(2025)
-n_show <- 50  # Show first 50 CIs
+n_show <- n_sims  # Show all CIs
 ci_data <- data.frame(
   sim = 1:n_show,
   covered = logical(n_show),
