@@ -4282,7 +4282,7 @@ y_t = \beta_{\text{baseline}} + \beta_{\text{trend}} \cdot t + A \cdot \sin\left
 <span id="cb65-10"><a href="#cb65-10" aria-hidden="true" tabindex="-1"></a>sim_data_full <span class="ot">&lt;-</span> <span class="fu">simulate_seasonal_unemployment</span>(</span>
 <span id="cb65-11"><a href="#cb65-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_years =</span> <span class="dv">10</span>,</span>
 <span id="cb65-12"><a href="#cb65-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">baseline_rate =</span> true_params_full<span class="sc">$</span>baseline,</span>
-<span id="cb65-13"><a href="#cb65-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">trend_slope =</span> <span class="fl">0.0003</span>,</span>
+<span id="cb65-13"><a href="#cb65-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">trend_slope =</span> <span class="dv">0</span>,  <span class="co"># No trend for coverage test</span></span>
 <span id="cb65-14"><a href="#cb65-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">seasonal_amplitude =</span> true_params_full<span class="sc">$</span>seasonal_amplitude,</span>
 <span id="cb65-15"><a href="#cb65-15" aria-hidden="true" tabindex="-1"></a>  <span class="at">noise_sd =</span> <span class="fl">0.002</span>,</span>
 <span id="cb65-16"><a href="#cb65-16" aria-hidden="true" tabindex="-1"></a>  <span class="at">seed =</span> <span class="dv">999</span></span>

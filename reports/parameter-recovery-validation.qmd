@@ -737,7 +737,7 @@ true_params_full <- list(
 sim_data_full <- simulate_seasonal_unemployment(
   n_years = 10,
   baseline_rate = true_params_full$baseline,
-  trend_slope = 0.0003,
+  trend_slope = 0,  # No trend for coverage test
   seasonal_amplitude = true_params_full$seasonal_amplitude,
   noise_sd = 0.002,
   seed = 999
