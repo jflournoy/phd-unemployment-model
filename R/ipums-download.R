@@ -88,6 +88,8 @@ generate_cps_samples <- function(start_year, end_year) {
 #'
 #' @param output_dir Character. Directory where data file will be saved.
 #'   Default is "data-raw" in the project root.
+#' @param skip_if_exists Logical. If TRUE, skip download if data file already exists.
+#'   Default is FALSE. Use update_ipums_data() for smarter age-based checking.
 #' @param use_api Logical. If TRUE, uses IPUMS API to download real data.
 #'   If FALSE, creates placeholder data. Default is FALSE for backward compatibility.
 #' @param samples Character vector. IPUMS CPS sample IDs to include in extract.
@@ -140,12 +142,36 @@ generate_cps_samples <- function(start_year, end_year) {
 #' When use_api = FALSE (default), creates minimal placeholder data for testing
 #' and development. Replace with real API data for production analyses.
 #'
+#' ## Smart Download Management
+#'
+#' For production use, consider using update_ipums_data() instead, which:
+#' - Checks if data already exists
+#' - Only downloads if data is stale (configurable age threshold)
+#' - Avoids unnecessary IPUMS API requests
+#'
+#' See ?update_ipums_data for details.
+#'
 #' @examples
 #' \dontrun{
+#' # RECOMMENDED: Use update_ipums_data() for smart downloads
+#' samples <- generate_cps_samples(2000, 2025)
+#' result <- update_ipums_data(
+#'   use_api = TRUE,
+#'   samples = samples,
+#'   max_age_days = 30  # Only re-download if older than 30 days
+#' )
+#'
+#' # Simple skip if file exists (less smart than update_ipums_data)
+#' result <- download_ipums_data(
+#'   skip_if_exists = TRUE,
+#'   use_api = TRUE,
+#'   samples = generate_cps_samples(2020, 2025)
+#' )
+#'
 #' # Download using placeholder data (for development)
 #' result <- download_ipums_data()
 #'
-#' # Download CPS monthly data for 2020-2025
+#' # Download CPS monthly data for 2020-2025 (always downloads)
 #' samples <- generate_cps_samples(2020, 2025)
 #' result <- download_ipums_data(
 #'   use_api = TRUE,
@@ -153,16 +179,13 @@ generate_cps_samples <- function(start_year, end_year) {
 #'   extract_description = "PhD unemployment analysis 2020-2025"
 #' )
 #'
-#' # Download just recent year
-#' samples <- generate_cps_samples(2024, 2024)
-#' result <- download_ipums_data(use_api = TRUE, samples = samples)
-#'
 #' # Read the downloaded data
 #' data <- readRDS(result$file_path)
 #' }
 #'
 #' @export
 download_ipums_data <- function(output_dir = "data-raw",
+                                  skip_if_exists = FALSE,
                                   use_api = FALSE,
                                   samples = NULL,
                                   variables = c("YEAR", "MONTH", "EMPSTAT", "EDUC", "AGE", "SEX", "WTFINL"),
@@ -181,6 +204,15 @@ download_ipums_data <- function(output_dir = "data-raw",
 
   # Construct file path
   file_path <- file.path(output_dir, "ipums_data.rds")
+
+  # Check if we should skip download
+  if (skip_if_exists && file.exists(file_path)) {
+    message("Data file already exists, skipping download (skip_if_exists=TRUE)")
+    return(list(
+      file_path = normalizePath(file_path, mustWork = TRUE),
+      skipped = TRUE
+    ))
+  }
 
   if (use_api) {
     # Use IPUMS API to download real data

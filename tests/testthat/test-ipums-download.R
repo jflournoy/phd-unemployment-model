@@ -1,7 +1,6 @@
 #' Tests for IPUMS data download functionality
 #'
-#' TDD RED Phase: These tests define the interface for download_ipums_data()
-#' before implementation exists.
+#' TDD: Tests for download_ipums_data() and smart download features
 
 library(testthat)
 
@@ -114,4 +113,100 @@ test_that("download_ipums_data falls back to placeholder when use_api=FALSE", {
   # Verify it's placeholder data
   data <- readRDS(result$file_path)
   expect_equal(nrow(data), 3)  # Placeholder has 3 rows
+})
+
+# TDD REFACTOR: Tests for skip_if_exists parameter
+
+test_that("download_ipums_data with skip_if_exists=FALSE always downloads", {
+  temp_dir <- tempfile()
+  on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
+
+  # First download
+  result1 <- download_ipums_data(
+    output_dir = temp_dir,
+    skip_if_exists = FALSE,
+    use_api = FALSE
+  )
+
+  expect_true(file.exists(result1$file_path))
+  expect_false(isTRUE(result1$skipped))
+
+  # Second download with skip_if_exists=FALSE should still download
+  result2 <- download_ipums_data(
+    output_dir = temp_dir,
+    skip_if_exists = FALSE,
+    use_api = FALSE
+  )
+
+  expect_true(file.exists(result2$file_path))
+  expect_false(isTRUE(result2$skipped))
+})
+
+test_that("download_ipums_data with skip_if_exists=TRUE skips when file exists", {
+  temp_dir <- tempfile()
+  on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
+
+  # First download
+  result1 <- download_ipums_data(
+    output_dir = temp_dir,
+    skip_if_exists = FALSE,
+    use_api = FALSE
+  )
+
+  expect_true(file.exists(result1$file_path))
+  first_mtime <- file.info(result1$file_path)$mtime
+
+  # Wait a moment to ensure mtime would be different if file was recreated
+  Sys.sleep(0.1)
+
+  # Second download with skip_if_exists=TRUE should skip
+  result2 <- download_ipums_data(
+    output_dir = temp_dir,
+    skip_if_exists = TRUE,
+    use_api = FALSE
+  )
+
+  expect_true(file.exists(result2$file_path))
+  expect_true(result2$skipped)
+  expect_equal(result2$file_path, result1$file_path)
+
+  # Verify file wasn't modified
+  second_mtime <- file.info(result2$file_path)$mtime
+  expect_equal(first_mtime, second_mtime)
+})
+
+test_that("download_ipums_data with skip_if_exists=TRUE downloads when file missing", {
+  temp_dir <- tempfile()
+  on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
+
+  # First call with skip_if_exists=TRUE but no existing file
+  result <- download_ipums_data(
+    output_dir = temp_dir,
+    skip_if_exists = TRUE,
+    use_api = FALSE
+  )
+
+  expect_true(file.exists(result$file_path))
+  expect_false(isTRUE(result$skipped))
+})
+
+test_that("skip_if_exists returns correct structure when skipping", {
+  temp_dir <- tempfile()
+  on.exit(unlink(temp_dir, recursive = TRUE), add = TRUE)
+
+  # Create existing file
+  download_ipums_data(output_dir = temp_dir, use_api = FALSE)
+
+  # Try to download with skip_if_exists=TRUE
+  result <- download_ipums_data(
+    output_dir = temp_dir,
+    skip_if_exists = TRUE,
+    use_api = FALSE
+  )
+
+  expect_type(result, "list")
+  expect_true("file_path" %in% names(result))
+  expect_true("skipped" %in% names(result))
+  expect_true(result$skipped)
+  expect_type(result$file_path, "character")
 })
