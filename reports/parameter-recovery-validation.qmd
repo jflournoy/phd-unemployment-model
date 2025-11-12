@@ -390,21 +390,10 @@ n_misses <- sum(!ci_data$covered)
 pct_contains <- n_contains / n_show * 100
 pct_misses <- n_misses / n_show * 100
 
-ggplot(ci_data, aes(x = sim, y = est, color = covered)) +
+# Main plot: CI intervals
+p1 <- ggplot(ci_data, aes(x = sim, y = est, color = covered)) +
   geom_hline(yintercept = true_baseline, color = "red", linewidth = 1) +
   geom_pointrange(aes(ymin = lower, ymax = upper), size = 0.3) +
-  # Add summary annotation box
-  annotate("rect", xmin = 1, xmax = 15, ymin = 0.0258, ymax = 0.0262,
-           fill = "white", color = "gray50", alpha = 0.9, linewidth = 0.5) +
-  annotate("text", x = 8, y = 0.02605,
-           label = sprintf("Coverage Summary (n=%d):", n_show),
-           size = 3.5, fontface = "bold") +
-  annotate("text", x = 8, y = 0.026,
-           label = sprintf("Contains: %d (%.0f%%)", n_contains, pct_contains),
-           size = 3, color = "steelblue") +
-  annotate("text", x = 8, y = 0.02595,
-           label = sprintf("Misses: %d (%.0f%%)", n_misses, pct_misses),
-           size = 3, color = "orange") +
   scale_color_manual(
     values = c("TRUE" = "steelblue", "FALSE" = "orange"),
     labels = c("TRUE" = "CI contains true value", "FALSE" = "CI misses true value")
@@ -419,6 +408,34 @@ ggplot(ci_data, aes(x = sim, y = est, color = covered)) +
     caption = "Red line: True baseline | Points: Estimated baseline ± 95% CI"
   ) +
   theme(legend.position = "top", plot.caption = element_text(hjust = 0, face = "italic"))
+
+# Coverage summary bar chart
+summary_data <- data.frame(
+  category = c("Contains", "Misses"),
+  count = c(n_contains, n_misses),
+  percentage = c(pct_contains, pct_misses)
+)
+summary_data$category <- factor(summary_data$category, levels = c("Contains", "Misses"))
+
+p2 <- ggplot(summary_data, aes(x = "", y = count, fill = category)) +
+  geom_col(width = 1, color = "white", linewidth = 1) +
+  geom_text(aes(label = sprintf("%d\n(%.0f%%)", count, percentage)),
+            position = position_stack(vjust = 0.5),
+            color = "white", fontface = "bold", size = 5) +
+  scale_fill_manual(values = c("Contains" = "steelblue", "Misses" = "orange")) +
+  coord_flip() +
+  labs(
+    title = sprintf("Coverage Summary\n(n=%d)", n_show),
+    fill = NULL
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 11),
+    legend.position = "none"
+  )
+
+# Display both plots side by side
+p1 + p2 + plot_layout(widths = c(3, 1))
 ```
 
 **Interpretation:** Well-calibrated confidence intervals should contain the true parameter about 95% of the time. Too low = intervals too narrow (overconfident). Too high = intervals too wide (inefficient).
