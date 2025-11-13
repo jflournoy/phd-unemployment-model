@@ -171,6 +171,37 @@ simulate_multi_education_unemployment <- function(n_years = 5,
   validate_param_vector(seasonal_amplitudes, "seasonal_amplitudes")
   validate_param_vector(trend_slopes, "trend_slopes")
 
+  # Validate that parameter combinations won't violate [0,1] bounds
+  # Check each education level
+  for (educ in education_levels) {
+    baseline <- baseline_rates[[educ]]
+    amplitude <- seasonal_amplitudes[[educ]]
+    slope <- trend_slopes[[educ]]
+
+    # Calculate min/max over the time series
+    # Seasonal goes from -amplitude to +amplitude
+    # Trend goes from 0 to slope * n_months at extremes
+    n_months <- n_years * 12
+
+    # Worst case min: baseline - amplitude + min(0, slope * n_months) - 3*noise_sd
+    min_rate <- baseline - amplitude + min(0, slope * n_months) - 3 * noise_sd
+    # Worst case max: baseline + amplitude + max(0, slope * n_months) + 3*noise_sd
+    max_rate <- baseline + amplitude + max(0, slope * n_months) + 3 * noise_sd
+
+    if (min_rate < 0.005) {
+      stop(sprintf(
+        "Parameter combination for '%s' may produce rates too close to 0 (min ~%.4f). Increase baseline_rates or reduce negative trend/seasonality.",
+        educ, min_rate
+      ))
+    }
+    if (max_rate > 0.95) {
+      stop(sprintf(
+        "Parameter combination for '%s' may produce rates too close to 1 (max ~%.4f). Decrease baseline_rates or reduce positive trend/seasonality.",
+        educ, max_rate
+      ))
+    }
+  }
+
   # Set seed if provided
   if (!is.null(seed)) {
     set.seed(seed)

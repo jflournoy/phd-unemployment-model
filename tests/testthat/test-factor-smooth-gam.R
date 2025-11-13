@@ -574,14 +574,57 @@ test_that("simulate_multi_education_unemployment validates parameter vectors", {
   )
 })
 
+test_that("simulate_multi_education_unemployment validates boundary safety", {
+  # Should error if parameters would produce rates too close to 0
+  expect_error(
+    simulate_multi_education_unemployment(
+      n_years = 10,
+      education_levels = c("phd"),
+      baseline_rates = c(phd = 0.02),
+      seasonal_amplitudes = c(phd = 0.01),
+      trend_slopes = c(phd = -0.0008),  # Too steep negative - will hit ~0
+      noise_sd = 0.002
+    ),
+    "may produce rates too close to 0"
+  )
+
+  # Should error if parameters would produce rates too close to 1
+  expect_error(
+    simulate_multi_education_unemployment(
+      n_years = 10,
+      education_levels = c("high_unemp"),
+      baseline_rates = c(high_unemp = 0.90),
+      seasonal_amplitudes = c(high_unemp = 0.05),
+      trend_slopes = c(high_unemp = 0.0005),  # Positive trend pushes toward 1
+      noise_sd = 0.002
+    ),
+    "may produce rates too close to 1"
+  )
+
+  # Should NOT error for safe parameter combinations
+  expect_no_error(
+    simulate_multi_education_unemployment(
+      n_years = 10,
+      education_levels = c("phd"),
+      baseline_rates = c(phd = 0.05),
+      seasonal_amplitudes = c(phd = 0.01),
+      trend_slopes = c(phd = -0.0002),
+      noise_sd = 0.002
+    )
+  )
+})
+
 test_that("simulate_multi_education_unemployment generates education-specific patterns", {
   # Simulate with very different parameters
+  # Adjusted to avoid boundary violations:
+  # - high: baseline 0.07, seasonal 0.012, trend -0.0001 (very modest over 15 years)
+  # - This keeps high education away from 0 bound even with 15*12=180 months
   sim_data <- simulate_multi_education_unemployment(
     n_years = 15,
     education_levels = c("low", "high"),
-    baseline_rates = c(low = 0.08, high = 0.02),  # Large difference
-    seasonal_amplitudes = c(low = 0.002, high = 0.030),  # Large difference
-    trend_slopes = c(low = 0.0005, high = -0.001),  # Opposite directions
+    baseline_rates = c(low = 0.08, high = 0.07),  # Moderate difference, very safe
+    seasonal_amplitudes = c(low = 0.002, high = 0.012),  # 6x difference, safe range
+    trend_slopes = c(low = 0.0002, high = -0.0001),  # Opposite directions, very modest
     noise_sd = 0.001,  # Low noise to see patterns clearly
     seed = 123
   )
@@ -895,11 +938,13 @@ test_that("REGRESSION: model selection identifies correct structure with educati
   )
 
   # Scenario 2: Only trend differences (should prefer m4)
+  # Adjusted baselines to avoid boundary
+  # Bachelors: 0.080 - 0.008 + (-0.0005 * 120) - 3*0.002 = 0.080 - 0.008 - 0.060 - 0.006 = 0.006 (safe!)
   sim_trend_only <- simulate_multi_education_unemployment(
     n_years = 10,
     education_levels = c("phd", "masters", "bachelors"),
-    baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
-    seasonal_amplitudes = c(phd = 0.010, masters = 0.010, bachelors = 0.010),  # Same
+    baseline_rates = c(phd = 0.042, masters = 0.055, bachelors = 0.080),  # Higher baselines, safe
+    seasonal_amplitudes = c(phd = 0.008, masters = 0.008, bachelors = 0.008),  # Same
     trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),  # Different!
     noise_sd = 0.002,
     seed = 43
@@ -916,10 +961,13 @@ test_that("REGRESSION: model selection identifies correct structure with educati
   )
 
   # Scenario 3: Both differ (should prefer m6)
+  # PhD: 0.040 - 0.005 + (-0.0001 * 120) - 3*0.002 = 0.040 - 0.005 - 0.012 - 0.006 = 0.017 (safe!)
+  # Masters: 0.065 - 0.015 + (-0.0003 * 120) - 3*0.002 = 0.065 - 0.015 - 0.036 - 0.006 = 0.008 (safe!)
+  # Bachelors: 0.105 - 0.025 + (-0.0005 * 120) - 3*0.002 = 0.105 - 0.025 - 0.060 - 0.006 = 0.014 (safe!)
   sim_both <- simulate_multi_education_unemployment(
     n_years = 10,
     education_levels = c("phd", "masters", "bachelors"),
-    baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+    baseline_rates = c(phd = 0.040, masters = 0.065, bachelors = 0.105),
     seasonal_amplitudes = c(phd = 0.005, masters = 0.015, bachelors = 0.025),  # Different
     trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),  # Different
     noise_sd = 0.002,
@@ -940,13 +988,14 @@ test_that("REGRESSION: model selection identifies correct structure with educati
 test_that("REGRESSION: nested models with education factor distinguish education levels", {
   # Integration test: Verifies that with education factor included, models can
   # actually distinguish between education levels and recover different patterns
+  # Adjusted to avoid boundary: high baseline 0.05 (was 0.02), trend -0.0003 (was -0.001)
 
   sim_data <- simulate_multi_education_unemployment(
     n_years = 10,
     education_levels = c("low", "high"),
-    baseline_rates = c(low = 0.08, high = 0.02),  # Very different
-    seasonal_amplitudes = c(low = 0.005, high = 0.025),  # Very different
-    trend_slopes = c(low = 0.0005, high = -0.001),  # Opposite directions
+    baseline_rates = c(low = 0.08, high = 0.05),  # Very different, safe from boundaries
+    seasonal_amplitudes = c(low = 0.005, high = 0.015),  # Very different, safe range
+    trend_slopes = c(low = 0.0003, high = -0.0002),  # Opposite directions, safe
     noise_sd = 0.001,
     seed = 45
   )
@@ -964,17 +1013,17 @@ test_that("REGRESSION: nested models with education factor distinguish education
   pred_m6 <- predict(models$m6, newdata = newdata, type = "response")
 
   # Predictions should be very different between low and high education
-  # (low has higher baseline: 0.08 vs 0.02)
+  # (low has higher baseline: 0.08 vs 0.05)
   expect_gt(
     pred_m6[1],  # low education
     pred_m6[2],  # high education
     label = "m6 should predict higher unemployment for low education (higher baseline)"
   )
 
-  # Difference should be substantial (at least 0.03 pp)
+  # Difference should be substantial (at least 0.02 pp, adjusted from 0.03)
   expect_gt(
     pred_m6[1] - pred_m6[2],
-    0.03,
+    0.02,
     label = "m6 should show substantial difference between education levels"
   )
 })
