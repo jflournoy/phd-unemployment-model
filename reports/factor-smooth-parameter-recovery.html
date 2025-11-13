@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Statistical Analysis">
-<meta name="dcterms.date" content="2025-11-12">
+<meta name="dcterms.date" content="2025-11-13">
 
 <title>Parameter Recovery Validation: Factor Smooth GAMs</title>
 <style>
@@ -145,7 +145,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">November 12, 2025</p>
+      <p class="date">November 13, 2025</p>
     </div>
   </div>
   
@@ -253,28 +253,31 @@ Family: gaussian
 Link function: identity 
 
 Formula:
-unemployment_rate ~ s(time_index, by = education, bs = "cr", 
-    k = 20) + s(month, by = education, bs = "cc", k = 10)
+unemployment_rate ~ education + s(time_index, by = education, 
+    bs = "cr", k = 20) + s(month, by = education, bs = "cc", 
+    k = 10)
 
 Parametric coefficients:
-             Estimate Std. Error t value Pr(&gt;|t|)    
-(Intercept) 0.0260123  0.0003683   70.63   &lt;2e-16 ***
+                    Estimate Std. Error t value Pr(&gt;|t|)    
+(Intercept)        0.0159606  0.0001479  107.94   &lt;2e-16 ***
+educationmasters   0.0100795  0.0002091   48.20   &lt;2e-16 ***
+educationbachelors 0.0200756  0.0002091   96.01   &lt;2e-16 ***
 ---
 Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
 Approximate significance of smooth terms:
-                                   edf Ref.df      F  p-value    
-s(time_index):educationphd       1.001  1.001 67.872  &lt; 2e-16 ***
-s(time_index):educationmasters   1.001  1.001 65.608  &lt; 2e-16 ***
-s(time_index):educationbachelors 1.001  1.001 64.124  &lt; 2e-16 ***
-s(month):educationphd            2.793  8.000  3.839 7.06e-07 ***
-s(month):educationmasters        4.230  8.000 22.137  &lt; 2e-16 ***
-s(month):educationbachelors      5.156  8.000 59.147  &lt; 2e-16 ***
+                                   edf Ref.df       F p-value    
+s(time_index):educationphd       1.001  1.002 1259.88  &lt;2e-16 ***
+s(time_index):educationmasters   1.009  1.018 1197.50  &lt;2e-16 ***
+s(time_index):educationbachelors 1.001  1.002 1190.29  &lt;2e-16 ***
+s(month):educationphd            5.415  8.000   78.08  &lt;2e-16 ***
+s(month):educationmasters        6.946  8.000  421.81  &lt;2e-16 ***
+s(month):educationbachelors      7.482  8.000 1112.73  &lt;2e-16 ***
 ---
 Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
 
-R-sq.(adj) =  0.621   Deviance explained = 63.2%
--REML = -1769.2  Scale est. = 7.325e-05  n = 540</code></pre>
+R-sq.(adj) =   0.98   Deviance explained = 98.1%
+-REML = -2517.2  Scale est. = 3.9353e-06  n = 540</code></pre>
 </div>
 </div>
 </section>
@@ -372,8 +375,8 @@ R-sq.(adj) =  0.621   Deviance explained = 63.2%
 <col style="width: 13%">
 <col style="width: 18%">
 <col style="width: 24%">
-<col style="width: 9%">
-<col style="width: 22%">
+<col style="width: 8%">
+<col style="width: 23%">
 </colgroup>
 <thead>
 <tr class="header">
@@ -390,25 +393,25 @@ R-sq.(adj) =  0.621   Deviance explained = 63.2%
 <td style="text-align: left;">phd</td>
 <td style="text-align: left;">PhD</td>
 <td style="text-align: right;">0.005</td>
-<td style="text-align: right;">0.0046</td>
-<td style="text-align: right;">-0.0004</td>
-<td style="text-align: right;">-8.9175</td>
+<td style="text-align: right;">0.0050</td>
+<td style="text-align: right;">0e+00</td>
+<td style="text-align: right;">-0.5090</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">masters</td>
 <td style="text-align: left;">Master’s</td>
 <td style="text-align: right;">0.012</td>
-<td style="text-align: right;">0.0000</td>
-<td style="text-align: right;">-0.0120</td>
-<td style="text-align: right;">-100.0000</td>
+<td style="text-align: right;">0.0118</td>
+<td style="text-align: right;">-2e-04</td>
+<td style="text-align: right;">-1.8834</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">bachelors</td>
 <td style="text-align: left;">Bachelor’s</td>
 <td style="text-align: right;">0.020</td>
-<td style="text-align: right;">0.0000</td>
-<td style="text-align: right;">-0.0200</td>
-<td style="text-align: right;">-100.0000</td>
+<td style="text-align: right;">0.0192</td>
+<td style="text-align: right;">-8e-04</td>
+<td style="text-align: right;">-4.1491</td>
 </tr>
 </tbody>
 </table>
@@ -537,12 +540,12 @@ R-sq.(adj) =  0.621   Deviance explained = 63.2%
 <table class="caption-top table table-sm table-striped small">
 <caption>Trend Slope Recovery (units: percentage points per month)</caption>
 <colgroup>
-<col style="width: 13%">
+<col style="width: 12%">
 <col style="width: 14%">
 <col style="width: 14%">
-<col style="width: 21%">
-<col style="width: 9%">
-<col style="width: 25%">
+<col style="width: 20%">
+<col style="width: 12%">
+<col style="width: 24%">
 </colgroup>
 <thead>
 <tr class="header">
@@ -560,24 +563,24 @@ R-sq.(adj) =  0.621   Deviance explained = 63.2%
 <td style="text-align: left;">PhD</td>
 <td style="text-align: right;">-1e-04</td>
 <td style="text-align: right;">-0.000103</td>
-<td style="text-align: right;">-3e-06</td>
-<td style="text-align: right;">-3.272659</td>
+<td style="text-align: right;">-0.000003</td>
+<td style="text-align: right;">-3.262824</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">masters</td>
 <td style="text-align: left;">Master’s</td>
 <td style="text-align: right;">-3e-04</td>
-<td style="text-align: right;">0.000000</td>
-<td style="text-align: right;">3e-04</td>
-<td style="text-align: right;">100.000000</td>
+<td style="text-align: right;">-0.000211</td>
+<td style="text-align: right;">0.000089</td>
+<td style="text-align: right;">29.755638</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">bachelors</td>
 <td style="text-align: left;">Bachelor’s</td>
 <td style="text-align: right;">-5e-04</td>
-<td style="text-align: right;">0.000000</td>
-<td style="text-align: right;">5e-04</td>
-<td style="text-align: right;">100.000000</td>
+<td style="text-align: right;">-0.000249</td>
+<td style="text-align: right;">0.000251</td>
+<td style="text-align: right;">50.253191</td>
 </tr>
 </tbody>
 </table>
@@ -938,7 +941,7 @@ R-sq.(adj) =  0.621   Deviance explained = 63.2%
 <div class="cell-output-display">
 <div data-pagedtable="false">
   <script data-pagedtable-source="" type="application/json">
-{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["time_index"],"name":[1],"type":["dbl"],"align":["right"]},{"label":["comparison"],"name":[2],"type":["chr"],"align":["left"]},{"label":["difference"],"name":[3],"type":["dbl"],"align":["right"]},{"label":["se"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["lower"],"name":[5],"type":["dbl"],"align":["right"]},{"label":["upper"],"name":[6],"type":["dbl"],"align":["right"]},{"label":["significant"],"name":[7],"type":["lgl"],"align":["right"]}],"data":[{"1":"1","2":"phd - masters","3":"-0.0107585870","4":"0.001504380","5":"-0.0137071174","6":"-0.007810057","7":"TRUE","_rn_":"1"},{"1":"13","2":"phd - masters","3":"-0.0083627081","4":"0.001198624","5":"-0.0107119671","6":"-0.006013449","7":"TRUE","_rn_":"2"},{"1":"25","2":"phd - masters","3":"-0.0059233918","4":"0.001125012","5":"-0.0081283750","6":"-0.003718409","7":"TRUE","_rn_":"3"},{"1":"37","2":"phd - masters","3":"-0.0034619298","4":"0.001106345","5":"-0.0056303253","6":"-0.001293534","7":"TRUE","_rn_":"4"},{"1":"49","2":"phd - masters","3":"-0.0009522681","4":"0.001090431","5":"-0.0030894731","6":"0.001184937","7":"FALSE","_rn_":"5"},{"1":"61","2":"phd - masters","3":"0.0015588721","4":"0.001076215","5":"-0.0005504705","6":"0.003668215","7":"FALSE","_rn_":"6"},{"1":"73","2":"phd - masters","3":"0.0039157420","4":"0.001067803","5":"0.0018228862","6":"0.006008598","7":"TRUE","_rn_":"7"},{"1":"85","2":"phd - masters","3":"0.0059128923","4":"0.001064870","5":"0.0038257854","6":"0.007999999","7":"TRUE","_rn_":"8"},{"1":"97","2":"phd - masters","3":"0.0074705993","4":"0.001064842","5":"0.0053835478","6":"0.009557651","7":"TRUE","_rn_":"9"},{"1":"109","2":"phd - masters","3":"0.0085682169","4":"0.001068401","5":"0.0064741899","6":"0.010662244","7":"TRUE","_rn_":"10"},{"1":"121","2":"phd - masters","3":"0.0092184383","4":"0.001077815","5":"0.0071059605","6":"0.011330916","7":"TRUE","_rn_":"11"},{"1":"133","2":"phd - masters","3":"0.0093621014","4":"0.001092449","5":"0.0072209397","6":"0.011503263","7":"TRUE","_rn_":"12"},{"1":"145","2":"phd - masters","3":"0.0090190001","4":"0.001108589","5":"0.0068462058","6":"0.011191794","7":"TRUE","_rn_":"13"},{"1":"157","2":"phd - masters","3":"0.0082670730","4":"0.001130092","5":"0.0060521332","6":"0.010482013","7":"TRUE","_rn_":"14"},{"1":"169","2":"phd - masters","3":"0.0072084962","4":"0.001216942","5":"0.0048233332","6":"0.009593659","7":"TRUE","_rn_":"15"},{"1":"1","2":"phd - bachelors","3":"-0.0193247206","4":"0.001600618","5":"-0.0224618737","6":"-0.016187568","7":"TRUE","_rn_":"16"},{"1":"13","2":"phd - bachelors","3":"-0.0142863547","4":"0.001198285","5":"-0.0166349506","6":"-0.011937759","7":"TRUE","_rn_":"21"},{"1":"25","2":"phd - bachelors","3":"-0.0093566164","4":"0.001146110","5":"-0.0116029515","6":"-0.007110281","7":"TRUE","_rn_":"31"},{"1":"37","2":"phd - bachelors","3":"-0.0045844179","4":"0.001128761","5":"-0.0067967497","6":"-0.002372086","7":"TRUE","_rn_":"41"},{"1":"49","2":"phd - bachelors","3":"0.0000483908","4":"0.001111361","5":"-0.0021298377","6":"0.002226619","7":"FALSE","_rn_":"51"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
+{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["time_index"],"name":[1],"type":["dbl"],"align":["right"]},{"label":["comparison"],"name":[2],"type":["chr"],"align":["left"]},{"label":["difference"],"name":[3],"type":["dbl"],"align":["right"]},{"label":["se"],"name":[4],"type":["dbl"],"align":["right"]},{"label":["lower"],"name":[5],"type":["dbl"],"align":["right"]},{"label":["upper"],"name":[6],"type":["dbl"],"align":["right"]},{"label":["significant"],"name":[7],"type":["lgl"],"align":["right"]}],"data":[{"1":"1","2":"phd - masters","3":"-0.0066970798","4":"0.0013393118","5":"-0.009322083","6":"-0.0040720770","7":"TRUE","_rn_":"1"},{"1":"13","2":"phd - masters","3":"-0.0043275804","4":"0.0010771859","5":"-0.006438826","6":"-0.0022163347","7":"TRUE","_rn_":"2"},{"1":"25","2":"phd - masters","3":"-0.0019035581","4":"0.0010250624","5":"-0.003912644","6":"0.0001055273","7":"FALSE","_rn_":"3"},{"1":"37","2":"phd - masters","3":"0.0005420447","4":"0.0010117443","5":"-0.001440938","6":"0.0025250270","7":"FALSE","_rn_":"4"},{"1":"49","2":"phd - masters","3":"0.0030517743","4":"0.0009989936","5":"0.001093783","6":"0.0050097657","7":"TRUE","_rn_":"5"},{"1":"61","2":"phd - masters","3":"0.0055861731","4":"0.0009880922","5":"0.003649548","6":"0.0075227983","7":"TRUE","_rn_":"6"},{"1":"73","2":"phd - masters","3":"0.0079732858","4":"0.0009820506","5":"0.006048502","6":"0.0098980697","7":"TRUE","_rn_":"7"},{"1":"85","2":"phd - masters","3":"0.0099781195","4":"0.0009802123","5":"0.008056939","6":"0.0118993004","7":"TRUE","_rn_":"8"},{"1":"97","2":"phd - masters","3":"0.0115293038","4":"0.0009801298","5":"0.009608285","6":"0.0134503229","7":"TRUE","_rn_":"9"},{"1":"109","2":"phd - masters","3":"0.0126218721","4":"0.0009824810","5":"0.010696245","6":"0.0145474996","7":"TRUE","_rn_":"10"},{"1":"121","2":"phd - masters","3":"0.0132844961","4":"0.0009893863","5":"0.011345335","6":"0.0152236575","7":"TRUE","_rn_":"11"},{"1":"133","2":"phd - masters","3":"0.0134362103","4":"0.0010005607","5":"0.011475147","6":"0.0153972732","7":"TRUE","_rn_":"12"},{"1":"145","2":"phd - masters","3":"0.0130887877","4":"0.0010133241","5":"0.011102709","6":"0.0150748666","7":"TRUE","_rn_":"13"},{"1":"157","2":"phd - masters","3":"0.0123140663","4":"0.0010284998","5":"0.010298244","6":"0.0143298890","7":"TRUE","_rn_":"14"},{"1":"169","2":"phd - masters","3":"0.0112006792","4":"0.0010914353","5":"0.009061505","6":"0.0133398530","7":"TRUE","_rn_":"15"},{"1":"1","2":"phd - bachelors","3":"-0.0150170904","4":"0.0014200765","5":"-0.017800389","6":"-0.0122337916","7":"TRUE","_rn_":"16"},{"1":"13","2":"phd - bachelors","3":"-0.0099504655","4":"0.0010783764","5":"-0.012064044","6":"-0.0078368867","7":"TRUE","_rn_":"21"},{"1":"25","2":"phd - bachelors","3":"-0.0050186779","4":"0.0010435523","5":"-0.007064003","6":"-0.0029733530","7":"TRUE","_rn_":"31"},{"1":"37","2":"phd - bachelors","3":"-0.0002736241","4":"0.0010296975","5":"-0.002291794","6":"0.0017445459","7":"FALSE","_rn_":"41"},{"1":"49","2":"phd - bachelors","3":"0.0043254350","4":"0.0010167827","5":"0.002332578","6":"0.0063182924","7":"TRUE","_rn_":"51"}],"options":{"columns":{"min":{},"max":[10]},"rows":{"min":[10],"max":[10]},"pages":{}}}
   </script>
 </div>
 </div>
@@ -1022,25 +1025,25 @@ R-sq.(adj) =  0.621   Deviance explained = 63.2%
 <tr class="odd">
 <td style="text-align: left;">phd - masters</td>
 <td style="text-align: right;">2e-04</td>
-<td style="text-align: right;">-0.010759</td>
-<td style="text-align: right;">-0.013707</td>
-<td style="text-align: right;">-0.007810</td>
+<td style="text-align: right;">-0.006697</td>
+<td style="text-align: right;">-0.009322</td>
+<td style="text-align: right;">-0.004072</td>
 <td style="text-align: left;">FALSE</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">phd - bachelors</td>
 <td style="text-align: right;">4e-04</td>
-<td style="text-align: right;">-0.019325</td>
-<td style="text-align: right;">-0.022462</td>
-<td style="text-align: right;">-0.016188</td>
+<td style="text-align: right;">-0.015017</td>
+<td style="text-align: right;">-0.017800</td>
+<td style="text-align: right;">-0.012234</td>
 <td style="text-align: left;">FALSE</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">masters - bachelors</td>
 <td style="text-align: right;">2e-04</td>
-<td style="text-align: right;">-0.008566</td>
-<td style="text-align: right;">-0.012186</td>
-<td style="text-align: right;">-0.004947</td>
+<td style="text-align: right;">-0.008320</td>
+<td style="text-align: right;">-0.011522</td>
+<td style="text-align: right;">-0.005118</td>
 <td style="text-align: left;">FALSE</td>
 </tr>
 </tbody>
@@ -1088,7 +1091,7 @@ R-sq.(adj) =  0.621   Deviance explained = 63.2%
 <h3 class="anchored" data-anchor-id="next-steps">Next Steps</h3>
 <p>Proceed to real data analysis with factor smooth GAMs, applying the modeling framework validated here to 2000-2025 CPS unemployment data for PhD, Master’s, and Bachelor’s degree holders.</p>
 <hr>
-<p><strong>Analysis Date</strong>: 2025-11-12</p>
+<p><strong>Analysis Date</strong>: 2025-11-13</p>
 <p><strong>R Session Info</strong>:</p>
 <div class="cell">
 <details open="" class="code-fold">
