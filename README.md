@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![R](https://img.shields.io/badge/R-%3E%3D4.0.0-blue)](https://www.r-project.org/)
 [![Stan](https://img.shields.io/badge/Stan-brms%2Fcmdstanr-red)](https://mc-stan.org/)
-[![Commands](https://img.shields.io/badge/commands-15-brightgreen)](.claude/commands/)
+[![Commands](https://img.shields.io/badge/commands-17-brightgreen)](.claude/commands/)
 
 Statistical modeling of PhD unemployment rates relative to sensible baselines (general unemployment, other graduate degrees) using Bayesian time series methods with Test-Driven Development.
 
@@ -263,6 +263,38 @@ Create Quarto documents in `reports/` for:
 - Model comparison
 - Results visualization
 - Final write-up
+
+### 5. Report Evaluation
+
+Evaluate parameter recovery and validation reports for quality and statistical rigor.
+
+**Quick Start:**
+
+```bash
+# Interactive mode - lists reports and lets you choose
+npm run report:evaluate
+
+# Or evaluate a specific report
+npm run report:evaluate reports/factor-smooth-parameter-recovery.html
+
+# Verbose diagnostics
+npm run report:evaluate:verbose
+```
+
+**What gets evaluated:**
+
+- **Coverage validation** - Proper methodology with ~95% coverage rates
+- **DGP consistency** - Consistent parameters across simulations
+- **Bias quantification** - Mean bias and precision metrics
+- **False positive control** - Type I error rate ≤5%
+- **Visualization quality** - Diagnostic plots and clear presentation
+- **Report structure** - Required sections and documentation
+- **Statistical rigor** - Adequate simulation runs, proper CI construction
+- **Documentation** - Reproducible code, explicit parameters
+
+The evaluation automatically detects anti-patterns like testing on training data (which gives artificially perfect 100% coverage) and parameter mismatches between simulations.
+
+See [`docs/report-evaluation.md`](docs/report-evaluation.md) for detailed criteria and [`.claude/commands/evaluate-report.md`](.claude/commands/evaluate-report.md) for usage
 
 ## Documentation
 

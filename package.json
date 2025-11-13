@@ -79,6 +79,8 @@
     "r:document": "Rscript -e 'devtools::document()'",
     "r:test": "Rscript -e 'devtools::test()'",
     "r:load": "Rscript -e 'devtools::load_all()'",
+    "report:evaluate": "bash scripts/evaluate-report-interactive.sh",
+    "report:evaluate:verbose": "bash scripts/evaluate-report-interactive.sh --verbose",
     "// CI/CD": "=== Continuous Integration commands ===",
     "quality:ci": "npm run lint:check && npm test && npm run docs validate",
     "ci:pre-push": "npm run quality:ci && npm run git:unpushed",
