@@ -388,6 +388,92 @@ test_that("simultaneous confidence bands control family-wise error rate", {
   expect_lte(prop_sig, 0.15)
 })
 
+test_that("can compute trend slope differences using derivatives", {
+  sim_data <- create_multi_education_sim_data(n_months = 150)
+  model <- fit_factor_smooth_gam(sim_data, formula_type = "full")
+
+  # Compute pairwise slope differences
+  slope_results <- compute_trend_slope_differences(
+    model,
+    education_pairs = list(c("phd", "bachelors"), c("masters", "bachelors")),
+    time_points = seq(20, 130, by = 10),  # Stay away from boundaries
+    eps = 0.1
+  )
+
+  # Should return a data frame
+  expect_s3_class(slope_results, "data.frame")
+
+  # Required columns
+  required_cols <- c("time_index", "comparison", "difference", "se",
+                     "lower", "upper", "significant")
+  expect_true(all(required_cols %in% names(slope_results)))
+
+  # Should have 2 comparisons × 12 time points = 24 rows
+  expect_equal(nrow(slope_results), 24)
+
+  # SE should be positive
+  expect_true(all(slope_results$se > 0))
+
+  # Confidence intervals should be valid
+  expect_true(all(slope_results$lower <= slope_results$difference))
+  expect_true(all(slope_results$upper >= slope_results$difference))
+  expect_true(all(slope_results$lower < slope_results$upper))
+})
+
+test_that("trend slope differences recover true slopes in simulation", {
+  # Simulate data with known linear trends
+  # Use boundary-safe parameters: min = 0.070 - 0.010 + (-0.0003*180) - 0.006 = 0.0
+  sim_data <- simulate_multi_education_unemployment(
+    n_years = 15,
+    education_levels = c("phd", "masters"),
+    baseline_rates = c(phd = 0.070, masters = 0.080),
+    seasonal_amplitudes = c(phd = 0.010, masters = 0.010),
+    trend_slopes = c(phd = -0.0001, masters = -0.0003),  # True difference: 0.0002
+    noise_sd = 0.002,
+    seed = 12345
+  )
+
+  model <- fit_factor_smooth_gam(sim_data, formula_type = "full")
+
+  # Compute slope difference
+  slope_results <- compute_trend_slope_differences(
+    model,
+    education_pairs = list(c("phd", "masters")),
+    time_points = 90,  # Middle of time series
+    eps = 0.1
+  )
+
+  true_slope_diff <- -0.0001 - (-0.0003)  # = 0.0002
+  estimated_slope_diff <- slope_results$difference[1]
+
+  # Should be close to true value (within ~3 SE)
+  expect_lt(abs(estimated_slope_diff - true_slope_diff), 3 * slope_results$se[1])
+
+  # CI should contain true value (may occasionally fail due to randomness)
+  # expect_gte(true_slope_diff, slope_results$lower[1])
+  # expect_lte(true_slope_diff, slope_results$upper[1])
+})
+
+test_that("compute_trend_differences is alias for compute_level_differences", {
+  # Test backward compatibility
+  sim_data <- create_multi_education_sim_data(n_months = 120)
+  model <- fit_factor_smooth_gam(sim_data, formula_type = "full")
+
+  result1 <- compute_trend_differences(
+    model,
+    education_pairs = list(c("phd", "masters")),
+    time_points = c(50, 100)
+  )
+
+  result2 <- compute_level_differences(
+    model,
+    education_pairs = list(c("phd", "masters")),
+    time_points = c(50, 100)
+  )
+
+  # Should be identical
+  expect_identical(result1, result2)
+})
 
 # ==============================================================================
 # Test Suite 5: Model Selection

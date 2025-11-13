@@ -156,6 +156,8 @@ extract_baseline_differences <- function(model,
 #' @param difference_type Type of difference to test: "trend", "seasonal", or "baseline"
 #' @param seed Random seed for reproducibility
 #' @param verbose Print progress messages (default TRUE)
+#' @param parallel Use parallel processing (requires future and furrr packages)
+#' @param n_cores Number of cores to use if parallel=TRUE (default: detectCores() - 1)
 #'
 #' @return List with:
 #'   \item{coverage_rate}{Proportion of CIs containing true difference}
@@ -173,11 +175,28 @@ validate_difference_coverage <- function(n_sims = 300,
                                         noise_sd = 0.002,
                                         difference_type = c("trend", "seasonal", "baseline"),
                                         seed = NULL,
-                                        verbose = TRUE) {
+                                        verbose = TRUE,
+                                        parallel = FALSE,
+                                        n_cores = NULL) {
 
   difference_type <- match.arg(difference_type)
 
   if (!is.null(seed)) set.seed(seed)
+
+  # Set up parallelization if requested
+  if (parallel) {
+    if (!requireNamespace("future", quietly = TRUE) ||
+        !requireNamespace("furrr", quietly = TRUE)) {
+      warning("Packages 'future' and 'furrr' required for parallelization. Running sequentially.")
+      parallel <- FALSE
+    } else {
+      if (is.null(n_cores)) {
+        n_cores <- max(1, parallel::detectCores() - 1)
+      }
+      future::plan(future::multisession, workers = n_cores)
+      if (verbose) cat(sprintf("Using %d cores for parallel processing\n", n_cores))
+    }
+  }
 
   if (verbose) {
     cat(sprintf("\nValidating %s difference coverage (%d simulations)...\n",
@@ -211,13 +230,11 @@ validate_difference_coverage <- function(n_sims = 300,
     )
   }
 
-  # Storage for results
-  all_results <- vector("list", n_sims)
-
-  # Run simulations
-  for (i in 1:n_sims) {
-    if (verbose && i %% 50 == 0) {
-      cat(sprintf("  Completed %d/%d simulations\n", i, n_sims))
+  # Function to run one simulation
+  run_one_sim <- function(i) {
+    # Load package in worker (for parallel execution)
+    if (!exists("simulate_multi_education_unemployment")) {
+      requireNamespace("phdunemployment", quietly = TRUE)
     }
 
     # Simulate data
@@ -239,10 +256,15 @@ validate_difference_coverage <- function(n_sims = 300,
 
     # Extract differences based on type
     if (difference_type == "trend") {
-      diffs <- compute_trend_differences(
+      # For trend differences, we want SLOPES (derivatives), not levels
+      # Use compute_trend_slope_differences to estimate rate of change
+      # Use middle of time series to avoid boundary effects
+      mid_time <- floor(n_years * 12 / 2)
+      diffs <- compute_trend_slope_differences(
         model,
         education_pairs = education_pairs,
-        time_points = 1  # Just at t=1 for coverage check
+        time_points = mid_time,  # Evaluate slope at middle of series
+        eps = 0.1                # Finite difference step size
       )
     } else if (difference_type == "baseline") {
       diffs <- extract_baseline_differences(
@@ -255,33 +277,71 @@ validate_difference_coverage <- function(n_sims = 300,
     }
 
     # Check coverage for each pair
-    for (j in 1:length(education_pairs)) {
+    results_list <- lapply(1:length(education_pairs), function(j) {
       diff_row <- diffs[j, ]
       true_diff <- true_diffs[j]
 
       covered <- (true_diff >= diff_row$lower) & (true_diff <= diff_row$upper)
       error <- diff_row$difference - true_diff
 
-      all_results[[i]] <- rbind(
-        if (is.data.frame(all_results[[i]])) all_results[[i]] else NULL,
-        data.frame(
-          sim_id = i,
-          comparison = diff_row$comparison,
-          true_difference = true_diff,
-          estimated_difference = diff_row$difference,
-          se = diff_row$se,
-          lower = diff_row$lower,
-          upper = diff_row$upper,
-          covered = covered,
-          error = error,
-          stringsAsFactors = FALSE
-        )
+      data.frame(
+        sim_id = i,
+        comparison = diff_row$comparison,
+        true_difference = true_diff,
+        estimated_difference = diff_row$difference,
+        se = diff_row$se,
+        lower = diff_row$lower,
+        upper = diff_row$upper,
+        covered = covered,
+        error = error,
+        stringsAsFactors = FALSE
       )
-    }
+    })
+
+    return(do.call(rbind, results_list))
   }
 
-  # Combine all results
-  detailed_results <- do.call(rbind, all_results)
+  # Run simulations (parallel or sequential)
+  if (parallel) {
+    # Export necessary objects to workers
+    all_results <- furrr::future_map_dfr(
+      1:n_sims,
+      run_one_sim,
+      .options = furrr::furrr_options(
+        seed = TRUE,
+        globals = list(
+          run_one_sim = run_one_sim,
+          n_years = n_years,
+          education_levels = education_levels,
+          baseline_rates = baseline_rates,
+          seasonal_amplitudes = seasonal_amplitudes,
+          trend_slopes = trend_slopes,
+          noise_sd = noise_sd,
+          difference_type = difference_type,
+          seed = seed,
+          education_pairs = education_pairs,
+          true_diffs = true_diffs
+        ),
+        packages = "phdunemployment"
+      )
+    )
+  } else {
+    all_results_list <- lapply(1:n_sims, function(i) {
+      if (verbose && i %% 50 == 0) {
+        cat(sprintf("  Completed %d/%d simulations\n", i, n_sims))
+      }
+      run_one_sim(i)
+    })
+    all_results <- do.call(rbind, all_results_list)
+  }
+
+  # Clean up parallel workers
+  if (parallel) {
+    future::plan(future::sequential)
+  }
+
+  # Detailed results
+  detailed_results <- all_results
 
   # Compute summary statistics by comparison
   summary_by_pair <- lapply(split(detailed_results, detailed_results$comparison), function(df) {
