@@ -1476,17 +1476,17 @@ fit_nested_model_sequence <- function(data) {
                      s(month, bs = "cc"),
                    data = data, method = "REML"),
 
-    m4 = mgcv::gam(unemployment_rate ~
+    m4 = mgcv::gam(unemployment_rate ~ education +
                      s(time_index, by = education) +
                      s(month, bs = "cc"),
                    data = data, method = "REML"),
 
-    m5 = mgcv::gam(unemployment_rate ~
+    m5 = mgcv::gam(unemployment_rate ~ education +
                      s(time_index) +
                      s(month, by = education, bs = "cc"),
                    data = data, method = "REML"),
 
-    m6 = mgcv::gam(unemployment_rate ~
+    m6 = mgcv::gam(unemployment_rate ~ education +
                      s(time_index, by = education) +
                      s(month, by = education, bs = "cc"),
                    data = data, method = "REML")

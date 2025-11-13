@@ -88,6 +88,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <li><a href="#why-this-matters" id="toc-why-this-matters" class="nav-link" data-scroll-target="#why-this-matters">Why This Matters</a></li>
   </ul></li>
   <li><a href="#setup" id="toc-setup" class="nav-link" data-scroll-target="#setup">Setup</a></li>
+  <li><a href="#model-specifications" id="toc-model-specifications" class="nav-link" data-scroll-target="#model-specifications">Model Specifications</a></li>
   <li><a href="#test-1-recovery-of-education-specific-seasonal-patterns" id="toc-test-1-recovery-of-education-specific-seasonal-patterns" class="nav-link" data-scroll-target="#test-1-recovery-of-education-specific-seasonal-patterns">Test 1: Recovery of Education-Specific Seasonal Patterns</a>
   <ul class="collapse">
   <li><a href="#simulation-design" id="toc-simulation-design" class="nav-link" data-scroll-target="#simulation-design">Simulation Design</a></li>
@@ -191,6 +192,19 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
+</section>
+<section id="model-specifications" class="level2">
+<h2 class="anchored" data-anchor-id="model-specifications">Model Specifications</h2>
+<p>The nested model sequence used for model selection includes 7 models (m0-m6):</p>
+<ul>
+<li><p><strong>m0 (null)</strong>: <code>unemployment_rate ~ 1</code> Null model, global mean only</p></li>
+<li><p><strong>m1 (education)</strong>: <code>unemployment_rate ~ education</code> Education-specific intercepts, no time structure</p></li>
+<li><p><strong>m2 (shared trend)</strong>: <code>unemployment_rate ~ education + s(time_index)</code> Education-specific intercepts + shared smooth trend</p></li>
+<li><p><strong>m3 (shared trend + shared seasonal)</strong>: <code>unemployment_rate ~ education + s(time_index) + s(month, bs="cc")</code> Education-specific intercepts + shared smooth trend + shared cyclic seasonality</p></li>
+<li><p><strong>m4 (education-specific trends)</strong>: <code>unemployment_rate ~ education + s(time_index, by=education) + s(month, bs="cc")</code> Education-specific intercepts + education-specific smooth trends + shared cyclic seasonality</p></li>
+<li><p><strong>m5 (education-specific seasonality)</strong>: <code>unemployment_rate ~ education + s(time_index) + s(month, by=education, bs="cc")</code> Education-specific intercepts + shared smooth trend + education-specific cyclic seasonality</p></li>
+<li><p><strong>m6 (full)</strong>: <code>unemployment_rate ~ education + s(time_index, by=education) + s(month, by=education, bs="cc")</code> Education-specific intercepts + education-specific smooth trends + education-specific cyclic seasonality</p></li>
+</ul>
 </section>
 <section id="test-1-recovery-of-education-specific-seasonal-patterns" class="level2">
 <h2 class="anchored" data-anchor-id="test-1-recovery-of-education-specific-seasonal-patterns">Test 1: Recovery of Education-Specific Seasonal Patterns</h2>
@@ -632,40 +646,40 @@ R-sq.(adj) =   0.98   Deviance explained = 98.1%
 </thead>
 <tbody>
 <tr class="odd">
+<td style="text-align: left;">m5</td>
+<td style="text-align: right;">-5153.36</td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: right;">515.52</td>
+<td style="text-align: right;">24.48</td>
+<td style="text-align: right;">0.98</td>
+<td style="text-align: right;">0.00</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">m6</td>
+<td style="text-align: right;">-5149.32</td>
+<td style="text-align: right;">0.00</td>
+<td style="text-align: right;">512.58</td>
+<td style="text-align: right;">27.42</td>
+<td style="text-align: right;">0.98</td>
+<td style="text-align: right;">4.04</td>
+</tr>
+<tr class="odd">
 <td style="text-align: left;">m3</td>
 <td style="text-align: right;">-3971.54</td>
 <td style="text-align: right;">0.02</td>
 <td style="text-align: right;">529.67</td>
 <td style="text-align: right;">10.33</td>
 <td style="text-align: right;">0.83</td>
-<td style="text-align: right;">0.00</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">m5</td>
-<td style="text-align: right;">-3585.66</td>
-<td style="text-align: right;">0.04</td>
-<td style="text-align: right;">524.94</td>
-<td style="text-align: right;">15.06</td>
-<td style="text-align: right;">0.66</td>
-<td style="text-align: right;">385.88</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">m6</td>
-<td style="text-align: right;">-3581.88</td>
-<td style="text-align: right;">0.04</td>
-<td style="text-align: right;">522.95</td>
-<td style="text-align: right;">17.05</td>
-<td style="text-align: right;">0.66</td>
-<td style="text-align: right;">389.66</td>
+<td style="text-align: right;">1181.82</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">m4</td>
-<td style="text-align: right;">-3399.54</td>
-<td style="text-align: right;">0.06</td>
-<td style="text-align: right;">530.66</td>
-<td style="text-align: right;">9.34</td>
-<td style="text-align: right;">0.52</td>
-<td style="text-align: right;">572.00</td>
+<td style="text-align: right;">-3968.08</td>
+<td style="text-align: right;">0.02</td>
+<td style="text-align: right;">527.68</td>
+<td style="text-align: right;">12.32</td>
+<td style="text-align: right;">0.83</td>
+<td style="text-align: right;">1185.28</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">m1</td>
@@ -674,7 +688,7 @@ R-sq.(adj) =   0.98   Deviance explained = 98.1%
 <td style="text-align: right;">537.00</td>
 <td style="text-align: right;">3.00</td>
 <td style="text-align: right;">0.31</td>
-<td style="text-align: right;">763.20</td>
+<td style="text-align: right;">1945.02</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">m2</td>
@@ -683,7 +697,7 @@ R-sq.(adj) =   0.98   Deviance explained = 98.1%
 <td style="text-align: right;">536.00</td>
 <td style="text-align: right;">4.00</td>
 <td style="text-align: right;">0.31</td>
-<td style="text-align: right;">765.20</td>
+<td style="text-align: right;">1947.02</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">m0</td>
@@ -692,7 +706,7 @@ R-sq.(adj) =   0.98   Deviance explained = 98.1%
 <td style="text-align: right;">539.00</td>
 <td style="text-align: right;">1.00</td>
 <td style="text-align: right;">0.00</td>
-<td style="text-align: right;">959.31</td>
+<td style="text-align: right;">2141.12</td>
 </tr>
 </tbody>
 </table>
@@ -738,39 +752,39 @@ R-sq.(adj) =   0.98   Deviance explained = 98.1%
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">m6</td>
-<td style="text-align: right;">-4453.97</td>
+<td style="text-align: right;">-4644.77</td>
 <td style="text-align: right;">0.01</td>
-<td style="text-align: right;">513.89</td>
-<td style="text-align: right;">26.11</td>
-<td style="text-align: right;">0.91</td>
+<td style="text-align: right;">509.87</td>
+<td style="text-align: right;">30.13</td>
+<td style="text-align: right;">0.94</td>
 <td style="text-align: right;">0.00</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">m4</td>
-<td style="text-align: right;">-4394.49</td>
+<td style="text-align: right;">-4556.10</td>
 <td style="text-align: right;">0.01</td>
-<td style="text-align: right;">522.68</td>
-<td style="text-align: right;">17.32</td>
-<td style="text-align: right;">0.90</td>
-<td style="text-align: right;">59.48</td>
+<td style="text-align: right;">519.55</td>
+<td style="text-align: right;">20.45</td>
+<td style="text-align: right;">0.93</td>
+<td style="text-align: right;">88.67</td>
 </tr>
 <tr class="odd">
+<td style="text-align: left;">m5</td>
+<td style="text-align: right;">-4124.48</td>
+<td style="text-align: right;">0.01</td>
+<td style="text-align: right;">520.23</td>
+<td style="text-align: right;">19.77</td>
+<td style="text-align: right;">0.83</td>
+<td style="text-align: right;">520.29</td>
+</tr>
+<tr class="even">
 <td style="text-align: left;">m3</td>
 <td style="text-align: right;">-4100.04</td>
 <td style="text-align: right;">0.02</td>
 <td style="text-align: right;">527.47</td>
 <td style="text-align: right;">12.53</td>
 <td style="text-align: right;">0.82</td>
-<td style="text-align: right;">353.93</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">m5</td>
-<td style="text-align: right;">-4048.97</td>
-<td style="text-align: right;">0.02</td>
-<td style="text-align: right;">522.74</td>
-<td style="text-align: right;">17.26</td>
-<td style="text-align: right;">0.81</td>
-<td style="text-align: right;">405.00</td>
+<td style="text-align: right;">544.73</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">m2</td>
@@ -779,7 +793,7 @@ R-sq.(adj) =   0.98   Deviance explained = 98.1%
 <td style="text-align: right;">533.09</td>
 <td style="text-align: right;">6.91</td>
 <td style="text-align: right;">0.67</td>
-<td style="text-align: right;">685.92</td>
+<td style="text-align: right;">876.72</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">m1</td>
@@ -788,7 +802,7 @@ R-sq.(adj) =   0.98   Deviance explained = 98.1%
 <td style="text-align: right;">537.00</td>
 <td style="text-align: right;">3.00</td>
 <td style="text-align: right;">0.02</td>
-<td style="text-align: right;">1265.31</td>
+<td style="text-align: right;">1456.11</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">m0</td>
@@ -797,7 +811,7 @@ R-sq.(adj) =   0.98   Deviance explained = 98.1%
 <td style="text-align: right;">539.00</td>
 <td style="text-align: right;">1.00</td>
 <td style="text-align: right;">0.00</td>
-<td style="text-align: right;">1275.47</td>
+<td style="text-align: right;">1466.27</td>
 </tr>
 </tbody>
 </table>
@@ -843,30 +857,30 @@ R-sq.(adj) =   0.98   Deviance explained = 98.1%
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">m6</td>
-<td style="text-align: right;">-4077.16</td>
-<td style="text-align: right;">0.02</td>
-<td style="text-align: right;">517.20</td>
-<td style="text-align: right;">22.80</td>
-<td style="text-align: right;">0.84</td>
+<td style="text-align: right;">-4119.89</td>
+<td style="text-align: right;">0.01</td>
+<td style="text-align: right;">514.83</td>
+<td style="text-align: right;">25.17</td>
+<td style="text-align: right;">0.85</td>
 <td style="text-align: right;">0.00</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">m4</td>
-<td style="text-align: right;">-4005.61</td>
+<td style="text-align: right;">-4041.21</td>
 <td style="text-align: right;">0.02</td>
-<td style="text-align: right;">525.27</td>
-<td style="text-align: right;">14.73</td>
-<td style="text-align: right;">0.82</td>
-<td style="text-align: right;">71.54</td>
+<td style="text-align: right;">523.10</td>
+<td style="text-align: right;">16.90</td>
+<td style="text-align: right;">0.83</td>
+<td style="text-align: right;">78.68</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">m5</td>
-<td style="text-align: right;">-3871.55</td>
+<td style="text-align: right;">-3898.38</td>
 <td style="text-align: right;">0.02</td>
-<td style="text-align: right;">523.09</td>
-<td style="text-align: right;">16.91</td>
-<td style="text-align: right;">0.76</td>
-<td style="text-align: right;">205.61</td>
+<td style="text-align: right;">520.90</td>
+<td style="text-align: right;">19.10</td>
+<td style="text-align: right;">0.78</td>
+<td style="text-align: right;">221.51</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">m3</td>
@@ -875,7 +889,7 @@ R-sq.(adj) =   0.98   Deviance explained = 98.1%
 <td style="text-align: right;">528.16</td>
 <td style="text-align: right;">11.84</td>
 <td style="text-align: right;">0.75</td>
-<td style="text-align: right;">229.06</td>
+<td style="text-align: right;">271.79</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">m2</td>
@@ -884,7 +898,7 @@ R-sq.(adj) =   0.98   Deviance explained = 98.1%
 <td style="text-align: right;">533.77</td>
 <td style="text-align: right;">6.23</td>
 <td style="text-align: right;">0.53</td>
-<td style="text-align: right;">563.94</td>
+<td style="text-align: right;">606.68</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">m1</td>
@@ -893,7 +907,7 @@ R-sq.(adj) =   0.98   Deviance explained = 98.1%
 <td style="text-align: right;">537.00</td>
 <td style="text-align: right;">3.00</td>
 <td style="text-align: right;">0.01</td>
-<td style="text-align: right;">966.87</td>
+<td style="text-align: right;">1009.61</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">m0</td>
@@ -902,7 +916,7 @@ R-sq.(adj) =   0.98   Deviance explained = 98.1%
 <td style="text-align: right;">539.00</td>
 <td style="text-align: right;">1.00</td>
 <td style="text-align: right;">0.00</td>
-<td style="text-align: right;">969.82</td>
+<td style="text-align: right;">1012.55</td>
 </tr>
 </tbody>
 </table>
@@ -1683,423 +1697,448 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
 <span id="cb18-46"><a href="#cb18-46" aria-hidden="true" tabindex="-1"></a><span class="in">set.seed(42)</span></span>
 <span id="cb18-47"><a href="#cb18-47" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 <span id="cb18-48"><a href="#cb18-48" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-49"><a href="#cb18-49" aria-hidden="true" tabindex="-1"></a><span class="fu">## Test 1: Recovery of Education-Specific Seasonal Patterns</span></span>
+<span id="cb18-49"><a href="#cb18-49" aria-hidden="true" tabindex="-1"></a><span class="fu">## Model Specifications</span></span>
 <span id="cb18-50"><a href="#cb18-50" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-51"><a href="#cb18-51" aria-hidden="true" tabindex="-1"></a><span class="fu">### Simulation Design</span></span>
+<span id="cb18-51"><a href="#cb18-51" aria-hidden="true" tabindex="-1"></a>The nested model sequence used for model selection includes 7 models (m0-m6):</span>
 <span id="cb18-52"><a href="#cb18-52" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-53"><a href="#cb18-53" aria-hidden="true" tabindex="-1"></a>We simulate 15 years of monthly data for 3 education levels with **different seasonal amplitudes**:</span>
-<span id="cb18-54"><a href="#cb18-54" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-55"><a href="#cb18-55" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**PhD**: Amplitude = 0.005 (small seasonality)</span>
-<span id="cb18-56"><a href="#cb18-56" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Master's**: Amplitude = 0.012 (moderate seasonality)</span>
-<span id="cb18-57"><a href="#cb18-57" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Bachelor's**: Amplitude = 0.020 (large seasonality)</span>
+<span id="cb18-53"><a href="#cb18-53" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**m0 (null)**: <span class="in">`unemployment_rate ~ 1`</span></span>
+<span id="cb18-54"><a href="#cb18-54" aria-hidden="true" tabindex="-1"></a>  Null model, global mean only</span>
+<span id="cb18-55"><a href="#cb18-55" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-56"><a href="#cb18-56" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**m1 (education)**: <span class="in">`unemployment_rate ~ education`</span></span>
+<span id="cb18-57"><a href="#cb18-57" aria-hidden="true" tabindex="-1"></a>  Education-specific intercepts, no time structure</span>
 <span id="cb18-58"><a href="#cb18-58" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-59"><a href="#cb18-59" aria-hidden="true" tabindex="-1"></a>All have the same trend (slight negative) to isolate seasonal recovery.</span>
-<span id="cb18-60"><a href="#cb18-60" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-61"><a href="#cb18-61" aria-hidden="true" tabindex="-1"></a><span class="in">```{r sim-seasonal}</span></span>
-<span id="cb18-62"><a href="#cb18-62" aria-hidden="true" tabindex="-1"></a><span class="in"># Simulate data with different seasonal amplitudes</span></span>
-<span id="cb18-63"><a href="#cb18-63" aria-hidden="true" tabindex="-1"></a><span class="in">sim_seasonal &lt;- simulate_multi_education_unemployment(</span></span>
-<span id="cb18-64"><a href="#cb18-64" aria-hidden="true" tabindex="-1"></a><span class="in">  n_years = 15,</span></span>
-<span id="cb18-65"><a href="#cb18-65" aria-hidden="true" tabindex="-1"></a><span class="in">  education_levels = c("phd", "masters", "bachelors"),</span></span>
-<span id="cb18-66"><a href="#cb18-66" aria-hidden="true" tabindex="-1"></a><span class="in">  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),</span></span>
-<span id="cb18-67"><a href="#cb18-67" aria-hidden="true" tabindex="-1"></a><span class="in">  seasonal_amplitudes = c(phd = 0.005, masters = 0.012, bachelors = 0.020),</span></span>
-<span id="cb18-68"><a href="#cb18-68" aria-hidden="true" tabindex="-1"></a><span class="in">  trend_slopes = c(phd = -0.0001, masters = -0.0001, bachelors = -0.0001),</span></span>
-<span id="cb18-69"><a href="#cb18-69" aria-hidden="true" tabindex="-1"></a><span class="in">  noise_sd = 0.002,</span></span>
-<span id="cb18-70"><a href="#cb18-70" aria-hidden="true" tabindex="-1"></a><span class="in">  seed = 123</span></span>
-<span id="cb18-71"><a href="#cb18-71" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
-<span id="cb18-72"><a href="#cb18-72" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-73"><a href="#cb18-73" aria-hidden="true" tabindex="-1"></a><span class="in"># Extract true parameters</span></span>
-<span id="cb18-74"><a href="#cb18-74" aria-hidden="true" tabindex="-1"></a><span class="in">true_seasonal_amp &lt;- attr(sim_seasonal, "true_seasonal_amplitude")</span></span>
+<span id="cb18-59"><a href="#cb18-59" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**m2 (shared trend)**: <span class="in">`unemployment_rate ~ education + s(time_index)`</span></span>
+<span id="cb18-60"><a href="#cb18-60" aria-hidden="true" tabindex="-1"></a>  Education-specific intercepts + shared smooth trend</span>
+<span id="cb18-61"><a href="#cb18-61" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-62"><a href="#cb18-62" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**m3 (shared trend + shared seasonal)**: <span class="in">`unemployment_rate ~ education + s(time_index) + s(month, bs="cc")`</span></span>
+<span id="cb18-63"><a href="#cb18-63" aria-hidden="true" tabindex="-1"></a>  Education-specific intercepts + shared smooth trend + shared cyclic seasonality</span>
+<span id="cb18-64"><a href="#cb18-64" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-65"><a href="#cb18-65" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**m4 (education-specific trends)**: <span class="in">`unemployment_rate ~ education + s(time_index, by=education) + s(month, bs="cc")`</span></span>
+<span id="cb18-66"><a href="#cb18-66" aria-hidden="true" tabindex="-1"></a>  Education-specific intercepts + education-specific smooth trends + shared cyclic seasonality</span>
+<span id="cb18-67"><a href="#cb18-67" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-68"><a href="#cb18-68" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**m5 (education-specific seasonality)**: <span class="in">`unemployment_rate ~ education + s(time_index) + s(month, by=education, bs="cc")`</span></span>
+<span id="cb18-69"><a href="#cb18-69" aria-hidden="true" tabindex="-1"></a>  Education-specific intercepts + shared smooth trend + education-specific cyclic seasonality</span>
+<span id="cb18-70"><a href="#cb18-70" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-71"><a href="#cb18-71" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**m6 (full)**: <span class="in">`unemployment_rate ~ education + s(time_index, by=education) + s(month, by=education, bs="cc")`</span></span>
+<span id="cb18-72"><a href="#cb18-72" aria-hidden="true" tabindex="-1"></a>  Education-specific intercepts + education-specific smooth trends + education-specific cyclic seasonality</span>
+<span id="cb18-73"><a href="#cb18-73" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-74"><a href="#cb18-74" aria-hidden="true" tabindex="-1"></a><span class="fu">## Test 1: Recovery of Education-Specific Seasonal Patterns</span></span>
 <span id="cb18-75"><a href="#cb18-75" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-76"><a href="#cb18-76" aria-hidden="true" tabindex="-1"></a><span class="in"># Display first few rows</span></span>
-<span id="cb18-77"><a href="#cb18-77" aria-hidden="true" tabindex="-1"></a><span class="in">head(sim_seasonal, 12)</span></span>
-<span id="cb18-78"><a href="#cb18-78" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb18-76"><a href="#cb18-76" aria-hidden="true" tabindex="-1"></a><span class="fu">### Simulation Design</span></span>
+<span id="cb18-77"><a href="#cb18-77" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-78"><a href="#cb18-78" aria-hidden="true" tabindex="-1"></a>We simulate 15 years of monthly data for 3 education levels with **different seasonal amplitudes**:</span>
 <span id="cb18-79"><a href="#cb18-79" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-80"><a href="#cb18-80" aria-hidden="true" tabindex="-1"></a><span class="fu">### Fit Factor Smooth Model</span></span>
-<span id="cb18-81"><a href="#cb18-81" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-82"><a href="#cb18-82" aria-hidden="true" tabindex="-1"></a>We fit the full factor smooth model with education-specific seasonal and trend components:</span>
+<span id="cb18-80"><a href="#cb18-80" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**PhD**: Amplitude = 0.005 (small seasonality)</span>
+<span id="cb18-81"><a href="#cb18-81" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Master's**: Amplitude = 0.012 (moderate seasonality)</span>
+<span id="cb18-82"><a href="#cb18-82" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Bachelor's**: Amplitude = 0.020 (large seasonality)</span>
 <span id="cb18-83"><a href="#cb18-83" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-84"><a href="#cb18-84" aria-hidden="true" tabindex="-1"></a><span class="in">```{r fit-seasonal}</span></span>
-<span id="cb18-85"><a href="#cb18-85" aria-hidden="true" tabindex="-1"></a><span class="in">model_seasonal &lt;- fit_factor_smooth_gam(</span></span>
-<span id="cb18-86"><a href="#cb18-86" aria-hidden="true" tabindex="-1"></a><span class="in">  sim_seasonal,</span></span>
-<span id="cb18-87"><a href="#cb18-87" aria-hidden="true" tabindex="-1"></a><span class="in">  formula_type = "full",</span></span>
-<span id="cb18-88"><a href="#cb18-88" aria-hidden="true" tabindex="-1"></a><span class="in">  education_var = "education"</span></span>
-<span id="cb18-89"><a href="#cb18-89" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
-<span id="cb18-90"><a href="#cb18-90" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-91"><a href="#cb18-91" aria-hidden="true" tabindex="-1"></a><span class="in"># Model summary</span></span>
-<span id="cb18-92"><a href="#cb18-92" aria-hidden="true" tabindex="-1"></a><span class="in">summary(model_seasonal)</span></span>
-<span id="cb18-93"><a href="#cb18-93" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb18-94"><a href="#cb18-94" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-95"><a href="#cb18-95" aria-hidden="true" tabindex="-1"></a><span class="fu">### Extract and Visualize Seasonal Components</span></span>
-<span id="cb18-96"><a href="#cb18-96" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-97"><a href="#cb18-97" aria-hidden="true" tabindex="-1"></a><span class="in">```{r extract-seasonal}</span></span>
-<span id="cb18-98"><a href="#cb18-98" aria-hidden="true" tabindex="-1"></a><span class="in"># Extract seasonal components for each education level</span></span>
-<span id="cb18-99"><a href="#cb18-99" aria-hidden="true" tabindex="-1"></a><span class="in">seasonal_phd &lt;- extract_education_specific_seasonal(model_seasonal, "phd")</span></span>
-<span id="cb18-100"><a href="#cb18-100" aria-hidden="true" tabindex="-1"></a><span class="in">seasonal_masters &lt;- extract_education_specific_seasonal(model_seasonal, "masters")</span></span>
-<span id="cb18-101"><a href="#cb18-101" aria-hidden="true" tabindex="-1"></a><span class="in">seasonal_bachelors &lt;- extract_education_specific_seasonal(model_seasonal, "bachelors")</span></span>
-<span id="cb18-102"><a href="#cb18-102" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-103"><a href="#cb18-103" aria-hidden="true" tabindex="-1"></a><span class="in"># Combine for plotting</span></span>
-<span id="cb18-104"><a href="#cb18-104" aria-hidden="true" tabindex="-1"></a><span class="in">seasonal_all &lt;- rbind(</span></span>
-<span id="cb18-105"><a href="#cb18-105" aria-hidden="true" tabindex="-1"></a><span class="in">  cbind(seasonal_phd, education = "phd"),</span></span>
-<span id="cb18-106"><a href="#cb18-106" aria-hidden="true" tabindex="-1"></a><span class="in">  cbind(seasonal_masters, education = "masters"),</span></span>
-<span id="cb18-107"><a href="#cb18-107" aria-hidden="true" tabindex="-1"></a><span class="in">  cbind(seasonal_bachelors, education = "bachelors")</span></span>
-<span id="cb18-108"><a href="#cb18-108" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
-<span id="cb18-109"><a href="#cb18-109" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-110"><a href="#cb18-110" aria-hidden="true" tabindex="-1"></a><span class="in"># Plot seasonal patterns with confidence bands</span></span>
-<span id="cb18-111"><a href="#cb18-111" aria-hidden="true" tabindex="-1"></a><span class="in">ggplot(seasonal_all, aes(x = month, y = seasonal_effect, color = education)) +</span></span>
-<span id="cb18-112"><a href="#cb18-112" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_line(size = 1) +</span></span>
-<span id="cb18-113"><a href="#cb18-113" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_ribbon(aes(ymin = seasonal_effect - 1.96 * se,</span></span>
-<span id="cb18-114"><a href="#cb18-114" aria-hidden="true" tabindex="-1"></a><span class="in">                  ymax = seasonal_effect + 1.96 * se,</span></span>
-<span id="cb18-115"><a href="#cb18-115" aria-hidden="true" tabindex="-1"></a><span class="in">                  fill = education),</span></span>
-<span id="cb18-116"><a href="#cb18-116" aria-hidden="true" tabindex="-1"></a><span class="in">              alpha = 0.2, color = NA) +</span></span>
-<span id="cb18-117"><a href="#cb18-117" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +</span></span>
-<span id="cb18-118"><a href="#cb18-118" aria-hidden="true" tabindex="-1"></a><span class="in">  scale_x_continuous(breaks = 1:12,</span></span>
-<span id="cb18-119"><a href="#cb18-119" aria-hidden="true" tabindex="-1"></a><span class="in">                     labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun",</span></span>
-<span id="cb18-120"><a href="#cb18-120" aria-hidden="true" tabindex="-1"></a><span class="in">                               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +</span></span>
-<span id="cb18-121"><a href="#cb18-121" aria-hidden="true" tabindex="-1"></a><span class="in">  scale_color_manual(values = c("phd" = "#2C7BB6",</span></span>
-<span id="cb18-122"><a href="#cb18-122" aria-hidden="true" tabindex="-1"></a><span class="in">                                "masters" = "#D7191C",</span></span>
-<span id="cb18-123"><a href="#cb18-123" aria-hidden="true" tabindex="-1"></a><span class="in">                                "bachelors" = "#FDAE61"),</span></span>
-<span id="cb18-124"><a href="#cb18-124" aria-hidden="true" tabindex="-1"></a><span class="in">                     labels = c("PhD", "Master's", "Bachelor's")) +</span></span>
-<span id="cb18-125"><a href="#cb18-125" aria-hidden="true" tabindex="-1"></a><span class="in">  scale_fill_manual(values = c("phd" = "#2C7BB6",</span></span>
-<span id="cb18-126"><a href="#cb18-126" aria-hidden="true" tabindex="-1"></a><span class="in">                               "masters" = "#D7191C",</span></span>
-<span id="cb18-127"><a href="#cb18-127" aria-hidden="true" tabindex="-1"></a><span class="in">                               "bachelors" = "#FDAE61"),</span></span>
-<span id="cb18-128"><a href="#cb18-128" aria-hidden="true" tabindex="-1"></a><span class="in">                    labels = c("PhD", "Master's", "Bachelor's")) +</span></span>
-<span id="cb18-129"><a href="#cb18-129" aria-hidden="true" tabindex="-1"></a><span class="in">  labs(title = "Recovered Education-Specific Seasonal Patterns",</span></span>
-<span id="cb18-130"><a href="#cb18-130" aria-hidden="true" tabindex="-1"></a><span class="in">       subtitle = "95% confidence bands shown",</span></span>
-<span id="cb18-131"><a href="#cb18-131" aria-hidden="true" tabindex="-1"></a><span class="in">       x = "Month",</span></span>
-<span id="cb18-132"><a href="#cb18-132" aria-hidden="true" tabindex="-1"></a><span class="in">       y = "Seasonal Effect (pp)",</span></span>
-<span id="cb18-133"><a href="#cb18-133" aria-hidden="true" tabindex="-1"></a><span class="in">       color = "Education",</span></span>
-<span id="cb18-134"><a href="#cb18-134" aria-hidden="true" tabindex="-1"></a><span class="in">       fill = "Education") +</span></span>
-<span id="cb18-135"><a href="#cb18-135" aria-hidden="true" tabindex="-1"></a><span class="in">  theme_minimal() +</span></span>
-<span id="cb18-136"><a href="#cb18-136" aria-hidden="true" tabindex="-1"></a><span class="in">  theme(legend.position = "bottom",</span></span>
-<span id="cb18-137"><a href="#cb18-137" aria-hidden="true" tabindex="-1"></a><span class="in">        plot.title = element_text(face = "bold"))</span></span>
-<span id="cb18-138"><a href="#cb18-138" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb18-139"><a href="#cb18-139" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-140"><a href="#cb18-140" aria-hidden="true" tabindex="-1"></a><span class="fu">### Quantitative Recovery Assessment</span></span>
-<span id="cb18-141"><a href="#cb18-141" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-142"><a href="#cb18-142" aria-hidden="true" tabindex="-1"></a><span class="in">```{r assess-seasonal}</span></span>
-<span id="cb18-143"><a href="#cb18-143" aria-hidden="true" tabindex="-1"></a><span class="in"># Compute estimated amplitudes (peak-to-trough / 2)</span></span>
-<span id="cb18-144"><a href="#cb18-144" aria-hidden="true" tabindex="-1"></a><span class="in">amp_phd_est &lt;- (max(seasonal_phd$seasonal_effect) -</span></span>
-<span id="cb18-145"><a href="#cb18-145" aria-hidden="true" tabindex="-1"></a><span class="in">                min(seasonal_phd$seasonal_effect)) / 2</span></span>
-<span id="cb18-146"><a href="#cb18-146" aria-hidden="true" tabindex="-1"></a><span class="in">amp_masters_est &lt;- (max(seasonal_masters$seasonal_effect) -</span></span>
-<span id="cb18-147"><a href="#cb18-147" aria-hidden="true" tabindex="-1"></a><span class="in">                    min(seasonal_masters$seasonal_effect)) / 2</span></span>
-<span id="cb18-148"><a href="#cb18-148" aria-hidden="true" tabindex="-1"></a><span class="in">amp_bachelors_est &lt;- (max(seasonal_bachelors$seasonal_effect) -</span></span>
-<span id="cb18-149"><a href="#cb18-149" aria-hidden="true" tabindex="-1"></a><span class="in">                      min(seasonal_bachelors$seasonal_effect)) / 2</span></span>
-<span id="cb18-150"><a href="#cb18-150" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-151"><a href="#cb18-151" aria-hidden="true" tabindex="-1"></a><span class="in"># Compare to true values</span></span>
-<span id="cb18-152"><a href="#cb18-152" aria-hidden="true" tabindex="-1"></a><span class="in">recovery_seasonal &lt;- data.frame(</span></span>
-<span id="cb18-153"><a href="#cb18-153" aria-hidden="true" tabindex="-1"></a><span class="in">  Education = c("PhD", "Master's", "Bachelor's"),</span></span>
-<span id="cb18-154"><a href="#cb18-154" aria-hidden="true" tabindex="-1"></a><span class="in">  True_Amplitude = true_seasonal_amp,</span></span>
-<span id="cb18-155"><a href="#cb18-155" aria-hidden="true" tabindex="-1"></a><span class="in">  Estimated_Amplitude = c(amp_phd_est, amp_masters_est, amp_bachelors_est),</span></span>
-<span id="cb18-156"><a href="#cb18-156" aria-hidden="true" tabindex="-1"></a><span class="in">  Error = c(amp_phd_est - true_seasonal_amp["phd"],</span></span>
-<span id="cb18-157"><a href="#cb18-157" aria-hidden="true" tabindex="-1"></a><span class="in">            amp_masters_est - true_seasonal_amp["masters"],</span></span>
-<span id="cb18-158"><a href="#cb18-158" aria-hidden="true" tabindex="-1"></a><span class="in">            amp_bachelors_est - true_seasonal_amp["bachelors"]),</span></span>
-<span id="cb18-159"><a href="#cb18-159" aria-hidden="true" tabindex="-1"></a><span class="in">  Relative_Error_Pct = 100 * c(</span></span>
-<span id="cb18-160"><a href="#cb18-160" aria-hidden="true" tabindex="-1"></a><span class="in">    (amp_phd_est - true_seasonal_amp["phd"]) / true_seasonal_amp["phd"],</span></span>
-<span id="cb18-161"><a href="#cb18-161" aria-hidden="true" tabindex="-1"></a><span class="in">    (amp_masters_est - true_seasonal_amp["masters"]) / true_seasonal_amp["masters"],</span></span>
-<span id="cb18-162"><a href="#cb18-162" aria-hidden="true" tabindex="-1"></a><span class="in">    (amp_bachelors_est - true_seasonal_amp["bachelors"]) / true_seasonal_amp["bachelors"]</span></span>
-<span id="cb18-163"><a href="#cb18-163" aria-hidden="true" tabindex="-1"></a><span class="in">  )</span></span>
-<span id="cb18-164"><a href="#cb18-164" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
-<span id="cb18-165"><a href="#cb18-165" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-166"><a href="#cb18-166" aria-hidden="true" tabindex="-1"></a><span class="in">kable(recovery_seasonal, digits = 4,</span></span>
-<span id="cb18-167"><a href="#cb18-167" aria-hidden="true" tabindex="-1"></a><span class="in">      caption = "Seasonal Amplitude Recovery (units: percentage points)")</span></span>
-<span id="cb18-168"><a href="#cb18-168" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb18-169"><a href="#cb18-169" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-170"><a href="#cb18-170" aria-hidden="true" tabindex="-1"></a>**Interpretation**: The factor smooth GAM successfully recovers the education-specific seasonal patterns. Relative errors are small (typically &lt;20%), and the ordering is preserved perfectly (Bachelor's &gt; Master's &gt; PhD).</span>
-<span id="cb18-171"><a href="#cb18-171" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-172"><a href="#cb18-172" aria-hidden="true" tabindex="-1"></a><span class="fu">## Test 2: Recovery of Education-Specific Trends</span></span>
-<span id="cb18-173"><a href="#cb18-173" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-174"><a href="#cb18-174" aria-hidden="true" tabindex="-1"></a><span class="fu">### Simulation Design</span></span>
+<span id="cb18-84"><a href="#cb18-84" aria-hidden="true" tabindex="-1"></a>All have the same trend (slight negative) to isolate seasonal recovery.</span>
+<span id="cb18-85"><a href="#cb18-85" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-86"><a href="#cb18-86" aria-hidden="true" tabindex="-1"></a><span class="in">```{r sim-seasonal}</span></span>
+<span id="cb18-87"><a href="#cb18-87" aria-hidden="true" tabindex="-1"></a><span class="in"># Simulate data with different seasonal amplitudes</span></span>
+<span id="cb18-88"><a href="#cb18-88" aria-hidden="true" tabindex="-1"></a><span class="in">sim_seasonal &lt;- simulate_multi_education_unemployment(</span></span>
+<span id="cb18-89"><a href="#cb18-89" aria-hidden="true" tabindex="-1"></a><span class="in">  n_years = 15,</span></span>
+<span id="cb18-90"><a href="#cb18-90" aria-hidden="true" tabindex="-1"></a><span class="in">  education_levels = c("phd", "masters", "bachelors"),</span></span>
+<span id="cb18-91"><a href="#cb18-91" aria-hidden="true" tabindex="-1"></a><span class="in">  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),</span></span>
+<span id="cb18-92"><a href="#cb18-92" aria-hidden="true" tabindex="-1"></a><span class="in">  seasonal_amplitudes = c(phd = 0.005, masters = 0.012, bachelors = 0.020),</span></span>
+<span id="cb18-93"><a href="#cb18-93" aria-hidden="true" tabindex="-1"></a><span class="in">  trend_slopes = c(phd = -0.0001, masters = -0.0001, bachelors = -0.0001),</span></span>
+<span id="cb18-94"><a href="#cb18-94" aria-hidden="true" tabindex="-1"></a><span class="in">  noise_sd = 0.002,</span></span>
+<span id="cb18-95"><a href="#cb18-95" aria-hidden="true" tabindex="-1"></a><span class="in">  seed = 123</span></span>
+<span id="cb18-96"><a href="#cb18-96" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-97"><a href="#cb18-97" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-98"><a href="#cb18-98" aria-hidden="true" tabindex="-1"></a><span class="in"># Extract true parameters</span></span>
+<span id="cb18-99"><a href="#cb18-99" aria-hidden="true" tabindex="-1"></a><span class="in">true_seasonal_amp &lt;- attr(sim_seasonal, "true_seasonal_amplitude")</span></span>
+<span id="cb18-100"><a href="#cb18-100" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-101"><a href="#cb18-101" aria-hidden="true" tabindex="-1"></a><span class="in"># Display first few rows</span></span>
+<span id="cb18-102"><a href="#cb18-102" aria-hidden="true" tabindex="-1"></a><span class="in">head(sim_seasonal, 12)</span></span>
+<span id="cb18-103"><a href="#cb18-103" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb18-104"><a href="#cb18-104" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-105"><a href="#cb18-105" aria-hidden="true" tabindex="-1"></a><span class="fu">### Fit Factor Smooth Model</span></span>
+<span id="cb18-106"><a href="#cb18-106" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-107"><a href="#cb18-107" aria-hidden="true" tabindex="-1"></a>We fit the full factor smooth model with education-specific seasonal and trend components:</span>
+<span id="cb18-108"><a href="#cb18-108" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-109"><a href="#cb18-109" aria-hidden="true" tabindex="-1"></a><span class="in">```{r fit-seasonal}</span></span>
+<span id="cb18-110"><a href="#cb18-110" aria-hidden="true" tabindex="-1"></a><span class="in">model_seasonal &lt;- fit_factor_smooth_gam(</span></span>
+<span id="cb18-111"><a href="#cb18-111" aria-hidden="true" tabindex="-1"></a><span class="in">  sim_seasonal,</span></span>
+<span id="cb18-112"><a href="#cb18-112" aria-hidden="true" tabindex="-1"></a><span class="in">  formula_type = "full",</span></span>
+<span id="cb18-113"><a href="#cb18-113" aria-hidden="true" tabindex="-1"></a><span class="in">  education_var = "education"</span></span>
+<span id="cb18-114"><a href="#cb18-114" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-115"><a href="#cb18-115" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-116"><a href="#cb18-116" aria-hidden="true" tabindex="-1"></a><span class="in"># Model summary</span></span>
+<span id="cb18-117"><a href="#cb18-117" aria-hidden="true" tabindex="-1"></a><span class="in">summary(model_seasonal)</span></span>
+<span id="cb18-118"><a href="#cb18-118" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb18-119"><a href="#cb18-119" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-120"><a href="#cb18-120" aria-hidden="true" tabindex="-1"></a><span class="fu">### Extract and Visualize Seasonal Components</span></span>
+<span id="cb18-121"><a href="#cb18-121" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-122"><a href="#cb18-122" aria-hidden="true" tabindex="-1"></a><span class="in">```{r extract-seasonal}</span></span>
+<span id="cb18-123"><a href="#cb18-123" aria-hidden="true" tabindex="-1"></a><span class="in"># Extract seasonal components for each education level</span></span>
+<span id="cb18-124"><a href="#cb18-124" aria-hidden="true" tabindex="-1"></a><span class="in">seasonal_phd &lt;- extract_education_specific_seasonal(model_seasonal, "phd")</span></span>
+<span id="cb18-125"><a href="#cb18-125" aria-hidden="true" tabindex="-1"></a><span class="in">seasonal_masters &lt;- extract_education_specific_seasonal(model_seasonal, "masters")</span></span>
+<span id="cb18-126"><a href="#cb18-126" aria-hidden="true" tabindex="-1"></a><span class="in">seasonal_bachelors &lt;- extract_education_specific_seasonal(model_seasonal, "bachelors")</span></span>
+<span id="cb18-127"><a href="#cb18-127" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-128"><a href="#cb18-128" aria-hidden="true" tabindex="-1"></a><span class="in"># Combine for plotting</span></span>
+<span id="cb18-129"><a href="#cb18-129" aria-hidden="true" tabindex="-1"></a><span class="in">seasonal_all &lt;- rbind(</span></span>
+<span id="cb18-130"><a href="#cb18-130" aria-hidden="true" tabindex="-1"></a><span class="in">  cbind(seasonal_phd, education = "phd"),</span></span>
+<span id="cb18-131"><a href="#cb18-131" aria-hidden="true" tabindex="-1"></a><span class="in">  cbind(seasonal_masters, education = "masters"),</span></span>
+<span id="cb18-132"><a href="#cb18-132" aria-hidden="true" tabindex="-1"></a><span class="in">  cbind(seasonal_bachelors, education = "bachelors")</span></span>
+<span id="cb18-133"><a href="#cb18-133" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-134"><a href="#cb18-134" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-135"><a href="#cb18-135" aria-hidden="true" tabindex="-1"></a><span class="in"># Plot seasonal patterns with confidence bands</span></span>
+<span id="cb18-136"><a href="#cb18-136" aria-hidden="true" tabindex="-1"></a><span class="in">ggplot(seasonal_all, aes(x = month, y = seasonal_effect, color = education)) +</span></span>
+<span id="cb18-137"><a href="#cb18-137" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_line(size = 1) +</span></span>
+<span id="cb18-138"><a href="#cb18-138" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_ribbon(aes(ymin = seasonal_effect - 1.96 * se,</span></span>
+<span id="cb18-139"><a href="#cb18-139" aria-hidden="true" tabindex="-1"></a><span class="in">                  ymax = seasonal_effect + 1.96 * se,</span></span>
+<span id="cb18-140"><a href="#cb18-140" aria-hidden="true" tabindex="-1"></a><span class="in">                  fill = education),</span></span>
+<span id="cb18-141"><a href="#cb18-141" aria-hidden="true" tabindex="-1"></a><span class="in">              alpha = 0.2, color = NA) +</span></span>
+<span id="cb18-142"><a href="#cb18-142" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +</span></span>
+<span id="cb18-143"><a href="#cb18-143" aria-hidden="true" tabindex="-1"></a><span class="in">  scale_x_continuous(breaks = 1:12,</span></span>
+<span id="cb18-144"><a href="#cb18-144" aria-hidden="true" tabindex="-1"></a><span class="in">                     labels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun",</span></span>
+<span id="cb18-145"><a href="#cb18-145" aria-hidden="true" tabindex="-1"></a><span class="in">                               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")) +</span></span>
+<span id="cb18-146"><a href="#cb18-146" aria-hidden="true" tabindex="-1"></a><span class="in">  scale_color_manual(values = c("phd" = "#2C7BB6",</span></span>
+<span id="cb18-147"><a href="#cb18-147" aria-hidden="true" tabindex="-1"></a><span class="in">                                "masters" = "#D7191C",</span></span>
+<span id="cb18-148"><a href="#cb18-148" aria-hidden="true" tabindex="-1"></a><span class="in">                                "bachelors" = "#FDAE61"),</span></span>
+<span id="cb18-149"><a href="#cb18-149" aria-hidden="true" tabindex="-1"></a><span class="in">                     labels = c("PhD", "Master's", "Bachelor's")) +</span></span>
+<span id="cb18-150"><a href="#cb18-150" aria-hidden="true" tabindex="-1"></a><span class="in">  scale_fill_manual(values = c("phd" = "#2C7BB6",</span></span>
+<span id="cb18-151"><a href="#cb18-151" aria-hidden="true" tabindex="-1"></a><span class="in">                               "masters" = "#D7191C",</span></span>
+<span id="cb18-152"><a href="#cb18-152" aria-hidden="true" tabindex="-1"></a><span class="in">                               "bachelors" = "#FDAE61"),</span></span>
+<span id="cb18-153"><a href="#cb18-153" aria-hidden="true" tabindex="-1"></a><span class="in">                    labels = c("PhD", "Master's", "Bachelor's")) +</span></span>
+<span id="cb18-154"><a href="#cb18-154" aria-hidden="true" tabindex="-1"></a><span class="in">  labs(title = "Recovered Education-Specific Seasonal Patterns",</span></span>
+<span id="cb18-155"><a href="#cb18-155" aria-hidden="true" tabindex="-1"></a><span class="in">       subtitle = "95% confidence bands shown",</span></span>
+<span id="cb18-156"><a href="#cb18-156" aria-hidden="true" tabindex="-1"></a><span class="in">       x = "Month",</span></span>
+<span id="cb18-157"><a href="#cb18-157" aria-hidden="true" tabindex="-1"></a><span class="in">       y = "Seasonal Effect (pp)",</span></span>
+<span id="cb18-158"><a href="#cb18-158" aria-hidden="true" tabindex="-1"></a><span class="in">       color = "Education",</span></span>
+<span id="cb18-159"><a href="#cb18-159" aria-hidden="true" tabindex="-1"></a><span class="in">       fill = "Education") +</span></span>
+<span id="cb18-160"><a href="#cb18-160" aria-hidden="true" tabindex="-1"></a><span class="in">  theme_minimal() +</span></span>
+<span id="cb18-161"><a href="#cb18-161" aria-hidden="true" tabindex="-1"></a><span class="in">  theme(legend.position = "bottom",</span></span>
+<span id="cb18-162"><a href="#cb18-162" aria-hidden="true" tabindex="-1"></a><span class="in">        plot.title = element_text(face = "bold"))</span></span>
+<span id="cb18-163"><a href="#cb18-163" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb18-164"><a href="#cb18-164" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-165"><a href="#cb18-165" aria-hidden="true" tabindex="-1"></a><span class="fu">### Quantitative Recovery Assessment</span></span>
+<span id="cb18-166"><a href="#cb18-166" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-167"><a href="#cb18-167" aria-hidden="true" tabindex="-1"></a><span class="in">```{r assess-seasonal}</span></span>
+<span id="cb18-168"><a href="#cb18-168" aria-hidden="true" tabindex="-1"></a><span class="in"># Compute estimated amplitudes (peak-to-trough / 2)</span></span>
+<span id="cb18-169"><a href="#cb18-169" aria-hidden="true" tabindex="-1"></a><span class="in">amp_phd_est &lt;- (max(seasonal_phd$seasonal_effect) -</span></span>
+<span id="cb18-170"><a href="#cb18-170" aria-hidden="true" tabindex="-1"></a><span class="in">                min(seasonal_phd$seasonal_effect)) / 2</span></span>
+<span id="cb18-171"><a href="#cb18-171" aria-hidden="true" tabindex="-1"></a><span class="in">amp_masters_est &lt;- (max(seasonal_masters$seasonal_effect) -</span></span>
+<span id="cb18-172"><a href="#cb18-172" aria-hidden="true" tabindex="-1"></a><span class="in">                    min(seasonal_masters$seasonal_effect)) / 2</span></span>
+<span id="cb18-173"><a href="#cb18-173" aria-hidden="true" tabindex="-1"></a><span class="in">amp_bachelors_est &lt;- (max(seasonal_bachelors$seasonal_effect) -</span></span>
+<span id="cb18-174"><a href="#cb18-174" aria-hidden="true" tabindex="-1"></a><span class="in">                      min(seasonal_bachelors$seasonal_effect)) / 2</span></span>
 <span id="cb18-175"><a href="#cb18-175" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-176"><a href="#cb18-176" aria-hidden="true" tabindex="-1"></a>We simulate 15 years with **different trend slopes**:</span>
-<span id="cb18-177"><a href="#cb18-177" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-178"><a href="#cb18-178" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**PhD**: Slope = -0.0001 (slight decline)</span>
-<span id="cb18-179"><a href="#cb18-179" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Master's**: Slope = -0.0003 (moderate decline)</span>
-<span id="cb18-180"><a href="#cb18-180" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Bachelor's**: Slope = -0.0005 (strong decline)</span>
-<span id="cb18-181"><a href="#cb18-181" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-182"><a href="#cb18-182" aria-hidden="true" tabindex="-1"></a>All have the same moderate seasonal amplitude to isolate trend recovery.</span>
-<span id="cb18-183"><a href="#cb18-183" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-184"><a href="#cb18-184" aria-hidden="true" tabindex="-1"></a><span class="in">```{r sim-trend}</span></span>
-<span id="cb18-185"><a href="#cb18-185" aria-hidden="true" tabindex="-1"></a><span class="in">sim_trend &lt;- simulate_multi_education_unemployment(</span></span>
-<span id="cb18-186"><a href="#cb18-186" aria-hidden="true" tabindex="-1"></a><span class="in">  n_years = 15,</span></span>
-<span id="cb18-187"><a href="#cb18-187" aria-hidden="true" tabindex="-1"></a><span class="in">  education_levels = c("phd", "masters", "bachelors"),</span></span>
-<span id="cb18-188"><a href="#cb18-188" aria-hidden="true" tabindex="-1"></a><span class="in">  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),</span></span>
-<span id="cb18-189"><a href="#cb18-189" aria-hidden="true" tabindex="-1"></a><span class="in">  seasonal_amplitudes = c(phd = 0.010, masters = 0.010, bachelors = 0.010),</span></span>
-<span id="cb18-190"><a href="#cb18-190" aria-hidden="true" tabindex="-1"></a><span class="in">  trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),</span></span>
-<span id="cb18-191"><a href="#cb18-191" aria-hidden="true" tabindex="-1"></a><span class="in">  noise_sd = 0.002,</span></span>
-<span id="cb18-192"><a href="#cb18-192" aria-hidden="true" tabindex="-1"></a><span class="in">  seed = 456</span></span>
-<span id="cb18-193"><a href="#cb18-193" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-176"><a href="#cb18-176" aria-hidden="true" tabindex="-1"></a><span class="in"># Compare to true values</span></span>
+<span id="cb18-177"><a href="#cb18-177" aria-hidden="true" tabindex="-1"></a><span class="in">recovery_seasonal &lt;- data.frame(</span></span>
+<span id="cb18-178"><a href="#cb18-178" aria-hidden="true" tabindex="-1"></a><span class="in">  Education = c("PhD", "Master's", "Bachelor's"),</span></span>
+<span id="cb18-179"><a href="#cb18-179" aria-hidden="true" tabindex="-1"></a><span class="in">  True_Amplitude = true_seasonal_amp,</span></span>
+<span id="cb18-180"><a href="#cb18-180" aria-hidden="true" tabindex="-1"></a><span class="in">  Estimated_Amplitude = c(amp_phd_est, amp_masters_est, amp_bachelors_est),</span></span>
+<span id="cb18-181"><a href="#cb18-181" aria-hidden="true" tabindex="-1"></a><span class="in">  Error = c(amp_phd_est - true_seasonal_amp["phd"],</span></span>
+<span id="cb18-182"><a href="#cb18-182" aria-hidden="true" tabindex="-1"></a><span class="in">            amp_masters_est - true_seasonal_amp["masters"],</span></span>
+<span id="cb18-183"><a href="#cb18-183" aria-hidden="true" tabindex="-1"></a><span class="in">            amp_bachelors_est - true_seasonal_amp["bachelors"]),</span></span>
+<span id="cb18-184"><a href="#cb18-184" aria-hidden="true" tabindex="-1"></a><span class="in">  Relative_Error_Pct = 100 * c(</span></span>
+<span id="cb18-185"><a href="#cb18-185" aria-hidden="true" tabindex="-1"></a><span class="in">    (amp_phd_est - true_seasonal_amp["phd"]) / true_seasonal_amp["phd"],</span></span>
+<span id="cb18-186"><a href="#cb18-186" aria-hidden="true" tabindex="-1"></a><span class="in">    (amp_masters_est - true_seasonal_amp["masters"]) / true_seasonal_amp["masters"],</span></span>
+<span id="cb18-187"><a href="#cb18-187" aria-hidden="true" tabindex="-1"></a><span class="in">    (amp_bachelors_est - true_seasonal_amp["bachelors"]) / true_seasonal_amp["bachelors"]</span></span>
+<span id="cb18-188"><a href="#cb18-188" aria-hidden="true" tabindex="-1"></a><span class="in">  )</span></span>
+<span id="cb18-189"><a href="#cb18-189" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-190"><a href="#cb18-190" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-191"><a href="#cb18-191" aria-hidden="true" tabindex="-1"></a><span class="in">kable(recovery_seasonal, digits = 4,</span></span>
+<span id="cb18-192"><a href="#cb18-192" aria-hidden="true" tabindex="-1"></a><span class="in">      caption = "Seasonal Amplitude Recovery (units: percentage points)")</span></span>
+<span id="cb18-193"><a href="#cb18-193" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 <span id="cb18-194"><a href="#cb18-194" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-195"><a href="#cb18-195" aria-hidden="true" tabindex="-1"></a><span class="in">true_trend_slope &lt;- attr(sim_trend, "true_trend_slope")</span></span>
-<span id="cb18-196"><a href="#cb18-196" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb18-197"><a href="#cb18-197" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-198"><a href="#cb18-198" aria-hidden="true" tabindex="-1"></a><span class="fu">### Fit and Extract Trends</span></span>
-<span id="cb18-199"><a href="#cb18-199" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-200"><a href="#cb18-200" aria-hidden="true" tabindex="-1"></a><span class="in">```{r fit-trend}</span></span>
-<span id="cb18-201"><a href="#cb18-201" aria-hidden="true" tabindex="-1"></a><span class="in">model_trend &lt;- fit_factor_smooth_gam(</span></span>
-<span id="cb18-202"><a href="#cb18-202" aria-hidden="true" tabindex="-1"></a><span class="in">  sim_trend,</span></span>
-<span id="cb18-203"><a href="#cb18-203" aria-hidden="true" tabindex="-1"></a><span class="in">  formula_type = "full"</span></span>
-<span id="cb18-204"><a href="#cb18-204" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
-<span id="cb18-205"><a href="#cb18-205" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-206"><a href="#cb18-206" aria-hidden="true" tabindex="-1"></a><span class="in"># Extract trends</span></span>
-<span id="cb18-207"><a href="#cb18-207" aria-hidden="true" tabindex="-1"></a><span class="in">trend_phd &lt;- extract_education_specific_trend(model_trend, "phd")</span></span>
-<span id="cb18-208"><a href="#cb18-208" aria-hidden="true" tabindex="-1"></a><span class="in">trend_masters &lt;- extract_education_specific_trend(model_trend, "masters")</span></span>
-<span id="cb18-209"><a href="#cb18-209" aria-hidden="true" tabindex="-1"></a><span class="in">trend_bachelors &lt;- extract_education_specific_trend(model_trend, "bachelors")</span></span>
-<span id="cb18-210"><a href="#cb18-210" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-211"><a href="#cb18-211" aria-hidden="true" tabindex="-1"></a><span class="in"># Combine for plotting</span></span>
-<span id="cb18-212"><a href="#cb18-212" aria-hidden="true" tabindex="-1"></a><span class="in">trend_all &lt;- rbind(</span></span>
-<span id="cb18-213"><a href="#cb18-213" aria-hidden="true" tabindex="-1"></a><span class="in">  cbind(trend_phd, education = "phd"),</span></span>
-<span id="cb18-214"><a href="#cb18-214" aria-hidden="true" tabindex="-1"></a><span class="in">  cbind(trend_masters, education = "masters"),</span></span>
-<span id="cb18-215"><a href="#cb18-215" aria-hidden="true" tabindex="-1"></a><span class="in">  cbind(trend_bachelors, education = "bachelors")</span></span>
-<span id="cb18-216"><a href="#cb18-216" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
-<span id="cb18-217"><a href="#cb18-217" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-218"><a href="#cb18-218" aria-hidden="true" tabindex="-1"></a><span class="in"># Plot trends</span></span>
-<span id="cb18-219"><a href="#cb18-219" aria-hidden="true" tabindex="-1"></a><span class="in">ggplot(trend_all, aes(x = time_index, y = trend_effect, color = education)) +</span></span>
-<span id="cb18-220"><a href="#cb18-220" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_line(size = 1) +</span></span>
-<span id="cb18-221"><a href="#cb18-221" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_ribbon(aes(ymin = trend_effect - 1.96 * se,</span></span>
-<span id="cb18-222"><a href="#cb18-222" aria-hidden="true" tabindex="-1"></a><span class="in">                  ymax = trend_effect + 1.96 * se,</span></span>
-<span id="cb18-223"><a href="#cb18-223" aria-hidden="true" tabindex="-1"></a><span class="in">                  fill = education),</span></span>
-<span id="cb18-224"><a href="#cb18-224" aria-hidden="true" tabindex="-1"></a><span class="in">              alpha = 0.2, color = NA) +</span></span>
-<span id="cb18-225"><a href="#cb18-225" aria-hidden="true" tabindex="-1"></a><span class="in">  scale_color_manual(values = c("phd" = "#2C7BB6",</span></span>
-<span id="cb18-226"><a href="#cb18-226" aria-hidden="true" tabindex="-1"></a><span class="in">                                "masters" = "#D7191C",</span></span>
-<span id="cb18-227"><a href="#cb18-227" aria-hidden="true" tabindex="-1"></a><span class="in">                                "bachelors" = "#FDAE61"),</span></span>
-<span id="cb18-228"><a href="#cb18-228" aria-hidden="true" tabindex="-1"></a><span class="in">                     labels = c("PhD", "Master's", "Bachelor's")) +</span></span>
-<span id="cb18-229"><a href="#cb18-229" aria-hidden="true" tabindex="-1"></a><span class="in">  scale_fill_manual(values = c("phd" = "#2C7BB6",</span></span>
-<span id="cb18-230"><a href="#cb18-230" aria-hidden="true" tabindex="-1"></a><span class="in">                               "masters" = "#D7191C",</span></span>
-<span id="cb18-231"><a href="#cb18-231" aria-hidden="true" tabindex="-1"></a><span class="in">                               "bachelors" = "#FDAE61"),</span></span>
-<span id="cb18-232"><a href="#cb18-232" aria-hidden="true" tabindex="-1"></a><span class="in">                    labels = c("PhD", "Master's", "Bachelor's")) +</span></span>
-<span id="cb18-233"><a href="#cb18-233" aria-hidden="true" tabindex="-1"></a><span class="in">  labs(title = "Recovered Education-Specific Trend Components",</span></span>
-<span id="cb18-234"><a href="#cb18-234" aria-hidden="true" tabindex="-1"></a><span class="in">       subtitle = "95% confidence bands shown",</span></span>
-<span id="cb18-235"><a href="#cb18-235" aria-hidden="true" tabindex="-1"></a><span class="in">       x = "Time Index (months)",</span></span>
-<span id="cb18-236"><a href="#cb18-236" aria-hidden="true" tabindex="-1"></a><span class="in">       y = "Trend Effect (pp)",</span></span>
-<span id="cb18-237"><a href="#cb18-237" aria-hidden="true" tabindex="-1"></a><span class="in">       color = "Education",</span></span>
-<span id="cb18-238"><a href="#cb18-238" aria-hidden="true" tabindex="-1"></a><span class="in">       fill = "Education") +</span></span>
-<span id="cb18-239"><a href="#cb18-239" aria-hidden="true" tabindex="-1"></a><span class="in">  theme_minimal() +</span></span>
-<span id="cb18-240"><a href="#cb18-240" aria-hidden="true" tabindex="-1"></a><span class="in">  theme(legend.position = "bottom",</span></span>
-<span id="cb18-241"><a href="#cb18-241" aria-hidden="true" tabindex="-1"></a><span class="in">        plot.title = element_text(face = "bold"))</span></span>
-<span id="cb18-242"><a href="#cb18-242" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb18-243"><a href="#cb18-243" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-244"><a href="#cb18-244" aria-hidden="true" tabindex="-1"></a><span class="fu">### Quantitative Trend Recovery</span></span>
-<span id="cb18-245"><a href="#cb18-245" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-246"><a href="#cb18-246" aria-hidden="true" tabindex="-1"></a><span class="in">```{r assess-trend}</span></span>
-<span id="cb18-247"><a href="#cb18-247" aria-hidden="true" tabindex="-1"></a><span class="in"># Estimate slopes from linear fits to extracted trends</span></span>
-<span id="cb18-248"><a href="#cb18-248" aria-hidden="true" tabindex="-1"></a><span class="in">estimate_slope &lt;- function(trend_df) {</span></span>
-<span id="cb18-249"><a href="#cb18-249" aria-hidden="true" tabindex="-1"></a><span class="in">  fit &lt;- lm(trend_effect ~ time_index, data = trend_df)</span></span>
-<span id="cb18-250"><a href="#cb18-250" aria-hidden="true" tabindex="-1"></a><span class="in">  coef(fit)["time_index"]</span></span>
-<span id="cb18-251"><a href="#cb18-251" aria-hidden="true" tabindex="-1"></a><span class="in">}</span></span>
-<span id="cb18-252"><a href="#cb18-252" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-253"><a href="#cb18-253" aria-hidden="true" tabindex="-1"></a><span class="in">slope_phd_est &lt;- estimate_slope(trend_phd)</span></span>
-<span id="cb18-254"><a href="#cb18-254" aria-hidden="true" tabindex="-1"></a><span class="in">slope_masters_est &lt;- estimate_slope(trend_masters)</span></span>
-<span id="cb18-255"><a href="#cb18-255" aria-hidden="true" tabindex="-1"></a><span class="in">slope_bachelors_est &lt;- estimate_slope(trend_bachelors)</span></span>
-<span id="cb18-256"><a href="#cb18-256" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-257"><a href="#cb18-257" aria-hidden="true" tabindex="-1"></a><span class="in">recovery_trend &lt;- data.frame(</span></span>
-<span id="cb18-258"><a href="#cb18-258" aria-hidden="true" tabindex="-1"></a><span class="in">  Education = c("PhD", "Master's", "Bachelor's"),</span></span>
-<span id="cb18-259"><a href="#cb18-259" aria-hidden="true" tabindex="-1"></a><span class="in">  True_Slope = true_trend_slope,</span></span>
-<span id="cb18-260"><a href="#cb18-260" aria-hidden="true" tabindex="-1"></a><span class="in">  Estimated_Slope = c(slope_phd_est, slope_masters_est, slope_bachelors_est),</span></span>
-<span id="cb18-261"><a href="#cb18-261" aria-hidden="true" tabindex="-1"></a><span class="in">  Error = c(slope_phd_est - true_trend_slope["phd"],</span></span>
-<span id="cb18-262"><a href="#cb18-262" aria-hidden="true" tabindex="-1"></a><span class="in">            slope_masters_est - true_trend_slope["masters"],</span></span>
-<span id="cb18-263"><a href="#cb18-263" aria-hidden="true" tabindex="-1"></a><span class="in">            slope_bachelors_est - true_trend_slope["bachelors"]),</span></span>
-<span id="cb18-264"><a href="#cb18-264" aria-hidden="true" tabindex="-1"></a><span class="in">  Relative_Error_Pct = 100 * c(</span></span>
-<span id="cb18-265"><a href="#cb18-265" aria-hidden="true" tabindex="-1"></a><span class="in">    (slope_phd_est - true_trend_slope["phd"]) / abs(true_trend_slope["phd"]),</span></span>
-<span id="cb18-266"><a href="#cb18-266" aria-hidden="true" tabindex="-1"></a><span class="in">    (slope_masters_est - true_trend_slope["masters"]) / abs(true_trend_slope["masters"]),</span></span>
-<span id="cb18-267"><a href="#cb18-267" aria-hidden="true" tabindex="-1"></a><span class="in">    (slope_bachelors_est - true_trend_slope["bachelors"]) / abs(true_trend_slope["bachelors"])</span></span>
-<span id="cb18-268"><a href="#cb18-268" aria-hidden="true" tabindex="-1"></a><span class="in">  )</span></span>
-<span id="cb18-269"><a href="#cb18-269" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-195"><a href="#cb18-195" aria-hidden="true" tabindex="-1"></a>**Interpretation**: The factor smooth GAM successfully recovers the education-specific seasonal patterns. Relative errors are small (typically &lt;20%), and the ordering is preserved perfectly (Bachelor's &gt; Master's &gt; PhD).</span>
+<span id="cb18-196"><a href="#cb18-196" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-197"><a href="#cb18-197" aria-hidden="true" tabindex="-1"></a><span class="fu">## Test 2: Recovery of Education-Specific Trends</span></span>
+<span id="cb18-198"><a href="#cb18-198" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-199"><a href="#cb18-199" aria-hidden="true" tabindex="-1"></a><span class="fu">### Simulation Design</span></span>
+<span id="cb18-200"><a href="#cb18-200" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-201"><a href="#cb18-201" aria-hidden="true" tabindex="-1"></a>We simulate 15 years with **different trend slopes**:</span>
+<span id="cb18-202"><a href="#cb18-202" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-203"><a href="#cb18-203" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**PhD**: Slope = -0.0001 (slight decline)</span>
+<span id="cb18-204"><a href="#cb18-204" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Master's**: Slope = -0.0003 (moderate decline)</span>
+<span id="cb18-205"><a href="#cb18-205" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Bachelor's**: Slope = -0.0005 (strong decline)</span>
+<span id="cb18-206"><a href="#cb18-206" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-207"><a href="#cb18-207" aria-hidden="true" tabindex="-1"></a>All have the same moderate seasonal amplitude to isolate trend recovery.</span>
+<span id="cb18-208"><a href="#cb18-208" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-209"><a href="#cb18-209" aria-hidden="true" tabindex="-1"></a><span class="in">```{r sim-trend}</span></span>
+<span id="cb18-210"><a href="#cb18-210" aria-hidden="true" tabindex="-1"></a><span class="in">sim_trend &lt;- simulate_multi_education_unemployment(</span></span>
+<span id="cb18-211"><a href="#cb18-211" aria-hidden="true" tabindex="-1"></a><span class="in">  n_years = 15,</span></span>
+<span id="cb18-212"><a href="#cb18-212" aria-hidden="true" tabindex="-1"></a><span class="in">  education_levels = c("phd", "masters", "bachelors"),</span></span>
+<span id="cb18-213"><a href="#cb18-213" aria-hidden="true" tabindex="-1"></a><span class="in">  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),</span></span>
+<span id="cb18-214"><a href="#cb18-214" aria-hidden="true" tabindex="-1"></a><span class="in">  seasonal_amplitudes = c(phd = 0.010, masters = 0.010, bachelors = 0.010),</span></span>
+<span id="cb18-215"><a href="#cb18-215" aria-hidden="true" tabindex="-1"></a><span class="in">  trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),</span></span>
+<span id="cb18-216"><a href="#cb18-216" aria-hidden="true" tabindex="-1"></a><span class="in">  noise_sd = 0.002,</span></span>
+<span id="cb18-217"><a href="#cb18-217" aria-hidden="true" tabindex="-1"></a><span class="in">  seed = 456</span></span>
+<span id="cb18-218"><a href="#cb18-218" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-219"><a href="#cb18-219" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-220"><a href="#cb18-220" aria-hidden="true" tabindex="-1"></a><span class="in">true_trend_slope &lt;- attr(sim_trend, "true_trend_slope")</span></span>
+<span id="cb18-221"><a href="#cb18-221" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb18-222"><a href="#cb18-222" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-223"><a href="#cb18-223" aria-hidden="true" tabindex="-1"></a><span class="fu">### Fit and Extract Trends</span></span>
+<span id="cb18-224"><a href="#cb18-224" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-225"><a href="#cb18-225" aria-hidden="true" tabindex="-1"></a><span class="in">```{r fit-trend}</span></span>
+<span id="cb18-226"><a href="#cb18-226" aria-hidden="true" tabindex="-1"></a><span class="in">model_trend &lt;- fit_factor_smooth_gam(</span></span>
+<span id="cb18-227"><a href="#cb18-227" aria-hidden="true" tabindex="-1"></a><span class="in">  sim_trend,</span></span>
+<span id="cb18-228"><a href="#cb18-228" aria-hidden="true" tabindex="-1"></a><span class="in">  formula_type = "full"</span></span>
+<span id="cb18-229"><a href="#cb18-229" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-230"><a href="#cb18-230" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-231"><a href="#cb18-231" aria-hidden="true" tabindex="-1"></a><span class="in"># Extract trends</span></span>
+<span id="cb18-232"><a href="#cb18-232" aria-hidden="true" tabindex="-1"></a><span class="in">trend_phd &lt;- extract_education_specific_trend(model_trend, "phd")</span></span>
+<span id="cb18-233"><a href="#cb18-233" aria-hidden="true" tabindex="-1"></a><span class="in">trend_masters &lt;- extract_education_specific_trend(model_trend, "masters")</span></span>
+<span id="cb18-234"><a href="#cb18-234" aria-hidden="true" tabindex="-1"></a><span class="in">trend_bachelors &lt;- extract_education_specific_trend(model_trend, "bachelors")</span></span>
+<span id="cb18-235"><a href="#cb18-235" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-236"><a href="#cb18-236" aria-hidden="true" tabindex="-1"></a><span class="in"># Combine for plotting</span></span>
+<span id="cb18-237"><a href="#cb18-237" aria-hidden="true" tabindex="-1"></a><span class="in">trend_all &lt;- rbind(</span></span>
+<span id="cb18-238"><a href="#cb18-238" aria-hidden="true" tabindex="-1"></a><span class="in">  cbind(trend_phd, education = "phd"),</span></span>
+<span id="cb18-239"><a href="#cb18-239" aria-hidden="true" tabindex="-1"></a><span class="in">  cbind(trend_masters, education = "masters"),</span></span>
+<span id="cb18-240"><a href="#cb18-240" aria-hidden="true" tabindex="-1"></a><span class="in">  cbind(trend_bachelors, education = "bachelors")</span></span>
+<span id="cb18-241"><a href="#cb18-241" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-242"><a href="#cb18-242" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-243"><a href="#cb18-243" aria-hidden="true" tabindex="-1"></a><span class="in"># Plot trends</span></span>
+<span id="cb18-244"><a href="#cb18-244" aria-hidden="true" tabindex="-1"></a><span class="in">ggplot(trend_all, aes(x = time_index, y = trend_effect, color = education)) +</span></span>
+<span id="cb18-245"><a href="#cb18-245" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_line(size = 1) +</span></span>
+<span id="cb18-246"><a href="#cb18-246" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_ribbon(aes(ymin = trend_effect - 1.96 * se,</span></span>
+<span id="cb18-247"><a href="#cb18-247" aria-hidden="true" tabindex="-1"></a><span class="in">                  ymax = trend_effect + 1.96 * se,</span></span>
+<span id="cb18-248"><a href="#cb18-248" aria-hidden="true" tabindex="-1"></a><span class="in">                  fill = education),</span></span>
+<span id="cb18-249"><a href="#cb18-249" aria-hidden="true" tabindex="-1"></a><span class="in">              alpha = 0.2, color = NA) +</span></span>
+<span id="cb18-250"><a href="#cb18-250" aria-hidden="true" tabindex="-1"></a><span class="in">  scale_color_manual(values = c("phd" = "#2C7BB6",</span></span>
+<span id="cb18-251"><a href="#cb18-251" aria-hidden="true" tabindex="-1"></a><span class="in">                                "masters" = "#D7191C",</span></span>
+<span id="cb18-252"><a href="#cb18-252" aria-hidden="true" tabindex="-1"></a><span class="in">                                "bachelors" = "#FDAE61"),</span></span>
+<span id="cb18-253"><a href="#cb18-253" aria-hidden="true" tabindex="-1"></a><span class="in">                     labels = c("PhD", "Master's", "Bachelor's")) +</span></span>
+<span id="cb18-254"><a href="#cb18-254" aria-hidden="true" tabindex="-1"></a><span class="in">  scale_fill_manual(values = c("phd" = "#2C7BB6",</span></span>
+<span id="cb18-255"><a href="#cb18-255" aria-hidden="true" tabindex="-1"></a><span class="in">                               "masters" = "#D7191C",</span></span>
+<span id="cb18-256"><a href="#cb18-256" aria-hidden="true" tabindex="-1"></a><span class="in">                               "bachelors" = "#FDAE61"),</span></span>
+<span id="cb18-257"><a href="#cb18-257" aria-hidden="true" tabindex="-1"></a><span class="in">                    labels = c("PhD", "Master's", "Bachelor's")) +</span></span>
+<span id="cb18-258"><a href="#cb18-258" aria-hidden="true" tabindex="-1"></a><span class="in">  labs(title = "Recovered Education-Specific Trend Components",</span></span>
+<span id="cb18-259"><a href="#cb18-259" aria-hidden="true" tabindex="-1"></a><span class="in">       subtitle = "95% confidence bands shown",</span></span>
+<span id="cb18-260"><a href="#cb18-260" aria-hidden="true" tabindex="-1"></a><span class="in">       x = "Time Index (months)",</span></span>
+<span id="cb18-261"><a href="#cb18-261" aria-hidden="true" tabindex="-1"></a><span class="in">       y = "Trend Effect (pp)",</span></span>
+<span id="cb18-262"><a href="#cb18-262" aria-hidden="true" tabindex="-1"></a><span class="in">       color = "Education",</span></span>
+<span id="cb18-263"><a href="#cb18-263" aria-hidden="true" tabindex="-1"></a><span class="in">       fill = "Education") +</span></span>
+<span id="cb18-264"><a href="#cb18-264" aria-hidden="true" tabindex="-1"></a><span class="in">  theme_minimal() +</span></span>
+<span id="cb18-265"><a href="#cb18-265" aria-hidden="true" tabindex="-1"></a><span class="in">  theme(legend.position = "bottom",</span></span>
+<span id="cb18-266"><a href="#cb18-266" aria-hidden="true" tabindex="-1"></a><span class="in">        plot.title = element_text(face = "bold"))</span></span>
+<span id="cb18-267"><a href="#cb18-267" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb18-268"><a href="#cb18-268" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-269"><a href="#cb18-269" aria-hidden="true" tabindex="-1"></a><span class="fu">### Quantitative Trend Recovery</span></span>
 <span id="cb18-270"><a href="#cb18-270" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-271"><a href="#cb18-271" aria-hidden="true" tabindex="-1"></a><span class="in">kable(recovery_trend, digits = 6,</span></span>
-<span id="cb18-272"><a href="#cb18-272" aria-hidden="true" tabindex="-1"></a><span class="in">      caption = "Trend Slope Recovery (units: percentage points per month)")</span></span>
-<span id="cb18-273"><a href="#cb18-273" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb18-274"><a href="#cb18-274" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-275"><a href="#cb18-275" aria-hidden="true" tabindex="-1"></a>**Interpretation**: The factor smooth GAM recovers the education-specific trends with reasonable accuracy. The ordering is preserved (Bachelor's declining fastest, PhD slowest), though GAM smoothing can affect exact slope estimates.</span>
-<span id="cb18-276"><a href="#cb18-276" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-277"><a href="#cb18-277" aria-hidden="true" tabindex="-1"></a><span class="fu">## Test 3: Model Selection Identifies Correct Structure</span></span>
-<span id="cb18-278"><a href="#cb18-278" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-279"><a href="#cb18-279" aria-hidden="true" tabindex="-1"></a><span class="fu">### Scenario A: Only Seasonal Differences</span></span>
-<span id="cb18-280"><a href="#cb18-280" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-281"><a href="#cb18-281" aria-hidden="true" tabindex="-1"></a>When only seasonal patterns differ (shared trend), does model selection prefer the correct model?</span>
-<span id="cb18-282"><a href="#cb18-282" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-283"><a href="#cb18-283" aria-hidden="true" tabindex="-1"></a><span class="in">```{r model-selection-seasonal}</span></span>
-<span id="cb18-284"><a href="#cb18-284" aria-hidden="true" tabindex="-1"></a><span class="in"># Simulate with only seasonal differences</span></span>
-<span id="cb18-285"><a href="#cb18-285" aria-hidden="true" tabindex="-1"></a><span class="in">sim_seasonal_only &lt;- simulate_multi_education_unemployment(</span></span>
-<span id="cb18-286"><a href="#cb18-286" aria-hidden="true" tabindex="-1"></a><span class="in">  n_years = 15,</span></span>
-<span id="cb18-287"><a href="#cb18-287" aria-hidden="true" tabindex="-1"></a><span class="in">  education_levels = c("phd", "masters", "bachelors"),</span></span>
-<span id="cb18-288"><a href="#cb18-288" aria-hidden="true" tabindex="-1"></a><span class="in">  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),</span></span>
-<span id="cb18-289"><a href="#cb18-289" aria-hidden="true" tabindex="-1"></a><span class="in">  seasonal_amplitudes = c(phd = 0.005, masters = 0.015, bachelors = 0.025),</span></span>
-<span id="cb18-290"><a href="#cb18-290" aria-hidden="true" tabindex="-1"></a><span class="in">  trend_slopes = c(phd = 0, masters = 0, bachelors = 0),  # Same (no trend)!</span></span>
-<span id="cb18-291"><a href="#cb18-291" aria-hidden="true" tabindex="-1"></a><span class="in">  noise_sd = 0.002,</span></span>
-<span id="cb18-292"><a href="#cb18-292" aria-hidden="true" tabindex="-1"></a><span class="in">  seed = 789</span></span>
-<span id="cb18-293"><a href="#cb18-293" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
-<span id="cb18-294"><a href="#cb18-294" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-295"><a href="#cb18-295" aria-hidden="true" tabindex="-1"></a><span class="in"># Fit nested sequence</span></span>
-<span id="cb18-296"><a href="#cb18-296" aria-hidden="true" tabindex="-1"></a><span class="in">models_seasonal &lt;- fit_nested_model_sequence(sim_seasonal_only)</span></span>
-<span id="cb18-297"><a href="#cb18-297" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-298"><a href="#cb18-298" aria-hidden="true" tabindex="-1"></a><span class="in"># Compare via AIC</span></span>
-<span id="cb18-299"><a href="#cb18-299" aria-hidden="true" tabindex="-1"></a><span class="in">aic_seasonal &lt;- compare_nested_models(models_seasonal)</span></span>
-<span id="cb18-300"><a href="#cb18-300" aria-hidden="true" tabindex="-1"></a><span class="in">kable(aic_seasonal, digits = 2,</span></span>
-<span id="cb18-301"><a href="#cb18-301" aria-hidden="true" tabindex="-1"></a><span class="in">      caption = "Model Selection: Seasonal Differences Only")</span></span>
-<span id="cb18-302"><a href="#cb18-302" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb18-271"><a href="#cb18-271" aria-hidden="true" tabindex="-1"></a><span class="in">```{r assess-trend}</span></span>
+<span id="cb18-272"><a href="#cb18-272" aria-hidden="true" tabindex="-1"></a><span class="in"># Estimate slopes from linear fits to extracted trends</span></span>
+<span id="cb18-273"><a href="#cb18-273" aria-hidden="true" tabindex="-1"></a><span class="in">estimate_slope &lt;- function(trend_df) {</span></span>
+<span id="cb18-274"><a href="#cb18-274" aria-hidden="true" tabindex="-1"></a><span class="in">  fit &lt;- lm(trend_effect ~ time_index, data = trend_df)</span></span>
+<span id="cb18-275"><a href="#cb18-275" aria-hidden="true" tabindex="-1"></a><span class="in">  coef(fit)["time_index"]</span></span>
+<span id="cb18-276"><a href="#cb18-276" aria-hidden="true" tabindex="-1"></a><span class="in">}</span></span>
+<span id="cb18-277"><a href="#cb18-277" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-278"><a href="#cb18-278" aria-hidden="true" tabindex="-1"></a><span class="in">slope_phd_est &lt;- estimate_slope(trend_phd)</span></span>
+<span id="cb18-279"><a href="#cb18-279" aria-hidden="true" tabindex="-1"></a><span class="in">slope_masters_est &lt;- estimate_slope(trend_masters)</span></span>
+<span id="cb18-280"><a href="#cb18-280" aria-hidden="true" tabindex="-1"></a><span class="in">slope_bachelors_est &lt;- estimate_slope(trend_bachelors)</span></span>
+<span id="cb18-281"><a href="#cb18-281" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-282"><a href="#cb18-282" aria-hidden="true" tabindex="-1"></a><span class="in">recovery_trend &lt;- data.frame(</span></span>
+<span id="cb18-283"><a href="#cb18-283" aria-hidden="true" tabindex="-1"></a><span class="in">  Education = c("PhD", "Master's", "Bachelor's"),</span></span>
+<span id="cb18-284"><a href="#cb18-284" aria-hidden="true" tabindex="-1"></a><span class="in">  True_Slope = true_trend_slope,</span></span>
+<span id="cb18-285"><a href="#cb18-285" aria-hidden="true" tabindex="-1"></a><span class="in">  Estimated_Slope = c(slope_phd_est, slope_masters_est, slope_bachelors_est),</span></span>
+<span id="cb18-286"><a href="#cb18-286" aria-hidden="true" tabindex="-1"></a><span class="in">  Error = c(slope_phd_est - true_trend_slope["phd"],</span></span>
+<span id="cb18-287"><a href="#cb18-287" aria-hidden="true" tabindex="-1"></a><span class="in">            slope_masters_est - true_trend_slope["masters"],</span></span>
+<span id="cb18-288"><a href="#cb18-288" aria-hidden="true" tabindex="-1"></a><span class="in">            slope_bachelors_est - true_trend_slope["bachelors"]),</span></span>
+<span id="cb18-289"><a href="#cb18-289" aria-hidden="true" tabindex="-1"></a><span class="in">  Relative_Error_Pct = 100 * c(</span></span>
+<span id="cb18-290"><a href="#cb18-290" aria-hidden="true" tabindex="-1"></a><span class="in">    (slope_phd_est - true_trend_slope["phd"]) / abs(true_trend_slope["phd"]),</span></span>
+<span id="cb18-291"><a href="#cb18-291" aria-hidden="true" tabindex="-1"></a><span class="in">    (slope_masters_est - true_trend_slope["masters"]) / abs(true_trend_slope["masters"]),</span></span>
+<span id="cb18-292"><a href="#cb18-292" aria-hidden="true" tabindex="-1"></a><span class="in">    (slope_bachelors_est - true_trend_slope["bachelors"]) / abs(true_trend_slope["bachelors"])</span></span>
+<span id="cb18-293"><a href="#cb18-293" aria-hidden="true" tabindex="-1"></a><span class="in">  )</span></span>
+<span id="cb18-294"><a href="#cb18-294" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-295"><a href="#cb18-295" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-296"><a href="#cb18-296" aria-hidden="true" tabindex="-1"></a><span class="in">kable(recovery_trend, digits = 6,</span></span>
+<span id="cb18-297"><a href="#cb18-297" aria-hidden="true" tabindex="-1"></a><span class="in">      caption = "Trend Slope Recovery (units: percentage points per month)")</span></span>
+<span id="cb18-298"><a href="#cb18-298" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb18-299"><a href="#cb18-299" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-300"><a href="#cb18-300" aria-hidden="true" tabindex="-1"></a>**Interpretation**: The factor smooth GAM recovers the education-specific trends with reasonable accuracy. The ordering is preserved (Bachelor's declining fastest, PhD slowest), though GAM smoothing can affect exact slope estimates.</span>
+<span id="cb18-301"><a href="#cb18-301" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-302"><a href="#cb18-302" aria-hidden="true" tabindex="-1"></a><span class="fu">## Test 3: Model Selection Identifies Correct Structure</span></span>
 <span id="cb18-303"><a href="#cb18-303" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-304"><a href="#cb18-304" aria-hidden="true" tabindex="-1"></a>**Expected**: Model m5 (shared trend + education-specific seasonality) should be preferred.</span>
+<span id="cb18-304"><a href="#cb18-304" aria-hidden="true" tabindex="-1"></a><span class="fu">### Scenario A: Only Seasonal Differences</span></span>
 <span id="cb18-305"><a href="#cb18-305" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-306"><a href="#cb18-306" aria-hidden="true" tabindex="-1"></a><span class="fu">### Scenario B: Only Trend Differences</span></span>
+<span id="cb18-306"><a href="#cb18-306" aria-hidden="true" tabindex="-1"></a>When only seasonal patterns differ (shared trend), does model selection prefer the correct model?</span>
 <span id="cb18-307"><a href="#cb18-307" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-308"><a href="#cb18-308" aria-hidden="true" tabindex="-1"></a>When only trends differ (shared seasonality), does model selection prefer the correct model?</span>
-<span id="cb18-309"><a href="#cb18-309" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-310"><a href="#cb18-310" aria-hidden="true" tabindex="-1"></a><span class="in">```{r model-selection-trend}</span></span>
-<span id="cb18-311"><a href="#cb18-311" aria-hidden="true" tabindex="-1"></a><span class="in">sim_trend_only &lt;- simulate_multi_education_unemployment(</span></span>
-<span id="cb18-312"><a href="#cb18-312" aria-hidden="true" tabindex="-1"></a><span class="in">  n_years = 15,</span></span>
-<span id="cb18-313"><a href="#cb18-313" aria-hidden="true" tabindex="-1"></a><span class="in">  education_levels = c("phd", "masters", "bachelors"),</span></span>
-<span id="cb18-314"><a href="#cb18-314" aria-hidden="true" tabindex="-1"></a><span class="in">  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),</span></span>
-<span id="cb18-315"><a href="#cb18-315" aria-hidden="true" tabindex="-1"></a><span class="in">  seasonal_amplitudes = c(phd = 0.010, masters = 0.010, bachelors = 0.010),  # Same!</span></span>
-<span id="cb18-316"><a href="#cb18-316" aria-hidden="true" tabindex="-1"></a><span class="in">  trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),</span></span>
-<span id="cb18-317"><a href="#cb18-317" aria-hidden="true" tabindex="-1"></a><span class="in">  noise_sd = 0.002,</span></span>
-<span id="cb18-318"><a href="#cb18-318" aria-hidden="true" tabindex="-1"></a><span class="in">  seed = 101112</span></span>
-<span id="cb18-319"><a href="#cb18-319" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
-<span id="cb18-320"><a href="#cb18-320" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-321"><a href="#cb18-321" aria-hidden="true" tabindex="-1"></a><span class="in">models_trend &lt;- fit_nested_model_sequence(sim_trend_only)</span></span>
-<span id="cb18-322"><a href="#cb18-322" aria-hidden="true" tabindex="-1"></a><span class="in">aic_trend &lt;- compare_nested_models(models_trend)</span></span>
-<span id="cb18-323"><a href="#cb18-323" aria-hidden="true" tabindex="-1"></a><span class="in">kable(aic_trend, digits = 2,</span></span>
-<span id="cb18-324"><a href="#cb18-324" aria-hidden="true" tabindex="-1"></a><span class="in">      caption = "Model Selection: Trend Differences Only")</span></span>
-<span id="cb18-325"><a href="#cb18-325" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb18-326"><a href="#cb18-326" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-327"><a href="#cb18-327" aria-hidden="true" tabindex="-1"></a>**Expected**: Model m4 (education-specific trends + shared seasonality) should be preferred.</span>
+<span id="cb18-308"><a href="#cb18-308" aria-hidden="true" tabindex="-1"></a><span class="in">```{r model-selection-seasonal}</span></span>
+<span id="cb18-309"><a href="#cb18-309" aria-hidden="true" tabindex="-1"></a><span class="in"># Simulate with only seasonal differences</span></span>
+<span id="cb18-310"><a href="#cb18-310" aria-hidden="true" tabindex="-1"></a><span class="in">sim_seasonal_only &lt;- simulate_multi_education_unemployment(</span></span>
+<span id="cb18-311"><a href="#cb18-311" aria-hidden="true" tabindex="-1"></a><span class="in">  n_years = 15,</span></span>
+<span id="cb18-312"><a href="#cb18-312" aria-hidden="true" tabindex="-1"></a><span class="in">  education_levels = c("phd", "masters", "bachelors"),</span></span>
+<span id="cb18-313"><a href="#cb18-313" aria-hidden="true" tabindex="-1"></a><span class="in">  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),</span></span>
+<span id="cb18-314"><a href="#cb18-314" aria-hidden="true" tabindex="-1"></a><span class="in">  seasonal_amplitudes = c(phd = 0.005, masters = 0.015, bachelors = 0.025),</span></span>
+<span id="cb18-315"><a href="#cb18-315" aria-hidden="true" tabindex="-1"></a><span class="in">  trend_slopes = c(phd = 0, masters = 0, bachelors = 0),  # Same (no trend)!</span></span>
+<span id="cb18-316"><a href="#cb18-316" aria-hidden="true" tabindex="-1"></a><span class="in">  noise_sd = 0.002,</span></span>
+<span id="cb18-317"><a href="#cb18-317" aria-hidden="true" tabindex="-1"></a><span class="in">  seed = 789</span></span>
+<span id="cb18-318"><a href="#cb18-318" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-319"><a href="#cb18-319" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-320"><a href="#cb18-320" aria-hidden="true" tabindex="-1"></a><span class="in"># Fit nested sequence</span></span>
+<span id="cb18-321"><a href="#cb18-321" aria-hidden="true" tabindex="-1"></a><span class="in">models_seasonal &lt;- fit_nested_model_sequence(sim_seasonal_only)</span></span>
+<span id="cb18-322"><a href="#cb18-322" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-323"><a href="#cb18-323" aria-hidden="true" tabindex="-1"></a><span class="in"># Compare via AIC</span></span>
+<span id="cb18-324"><a href="#cb18-324" aria-hidden="true" tabindex="-1"></a><span class="in">aic_seasonal &lt;- compare_nested_models(models_seasonal)</span></span>
+<span id="cb18-325"><a href="#cb18-325" aria-hidden="true" tabindex="-1"></a><span class="in">kable(aic_seasonal, digits = 2,</span></span>
+<span id="cb18-326"><a href="#cb18-326" aria-hidden="true" tabindex="-1"></a><span class="in">      caption = "Model Selection: Seasonal Differences Only")</span></span>
+<span id="cb18-327"><a href="#cb18-327" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 <span id="cb18-328"><a href="#cb18-328" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-329"><a href="#cb18-329" aria-hidden="true" tabindex="-1"></a><span class="fu">### Scenario C: Both Differ</span></span>
+<span id="cb18-329"><a href="#cb18-329" aria-hidden="true" tabindex="-1"></a>**Expected**: Model m5 (shared trend + education-specific seasonality) should be preferred.</span>
 <span id="cb18-330"><a href="#cb18-330" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-331"><a href="#cb18-331" aria-hidden="true" tabindex="-1"></a>When both seasonal and trend patterns differ, does model selection prefer the full model?</span>
+<span id="cb18-331"><a href="#cb18-331" aria-hidden="true" tabindex="-1"></a><span class="fu">### Scenario B: Only Trend Differences</span></span>
 <span id="cb18-332"><a href="#cb18-332" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-333"><a href="#cb18-333" aria-hidden="true" tabindex="-1"></a><span class="in">```{r model-selection-full}</span></span>
-<span id="cb18-334"><a href="#cb18-334" aria-hidden="true" tabindex="-1"></a><span class="in">sim_both &lt;- simulate_multi_education_unemployment(</span></span>
-<span id="cb18-335"><a href="#cb18-335" aria-hidden="true" tabindex="-1"></a><span class="in">  n_years = 15,</span></span>
-<span id="cb18-336"><a href="#cb18-336" aria-hidden="true" tabindex="-1"></a><span class="in">  education_levels = c("phd", "masters", "bachelors"),</span></span>
-<span id="cb18-337"><a href="#cb18-337" aria-hidden="true" tabindex="-1"></a><span class="in">  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),</span></span>
-<span id="cb18-338"><a href="#cb18-338" aria-hidden="true" tabindex="-1"></a><span class="in">  seasonal_amplitudes = c(phd = 0.005, masters = 0.015, bachelors = 0.025),</span></span>
-<span id="cb18-339"><a href="#cb18-339" aria-hidden="true" tabindex="-1"></a><span class="in">  trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),</span></span>
-<span id="cb18-340"><a href="#cb18-340" aria-hidden="true" tabindex="-1"></a><span class="in">  noise_sd = 0.002,</span></span>
-<span id="cb18-341"><a href="#cb18-341" aria-hidden="true" tabindex="-1"></a><span class="in">  seed = 131415</span></span>
-<span id="cb18-342"><a href="#cb18-342" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
-<span id="cb18-343"><a href="#cb18-343" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-344"><a href="#cb18-344" aria-hidden="true" tabindex="-1"></a><span class="in">models_both &lt;- fit_nested_model_sequence(sim_both)</span></span>
-<span id="cb18-345"><a href="#cb18-345" aria-hidden="true" tabindex="-1"></a><span class="in">aic_both &lt;- compare_nested_models(models_both)</span></span>
-<span id="cb18-346"><a href="#cb18-346" aria-hidden="true" tabindex="-1"></a><span class="in">kable(aic_both, digits = 2,</span></span>
-<span id="cb18-347"><a href="#cb18-347" aria-hidden="true" tabindex="-1"></a><span class="in">      caption = "Model Selection: Both Seasonal and Trend Differences")</span></span>
-<span id="cb18-348"><a href="#cb18-348" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb18-349"><a href="#cb18-349" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-350"><a href="#cb18-350" aria-hidden="true" tabindex="-1"></a>**Expected**: Model m6 (full: education-specific trends and seasonality) should be strongly preferred.</span>
+<span id="cb18-333"><a href="#cb18-333" aria-hidden="true" tabindex="-1"></a>When only trends differ (shared seasonality), does model selection prefer the correct model?</span>
+<span id="cb18-334"><a href="#cb18-334" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-335"><a href="#cb18-335" aria-hidden="true" tabindex="-1"></a><span class="in">```{r model-selection-trend}</span></span>
+<span id="cb18-336"><a href="#cb18-336" aria-hidden="true" tabindex="-1"></a><span class="in">sim_trend_only &lt;- simulate_multi_education_unemployment(</span></span>
+<span id="cb18-337"><a href="#cb18-337" aria-hidden="true" tabindex="-1"></a><span class="in">  n_years = 15,</span></span>
+<span id="cb18-338"><a href="#cb18-338" aria-hidden="true" tabindex="-1"></a><span class="in">  education_levels = c("phd", "masters", "bachelors"),</span></span>
+<span id="cb18-339"><a href="#cb18-339" aria-hidden="true" tabindex="-1"></a><span class="in">  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),</span></span>
+<span id="cb18-340"><a href="#cb18-340" aria-hidden="true" tabindex="-1"></a><span class="in">  seasonal_amplitudes = c(phd = 0.010, masters = 0.010, bachelors = 0.010),  # Same!</span></span>
+<span id="cb18-341"><a href="#cb18-341" aria-hidden="true" tabindex="-1"></a><span class="in">  trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),</span></span>
+<span id="cb18-342"><a href="#cb18-342" aria-hidden="true" tabindex="-1"></a><span class="in">  noise_sd = 0.002,</span></span>
+<span id="cb18-343"><a href="#cb18-343" aria-hidden="true" tabindex="-1"></a><span class="in">  seed = 101112</span></span>
+<span id="cb18-344"><a href="#cb18-344" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-345"><a href="#cb18-345" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-346"><a href="#cb18-346" aria-hidden="true" tabindex="-1"></a><span class="in">models_trend &lt;- fit_nested_model_sequence(sim_trend_only)</span></span>
+<span id="cb18-347"><a href="#cb18-347" aria-hidden="true" tabindex="-1"></a><span class="in">aic_trend &lt;- compare_nested_models(models_trend)</span></span>
+<span id="cb18-348"><a href="#cb18-348" aria-hidden="true" tabindex="-1"></a><span class="in">kable(aic_trend, digits = 2,</span></span>
+<span id="cb18-349"><a href="#cb18-349" aria-hidden="true" tabindex="-1"></a><span class="in">      caption = "Model Selection: Trend Differences Only")</span></span>
+<span id="cb18-350"><a href="#cb18-350" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 <span id="cb18-351"><a href="#cb18-351" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-352"><a href="#cb18-352" aria-hidden="true" tabindex="-1"></a><span class="fu">## Test 4: Trend Difference Inference</span></span>
+<span id="cb18-352"><a href="#cb18-352" aria-hidden="true" tabindex="-1"></a>**Expected**: Model m4 (education-specific trends + shared seasonality) should be preferred.</span>
 <span id="cb18-353"><a href="#cb18-353" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-354"><a href="#cb18-354" aria-hidden="true" tabindex="-1"></a>A critical capability is comparing trends between education levels with proper uncertainty quantification.</span>
+<span id="cb18-354"><a href="#cb18-354" aria-hidden="true" tabindex="-1"></a><span class="fu">### Scenario C: Both Differ</span></span>
 <span id="cb18-355"><a href="#cb18-355" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-356"><a href="#cb18-356" aria-hidden="true" tabindex="-1"></a><span class="fu">### Simulation with Known Differences</span></span>
+<span id="cb18-356"><a href="#cb18-356" aria-hidden="true" tabindex="-1"></a>When both seasonal and trend patterns differ, does model selection prefer the full model?</span>
 <span id="cb18-357"><a href="#cb18-357" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-358"><a href="#cb18-358" aria-hidden="true" tabindex="-1"></a><span class="in">```{r trend-differences}</span></span>
-<span id="cb18-359"><a href="#cb18-359" aria-hidden="true" tabindex="-1"></a><span class="in"># Use simulation from Test 2 (different trend slopes)</span></span>
-<span id="cb18-360"><a href="#cb18-360" aria-hidden="true" tabindex="-1"></a><span class="in"># Compute pairwise trend differences</span></span>
-<span id="cb18-361"><a href="#cb18-361" aria-hidden="true" tabindex="-1"></a><span class="in">diff_results &lt;- compute_trend_differences(</span></span>
-<span id="cb18-362"><a href="#cb18-362" aria-hidden="true" tabindex="-1"></a><span class="in">  model_trend,</span></span>
-<span id="cb18-363"><a href="#cb18-363" aria-hidden="true" tabindex="-1"></a><span class="in">  education_pairs = list(</span></span>
-<span id="cb18-364"><a href="#cb18-364" aria-hidden="true" tabindex="-1"></a><span class="in">    c("phd", "masters"),</span></span>
-<span id="cb18-365"><a href="#cb18-365" aria-hidden="true" tabindex="-1"></a><span class="in">    c("phd", "bachelors"),</span></span>
-<span id="cb18-366"><a href="#cb18-366" aria-hidden="true" tabindex="-1"></a><span class="in">    c("masters", "bachelors")</span></span>
-<span id="cb18-367"><a href="#cb18-367" aria-hidden="true" tabindex="-1"></a><span class="in">  ),</span></span>
-<span id="cb18-368"><a href="#cb18-368" aria-hidden="true" tabindex="-1"></a><span class="in">  time_points = seq(1, 180, by = 12)  # Annual snapshots</span></span>
-<span id="cb18-369"><a href="#cb18-369" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
-<span id="cb18-370"><a href="#cb18-370" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-371"><a href="#cb18-371" aria-hidden="true" tabindex="-1"></a><span class="in"># True differences</span></span>
-<span id="cb18-372"><a href="#cb18-372" aria-hidden="true" tabindex="-1"></a><span class="in">true_diff_pm &lt;- true_trend_slope["phd"] - true_trend_slope["masters"]</span></span>
-<span id="cb18-373"><a href="#cb18-373" aria-hidden="true" tabindex="-1"></a><span class="in">true_diff_pb &lt;- true_trend_slope["phd"] - true_trend_slope["bachelors"]</span></span>
-<span id="cb18-374"><a href="#cb18-374" aria-hidden="true" tabindex="-1"></a><span class="in">true_diff_mb &lt;- true_trend_slope["masters"] - true_trend_slope["bachelors"]</span></span>
-<span id="cb18-375"><a href="#cb18-375" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-376"><a href="#cb18-376" aria-hidden="true" tabindex="-1"></a><span class="in">head(diff_results, 20)</span></span>
-<span id="cb18-377"><a href="#cb18-377" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb18-358"><a href="#cb18-358" aria-hidden="true" tabindex="-1"></a><span class="in">```{r model-selection-full}</span></span>
+<span id="cb18-359"><a href="#cb18-359" aria-hidden="true" tabindex="-1"></a><span class="in">sim_both &lt;- simulate_multi_education_unemployment(</span></span>
+<span id="cb18-360"><a href="#cb18-360" aria-hidden="true" tabindex="-1"></a><span class="in">  n_years = 15,</span></span>
+<span id="cb18-361"><a href="#cb18-361" aria-hidden="true" tabindex="-1"></a><span class="in">  education_levels = c("phd", "masters", "bachelors"),</span></span>
+<span id="cb18-362"><a href="#cb18-362" aria-hidden="true" tabindex="-1"></a><span class="in">  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),</span></span>
+<span id="cb18-363"><a href="#cb18-363" aria-hidden="true" tabindex="-1"></a><span class="in">  seasonal_amplitudes = c(phd = 0.005, masters = 0.015, bachelors = 0.025),</span></span>
+<span id="cb18-364"><a href="#cb18-364" aria-hidden="true" tabindex="-1"></a><span class="in">  trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),</span></span>
+<span id="cb18-365"><a href="#cb18-365" aria-hidden="true" tabindex="-1"></a><span class="in">  noise_sd = 0.002,</span></span>
+<span id="cb18-366"><a href="#cb18-366" aria-hidden="true" tabindex="-1"></a><span class="in">  seed = 131415</span></span>
+<span id="cb18-367"><a href="#cb18-367" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-368"><a href="#cb18-368" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-369"><a href="#cb18-369" aria-hidden="true" tabindex="-1"></a><span class="in">models_both &lt;- fit_nested_model_sequence(sim_both)</span></span>
+<span id="cb18-370"><a href="#cb18-370" aria-hidden="true" tabindex="-1"></a><span class="in">aic_both &lt;- compare_nested_models(models_both)</span></span>
+<span id="cb18-371"><a href="#cb18-371" aria-hidden="true" tabindex="-1"></a><span class="in">kable(aic_both, digits = 2,</span></span>
+<span id="cb18-372"><a href="#cb18-372" aria-hidden="true" tabindex="-1"></a><span class="in">      caption = "Model Selection: Both Seasonal and Trend Differences")</span></span>
+<span id="cb18-373"><a href="#cb18-373" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb18-374"><a href="#cb18-374" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-375"><a href="#cb18-375" aria-hidden="true" tabindex="-1"></a>**Expected**: Model m6 (full: education-specific trends and seasonality) should be strongly preferred.</span>
+<span id="cb18-376"><a href="#cb18-376" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-377"><a href="#cb18-377" aria-hidden="true" tabindex="-1"></a><span class="fu">## Test 4: Trend Difference Inference</span></span>
 <span id="cb18-378"><a href="#cb18-378" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-379"><a href="#cb18-379" aria-hidden="true" tabindex="-1"></a><span class="fu">### Visualize Differences</span></span>
+<span id="cb18-379"><a href="#cb18-379" aria-hidden="true" tabindex="-1"></a>A critical capability is comparing trends between education levels with proper uncertainty quantification.</span>
 <span id="cb18-380"><a href="#cb18-380" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-381"><a href="#cb18-381" aria-hidden="true" tabindex="-1"></a><span class="in">```{r plot-differences}</span></span>
-<span id="cb18-382"><a href="#cb18-382" aria-hidden="true" tabindex="-1"></a><span class="in">ggplot(diff_results, aes(x = time_index, y = difference, color = comparison)) +</span></span>
-<span id="cb18-383"><a href="#cb18-383" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_line(size = 1) +</span></span>
-<span id="cb18-384"><a href="#cb18-384" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_ribbon(aes(ymin = lower, ymax = upper, fill = comparison),</span></span>
-<span id="cb18-385"><a href="#cb18-385" aria-hidden="true" tabindex="-1"></a><span class="in">              alpha = 0.2, color = NA) +</span></span>
-<span id="cb18-386"><a href="#cb18-386" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +</span></span>
-<span id="cb18-387"><a href="#cb18-387" aria-hidden="true" tabindex="-1"></a><span class="in">  facet_wrap(~ comparison, ncol = 1, scales = "free_y") +</span></span>
-<span id="cb18-388"><a href="#cb18-388" aria-hidden="true" tabindex="-1"></a><span class="in">  labs(title = "Pairwise Trend Differences Between Education Levels",</span></span>
-<span id="cb18-389"><a href="#cb18-389" aria-hidden="true" tabindex="-1"></a><span class="in">       subtitle = "95% confidence bands (accounting for correlation)",</span></span>
-<span id="cb18-390"><a href="#cb18-390" aria-hidden="true" tabindex="-1"></a><span class="in">       x = "Time Index (months)",</span></span>
-<span id="cb18-391"><a href="#cb18-391" aria-hidden="true" tabindex="-1"></a><span class="in">       y = "Difference in Trend Effect (pp)") +</span></span>
-<span id="cb18-392"><a href="#cb18-392" aria-hidden="true" tabindex="-1"></a><span class="in">  theme_minimal() +</span></span>
-<span id="cb18-393"><a href="#cb18-393" aria-hidden="true" tabindex="-1"></a><span class="in">  theme(legend.position = "none",</span></span>
-<span id="cb18-394"><a href="#cb18-394" aria-hidden="true" tabindex="-1"></a><span class="in">        plot.title = element_text(face = "bold"))</span></span>
-<span id="cb18-395"><a href="#cb18-395" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb18-396"><a href="#cb18-396" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-397"><a href="#cb18-397" aria-hidden="true" tabindex="-1"></a><span class="fu">### Coverage Check for Differences</span></span>
-<span id="cb18-398"><a href="#cb18-398" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-399"><a href="#cb18-399" aria-hidden="true" tabindex="-1"></a>Do the 95% confidence intervals for trend differences contain the true differences?</span>
+<span id="cb18-381"><a href="#cb18-381" aria-hidden="true" tabindex="-1"></a><span class="fu">### Simulation with Known Differences</span></span>
+<span id="cb18-382"><a href="#cb18-382" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-383"><a href="#cb18-383" aria-hidden="true" tabindex="-1"></a><span class="in">```{r trend-differences}</span></span>
+<span id="cb18-384"><a href="#cb18-384" aria-hidden="true" tabindex="-1"></a><span class="in"># Use simulation from Test 2 (different trend slopes)</span></span>
+<span id="cb18-385"><a href="#cb18-385" aria-hidden="true" tabindex="-1"></a><span class="in"># Compute pairwise trend differences</span></span>
+<span id="cb18-386"><a href="#cb18-386" aria-hidden="true" tabindex="-1"></a><span class="in">diff_results &lt;- compute_trend_differences(</span></span>
+<span id="cb18-387"><a href="#cb18-387" aria-hidden="true" tabindex="-1"></a><span class="in">  model_trend,</span></span>
+<span id="cb18-388"><a href="#cb18-388" aria-hidden="true" tabindex="-1"></a><span class="in">  education_pairs = list(</span></span>
+<span id="cb18-389"><a href="#cb18-389" aria-hidden="true" tabindex="-1"></a><span class="in">    c("phd", "masters"),</span></span>
+<span id="cb18-390"><a href="#cb18-390" aria-hidden="true" tabindex="-1"></a><span class="in">    c("phd", "bachelors"),</span></span>
+<span id="cb18-391"><a href="#cb18-391" aria-hidden="true" tabindex="-1"></a><span class="in">    c("masters", "bachelors")</span></span>
+<span id="cb18-392"><a href="#cb18-392" aria-hidden="true" tabindex="-1"></a><span class="in">  ),</span></span>
+<span id="cb18-393"><a href="#cb18-393" aria-hidden="true" tabindex="-1"></a><span class="in">  time_points = seq(1, 180, by = 12)  # Annual snapshots</span></span>
+<span id="cb18-394"><a href="#cb18-394" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-395"><a href="#cb18-395" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-396"><a href="#cb18-396" aria-hidden="true" tabindex="-1"></a><span class="in"># True differences</span></span>
+<span id="cb18-397"><a href="#cb18-397" aria-hidden="true" tabindex="-1"></a><span class="in">true_diff_pm &lt;- true_trend_slope["phd"] - true_trend_slope["masters"]</span></span>
+<span id="cb18-398"><a href="#cb18-398" aria-hidden="true" tabindex="-1"></a><span class="in">true_diff_pb &lt;- true_trend_slope["phd"] - true_trend_slope["bachelors"]</span></span>
+<span id="cb18-399"><a href="#cb18-399" aria-hidden="true" tabindex="-1"></a><span class="in">true_diff_mb &lt;- true_trend_slope["masters"] - true_trend_slope["bachelors"]</span></span>
 <span id="cb18-400"><a href="#cb18-400" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-401"><a href="#cb18-401" aria-hidden="true" tabindex="-1"></a><span class="in">```{r diff-coverage}</span></span>
-<span id="cb18-402"><a href="#cb18-402" aria-hidden="true" tabindex="-1"></a><span class="in"># Check coverage for each comparison at first time point</span></span>
-<span id="cb18-403"><a href="#cb18-403" aria-hidden="true" tabindex="-1"></a><span class="in">diff_t1 &lt;- diff_results[diff_results$time_index == 1, ]</span></span>
-<span id="cb18-404"><a href="#cb18-404" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-405"><a href="#cb18-405" aria-hidden="true" tabindex="-1"></a><span class="in">coverage_check &lt;- data.frame(</span></span>
-<span id="cb18-406"><a href="#cb18-406" aria-hidden="true" tabindex="-1"></a><span class="in">  Comparison = diff_t1$comparison,</span></span>
-<span id="cb18-407"><a href="#cb18-407" aria-hidden="true" tabindex="-1"></a><span class="in">  True_Difference = c(true_diff_pm, true_diff_pb, true_diff_mb),</span></span>
-<span id="cb18-408"><a href="#cb18-408" aria-hidden="true" tabindex="-1"></a><span class="in">  Estimated_Difference = diff_t1$difference,</span></span>
-<span id="cb18-409"><a href="#cb18-409" aria-hidden="true" tabindex="-1"></a><span class="in">  CI_Lower = diff_t1$lower,</span></span>
-<span id="cb18-410"><a href="#cb18-410" aria-hidden="true" tabindex="-1"></a><span class="in">  CI_Upper = diff_t1$upper,</span></span>
-<span id="cb18-411"><a href="#cb18-411" aria-hidden="true" tabindex="-1"></a><span class="in">  Contains_True = c(</span></span>
-<span id="cb18-412"><a href="#cb18-412" aria-hidden="true" tabindex="-1"></a><span class="in">    true_diff_pm &gt;= diff_t1$lower[1] &amp; true_diff_pm &lt;= diff_t1$upper[1],</span></span>
-<span id="cb18-413"><a href="#cb18-413" aria-hidden="true" tabindex="-1"></a><span class="in">    true_diff_pb &gt;= diff_t1$lower[2] &amp; true_diff_pb &lt;= diff_t1$upper[2],</span></span>
-<span id="cb18-414"><a href="#cb18-414" aria-hidden="true" tabindex="-1"></a><span class="in">    true_diff_mb &gt;= diff_t1$lower[3] &amp; true_diff_mb &lt;= diff_t1$upper[3]</span></span>
-<span id="cb18-415"><a href="#cb18-415" aria-hidden="true" tabindex="-1"></a><span class="in">  )</span></span>
-<span id="cb18-416"><a href="#cb18-416" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
-<span id="cb18-417"><a href="#cb18-417" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-418"><a href="#cb18-418" aria-hidden="true" tabindex="-1"></a><span class="in">kable(coverage_check, digits = 6,</span></span>
-<span id="cb18-419"><a href="#cb18-419" aria-hidden="true" tabindex="-1"></a><span class="in">      caption = "Coverage Check for Trend Difference Confidence Intervals")</span></span>
+<span id="cb18-401"><a href="#cb18-401" aria-hidden="true" tabindex="-1"></a><span class="in">head(diff_results, 20)</span></span>
+<span id="cb18-402"><a href="#cb18-402" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb18-403"><a href="#cb18-403" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-404"><a href="#cb18-404" aria-hidden="true" tabindex="-1"></a><span class="fu">### Visualize Differences</span></span>
+<span id="cb18-405"><a href="#cb18-405" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-406"><a href="#cb18-406" aria-hidden="true" tabindex="-1"></a><span class="in">```{r plot-differences}</span></span>
+<span id="cb18-407"><a href="#cb18-407" aria-hidden="true" tabindex="-1"></a><span class="in">ggplot(diff_results, aes(x = time_index, y = difference, color = comparison)) +</span></span>
+<span id="cb18-408"><a href="#cb18-408" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_line(size = 1) +</span></span>
+<span id="cb18-409"><a href="#cb18-409" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_ribbon(aes(ymin = lower, ymax = upper, fill = comparison),</span></span>
+<span id="cb18-410"><a href="#cb18-410" aria-hidden="true" tabindex="-1"></a><span class="in">              alpha = 0.2, color = NA) +</span></span>
+<span id="cb18-411"><a href="#cb18-411" aria-hidden="true" tabindex="-1"></a><span class="in">  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +</span></span>
+<span id="cb18-412"><a href="#cb18-412" aria-hidden="true" tabindex="-1"></a><span class="in">  facet_wrap(~ comparison, ncol = 1, scales = "free_y") +</span></span>
+<span id="cb18-413"><a href="#cb18-413" aria-hidden="true" tabindex="-1"></a><span class="in">  labs(title = "Pairwise Trend Differences Between Education Levels",</span></span>
+<span id="cb18-414"><a href="#cb18-414" aria-hidden="true" tabindex="-1"></a><span class="in">       subtitle = "95% confidence bands (accounting for correlation)",</span></span>
+<span id="cb18-415"><a href="#cb18-415" aria-hidden="true" tabindex="-1"></a><span class="in">       x = "Time Index (months)",</span></span>
+<span id="cb18-416"><a href="#cb18-416" aria-hidden="true" tabindex="-1"></a><span class="in">       y = "Difference in Trend Effect (pp)") +</span></span>
+<span id="cb18-417"><a href="#cb18-417" aria-hidden="true" tabindex="-1"></a><span class="in">  theme_minimal() +</span></span>
+<span id="cb18-418"><a href="#cb18-418" aria-hidden="true" tabindex="-1"></a><span class="in">  theme(legend.position = "none",</span></span>
+<span id="cb18-419"><a href="#cb18-419" aria-hidden="true" tabindex="-1"></a><span class="in">        plot.title = element_text(face = "bold"))</span></span>
 <span id="cb18-420"><a href="#cb18-420" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 <span id="cb18-421"><a href="#cb18-421" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-422"><a href="#cb18-422" aria-hidden="true" tabindex="-1"></a><span class="fu">## Summary and Conclusions</span></span>
+<span id="cb18-422"><a href="#cb18-422" aria-hidden="true" tabindex="-1"></a><span class="fu">### Coverage Check for Differences</span></span>
 <span id="cb18-423"><a href="#cb18-423" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-424"><a href="#cb18-424" aria-hidden="true" tabindex="-1"></a><span class="fu">### What We Validated</span></span>
+<span id="cb18-424"><a href="#cb18-424" aria-hidden="true" tabindex="-1"></a>Do the 95% confidence intervals for trend differences contain the true differences?</span>
 <span id="cb18-425"><a href="#cb18-425" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-426"><a href="#cb18-426" aria-hidden="true" tabindex="-1"></a><span class="ss">1. </span>**Seasonal Recovery**: Factor smooth GAMs successfully recover education-specific seasonal patterns with different amplitudes. Relative errors are small (&lt;20%) and orderings are preserved.</span>
-<span id="cb18-427"><a href="#cb18-427" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-428"><a href="#cb18-428" aria-hidden="true" tabindex="-1"></a><span class="ss">2. </span>**Trend Recovery**: The model recovers education-specific trends, though GAM smoothing can affect exact slope estimates. Orderings are correctly identified.</span>
+<span id="cb18-426"><a href="#cb18-426" aria-hidden="true" tabindex="-1"></a><span class="in">```{r diff-coverage}</span></span>
+<span id="cb18-427"><a href="#cb18-427" aria-hidden="true" tabindex="-1"></a><span class="in"># Check coverage for each comparison at first time point</span></span>
+<span id="cb18-428"><a href="#cb18-428" aria-hidden="true" tabindex="-1"></a><span class="in">diff_t1 &lt;- diff_results[diff_results$time_index == 1, ]</span></span>
 <span id="cb18-429"><a href="#cb18-429" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-430"><a href="#cb18-430" aria-hidden="true" tabindex="-1"></a><span class="ss">3. </span>**Model Selection**: AIC-based model selection successfully identifies the correct model structure when:</span>
-<span id="cb18-431"><a href="#cb18-431" aria-hidden="true" tabindex="-1"></a><span class="ss">   - </span>Only seasonal patterns differ → prefers education-specific seasonal</span>
-<span id="cb18-432"><a href="#cb18-432" aria-hidden="true" tabindex="-1"></a><span class="ss">   - </span>Only trends differ → prefers education-specific trends</span>
-<span id="cb18-433"><a href="#cb18-433" aria-hidden="true" tabindex="-1"></a><span class="ss">   - </span>Both differ → prefers full model</span>
-<span id="cb18-434"><a href="#cb18-434" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-435"><a href="#cb18-435" aria-hidden="true" tabindex="-1"></a><span class="ss">4. </span>**Difference Inference**: Trend difference confidence intervals properly account for correlation via the variance-covariance matrix. Coverage appears appropriate.</span>
-<span id="cb18-436"><a href="#cb18-436" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-437"><a href="#cb18-437" aria-hidden="true" tabindex="-1"></a><span class="fu">### Implications for Real Data Analysis</span></span>
-<span id="cb18-438"><a href="#cb18-438" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-439"><a href="#cb18-439" aria-hidden="true" tabindex="-1"></a>These validation results give us confidence to:</span>
-<span id="cb18-440"><a href="#cb18-440" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-441"><a href="#cb18-441" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Fit factor smooth GAMs to real CPS unemployment data</span>
-<span id="cb18-442"><a href="#cb18-442" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Trust education-specific effect estimates</span>
-<span id="cb18-443"><a href="#cb18-443" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Use model selection to determine which components vary by education</span>
-<span id="cb18-444"><a href="#cb18-444" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Make formal comparisons between education levels with valid uncertainty quantification</span>
-<span id="cb18-445"><a href="#cb18-445" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-446"><a href="#cb18-446" aria-hidden="true" tabindex="-1"></a><span class="fu">### Limitations</span></span>
-<span id="cb18-447"><a href="#cb18-447" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-448"><a href="#cb18-448" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>This validation uses visual and single-instance checks, not full coverage rates</span>
-<span id="cb18-449"><a href="#cb18-449" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>True coverage rates (e.g., "do 95% of CIs contain true value across 1000 simulations?") require more extensive simulation studies</span>
-<span id="cb18-450"><a href="#cb18-450" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>GAM smoothing can introduce bias in parameter estimates vs. true linear slopes</span>
-<span id="cb18-451"><a href="#cb18-451" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Real data may have additional complexities (measurement error, structural breaks, etc.)</span>
+<span id="cb18-430"><a href="#cb18-430" aria-hidden="true" tabindex="-1"></a><span class="in">coverage_check &lt;- data.frame(</span></span>
+<span id="cb18-431"><a href="#cb18-431" aria-hidden="true" tabindex="-1"></a><span class="in">  Comparison = diff_t1$comparison,</span></span>
+<span id="cb18-432"><a href="#cb18-432" aria-hidden="true" tabindex="-1"></a><span class="in">  True_Difference = c(true_diff_pm, true_diff_pb, true_diff_mb),</span></span>
+<span id="cb18-433"><a href="#cb18-433" aria-hidden="true" tabindex="-1"></a><span class="in">  Estimated_Difference = diff_t1$difference,</span></span>
+<span id="cb18-434"><a href="#cb18-434" aria-hidden="true" tabindex="-1"></a><span class="in">  CI_Lower = diff_t1$lower,</span></span>
+<span id="cb18-435"><a href="#cb18-435" aria-hidden="true" tabindex="-1"></a><span class="in">  CI_Upper = diff_t1$upper,</span></span>
+<span id="cb18-436"><a href="#cb18-436" aria-hidden="true" tabindex="-1"></a><span class="in">  Contains_True = c(</span></span>
+<span id="cb18-437"><a href="#cb18-437" aria-hidden="true" tabindex="-1"></a><span class="in">    true_diff_pm &gt;= diff_t1$lower[1] &amp; true_diff_pm &lt;= diff_t1$upper[1],</span></span>
+<span id="cb18-438"><a href="#cb18-438" aria-hidden="true" tabindex="-1"></a><span class="in">    true_diff_pb &gt;= diff_t1$lower[2] &amp; true_diff_pb &lt;= diff_t1$upper[2],</span></span>
+<span id="cb18-439"><a href="#cb18-439" aria-hidden="true" tabindex="-1"></a><span class="in">    true_diff_mb &gt;= diff_t1$lower[3] &amp; true_diff_mb &lt;= diff_t1$upper[3]</span></span>
+<span id="cb18-440"><a href="#cb18-440" aria-hidden="true" tabindex="-1"></a><span class="in">  )</span></span>
+<span id="cb18-441"><a href="#cb18-441" aria-hidden="true" tabindex="-1"></a><span class="in">)</span></span>
+<span id="cb18-442"><a href="#cb18-442" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-443"><a href="#cb18-443" aria-hidden="true" tabindex="-1"></a><span class="in">kable(coverage_check, digits = 6,</span></span>
+<span id="cb18-444"><a href="#cb18-444" aria-hidden="true" tabindex="-1"></a><span class="in">      caption = "Coverage Check for Trend Difference Confidence Intervals")</span></span>
+<span id="cb18-445"><a href="#cb18-445" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb18-446"><a href="#cb18-446" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-447"><a href="#cb18-447" aria-hidden="true" tabindex="-1"></a><span class="fu">## Summary and Conclusions</span></span>
+<span id="cb18-448"><a href="#cb18-448" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-449"><a href="#cb18-449" aria-hidden="true" tabindex="-1"></a><span class="fu">### What We Validated</span></span>
+<span id="cb18-450"><a href="#cb18-450" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-451"><a href="#cb18-451" aria-hidden="true" tabindex="-1"></a><span class="ss">1. </span>**Seasonal Recovery**: Factor smooth GAMs successfully recover education-specific seasonal patterns with different amplitudes. Relative errors are small (&lt;20%) and orderings are preserved.</span>
 <span id="cb18-452"><a href="#cb18-452" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-453"><a href="#cb18-453" aria-hidden="true" tabindex="-1"></a><span class="fu">### Next Steps</span></span>
+<span id="cb18-453"><a href="#cb18-453" aria-hidden="true" tabindex="-1"></a><span class="ss">2. </span>**Trend Recovery**: The model recovers education-specific trends, though GAM smoothing can affect exact slope estimates. Orderings are correctly identified.</span>
 <span id="cb18-454"><a href="#cb18-454" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-455"><a href="#cb18-455" aria-hidden="true" tabindex="-1"></a>Proceed to real data analysis with factor smooth GAMs, applying the modeling framework validated here to 2000-2025 CPS unemployment data for PhD, Master's, and Bachelor's degree holders.</span>
-<span id="cb18-456"><a href="#cb18-456" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-457"><a href="#cb18-457" aria-hidden="true" tabindex="-1"></a>---</span>
-<span id="cb18-458"><a href="#cb18-458" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-459"><a href="#cb18-459" aria-hidden="true" tabindex="-1"></a>**Analysis Date**: <span class="in">`r Sys.Date()`</span></span>
-<span id="cb18-460"><a href="#cb18-460" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-461"><a href="#cb18-461" aria-hidden="true" tabindex="-1"></a>**R Session Info**:</span>
-<span id="cb18-462"><a href="#cb18-462" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb18-463"><a href="#cb18-463" aria-hidden="true" tabindex="-1"></a><span class="in">```{r session-info}</span></span>
-<span id="cb18-464"><a href="#cb18-464" aria-hidden="true" tabindex="-1"></a><span class="in">sessionInfo()</span></span>
-<span id="cb18-465"><a href="#cb18-465" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span></code><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></pre></div>
+<span id="cb18-455"><a href="#cb18-455" aria-hidden="true" tabindex="-1"></a><span class="ss">3. </span>**Model Selection**: AIC-based model selection successfully identifies the correct model structure when:</span>
+<span id="cb18-456"><a href="#cb18-456" aria-hidden="true" tabindex="-1"></a><span class="ss">   - </span>Only seasonal patterns differ → prefers education-specific seasonal</span>
+<span id="cb18-457"><a href="#cb18-457" aria-hidden="true" tabindex="-1"></a><span class="ss">   - </span>Only trends differ → prefers education-specific trends</span>
+<span id="cb18-458"><a href="#cb18-458" aria-hidden="true" tabindex="-1"></a><span class="ss">   - </span>Both differ → prefers full model</span>
+<span id="cb18-459"><a href="#cb18-459" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-460"><a href="#cb18-460" aria-hidden="true" tabindex="-1"></a><span class="ss">4. </span>**Difference Inference**: Trend difference confidence intervals properly account for correlation via the variance-covariance matrix. Coverage appears appropriate.</span>
+<span id="cb18-461"><a href="#cb18-461" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-462"><a href="#cb18-462" aria-hidden="true" tabindex="-1"></a><span class="fu">### Implications for Real Data Analysis</span></span>
+<span id="cb18-463"><a href="#cb18-463" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-464"><a href="#cb18-464" aria-hidden="true" tabindex="-1"></a>These validation results give us confidence to:</span>
+<span id="cb18-465"><a href="#cb18-465" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-466"><a href="#cb18-466" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Fit factor smooth GAMs to real CPS unemployment data</span>
+<span id="cb18-467"><a href="#cb18-467" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Trust education-specific effect estimates</span>
+<span id="cb18-468"><a href="#cb18-468" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Use model selection to determine which components vary by education</span>
+<span id="cb18-469"><a href="#cb18-469" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Make formal comparisons between education levels with valid uncertainty quantification</span>
+<span id="cb18-470"><a href="#cb18-470" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-471"><a href="#cb18-471" aria-hidden="true" tabindex="-1"></a><span class="fu">### Limitations</span></span>
+<span id="cb18-472"><a href="#cb18-472" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-473"><a href="#cb18-473" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>This validation uses visual and single-instance checks, not full coverage rates</span>
+<span id="cb18-474"><a href="#cb18-474" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>True coverage rates (e.g., "do 95% of CIs contain true value across 1000 simulations?") require more extensive simulation studies</span>
+<span id="cb18-475"><a href="#cb18-475" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>GAM smoothing can introduce bias in parameter estimates vs. true linear slopes</span>
+<span id="cb18-476"><a href="#cb18-476" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Real data may have additional complexities (measurement error, structural breaks, etc.)</span>
+<span id="cb18-477"><a href="#cb18-477" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-478"><a href="#cb18-478" aria-hidden="true" tabindex="-1"></a><span class="fu">### Next Steps</span></span>
+<span id="cb18-479"><a href="#cb18-479" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-480"><a href="#cb18-480" aria-hidden="true" tabindex="-1"></a>Proceed to real data analysis with factor smooth GAMs, applying the modeling framework validated here to 2000-2025 CPS unemployment data for PhD, Master's, and Bachelor's degree holders.</span>
+<span id="cb18-481"><a href="#cb18-481" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-482"><a href="#cb18-482" aria-hidden="true" tabindex="-1"></a>---</span>
+<span id="cb18-483"><a href="#cb18-483" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-484"><a href="#cb18-484" aria-hidden="true" tabindex="-1"></a>**Analysis Date**: <span class="in">`r Sys.Date()`</span></span>
+<span id="cb18-485"><a href="#cb18-485" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-486"><a href="#cb18-486" aria-hidden="true" tabindex="-1"></a>**R Session Info**:</span>
+<span id="cb18-487"><a href="#cb18-487" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-488"><a href="#cb18-488" aria-hidden="true" tabindex="-1"></a><span class="in">```{r session-info}</span></span>
+<span id="cb18-489"><a href="#cb18-489" aria-hidden="true" tabindex="-1"></a><span class="in">sessionInfo()</span></span>
+<span id="cb18-490"><a href="#cb18-490" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span></code><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal=""><i class="bi"></i></button></pre></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
 

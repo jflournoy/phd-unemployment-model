@@ -46,6 +46,31 @@ library(knitr)
 set.seed(42)
 ```
 
+## Model Specifications
+
+The nested model sequence used for model selection includes 7 models (m0-m6):
+
+- **m0 (null)**: `unemployment_rate ~ 1`
+  Null model, global mean only
+
+- **m1 (education)**: `unemployment_rate ~ education`
+  Education-specific intercepts, no time structure
+
+- **m2 (shared trend)**: `unemployment_rate ~ education + s(time_index)`
+  Education-specific intercepts + shared smooth trend
+
+- **m3 (shared trend + shared seasonal)**: `unemployment_rate ~ education + s(time_index) + s(month, bs="cc")`
+  Education-specific intercepts + shared smooth trend + shared cyclic seasonality
+
+- **m4 (education-specific trends)**: `unemployment_rate ~ education + s(time_index, by=education) + s(month, bs="cc")`
+  Education-specific intercepts + education-specific smooth trends + shared cyclic seasonality
+
+- **m5 (education-specific seasonality)**: `unemployment_rate ~ education + s(time_index) + s(month, by=education, bs="cc")`
+  Education-specific intercepts + shared smooth trend + education-specific cyclic seasonality
+
+- **m6 (full)**: `unemployment_rate ~ education + s(time_index, by=education) + s(month, by=education, bs="cc")`
+  Education-specific intercepts + education-specific smooth trends + education-specific cyclic seasonality
+
 ## Test 1: Recovery of Education-Specific Seasonal Patterns
 
 ### Simulation Design
