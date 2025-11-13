@@ -47,8 +47,23 @@ library(ggplot2)
 library(knitr)
 library(dplyr)
 
-# Note: Running sequentially to avoid namespace issues in Quarto rendering
-# Parallelization can be enabled interactively by setting parallel=TRUE in function calls
+# Parallel processing setup
+# Note: Running sequentially by default to avoid namespace issues in Quarto rendering
+# To enable parallelization when running interactively:
+# 1. Install packages: install.packages(c("future", "furrr"))
+# 2. Set USE_PARALLEL <- TRUE below
+# 3. Set parallel=TRUE in validate_model_selection_enhanced() calls
+USE_PARALLEL <- FALSE
+
+if (USE_PARALLEL) {
+  library(future)
+  library(furrr)
+  plan(multisession, workers = parallel::detectCores() - 1)
+  cat(sprintf("Parallel processing enabled with %d cores\n",
+              parallel::detectCores() - 1))
+} else {
+  cat("Running sequentially (set USE_PARALLEL <- TRUE to enable parallelization)\n")
+}
 
 set.seed(42)
 ```
@@ -91,6 +106,151 @@ cat(sprintf("  AIC: %.1f\n", AIC(model_demo)))
 cat(sprintf("  R-squared: %.3f\n", summary(model_demo)$r.sq))
 ```
 
+### Visualizing Simulated Data and Model Fit
+
+Let's examine how well the model captures the data-generating process:
+
+```{r demo-viz-raw}
+# Plot raw data with fitted values
+sim_demo$fitted <- fitted(model_demo)
+
+ggplot(sim_demo, aes(x = time_index, y = unemployment_rate, color = education)) +
+  geom_point(alpha = 0.3, size = 1) +
+  geom_line(aes(y = fitted), linewidth = 1) +
+  facet_wrap(~ education, ncol = 1) +
+  scale_color_manual(values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01")) +
+  labs(title = "Simulated Data vs Model Fit",
+       subtitle = "Points = observed data, Lines = fitted values from full GAM (m6)",
+       x = "Time Index (months)",
+       y = "Unemployment Rate",
+       color = "Education") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+```{r demo-viz-components}
+# Extract and visualize model components
+# Create prediction grid
+pred_grid <- expand.grid(
+  time_index = seq(min(sim_demo$time_index), max(sim_demo$time_index), length.out = 120),
+  month = 6,  # Fix month to isolate trend
+  education = c("phd", "masters", "bachelors")
+)
+
+# Get predictions for trend component (fixing month)
+pred_grid$trend_pred <- predict(model_demo, newdata = pred_grid, type = "response")
+
+# Create grid for seasonal component (varying month, fixing time)
+seasonal_grid <- expand.grid(
+  time_index = 60,  # Fix time at middle
+  month = 1:12,
+  education = c("phd", "masters", "bachelors")
+)
+seasonal_grid$seasonal_pred <- predict(model_demo, newdata = seasonal_grid, type = "response")
+
+# Get baseline (intercept) for each education level
+baseline_grid <- expand.grid(
+  time_index = 1,
+  month = 6,
+  education = c("phd", "masters", "bachelors")
+)
+baseline_preds <- predict(model_demo, newdata = baseline_grid, type = "terms")
+
+# Plot trend components
+p1 <- ggplot(pred_grid, aes(x = time_index, y = trend_pred, color = education)) +
+  geom_line(linewidth = 1.2) +
+  scale_color_manual(values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01")) +
+  labs(title = "A. Estimated Trend Components",
+       subtitle = "Education-specific long-term trends (month fixed at 6)",
+       x = "Time Index (months)",
+       y = "Unemployment Rate",
+       color = "Education") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+# Plot seasonal components
+seasonal_grid$month_label <- factor(month.abb[seasonal_grid$month], levels = month.abb)
+p2 <- ggplot(seasonal_grid, aes(x = month_label, y = seasonal_pred,
+                                color = education, group = education)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01")) +
+  labs(title = "B. Estimated Seasonal Components",
+       subtitle = "Education-specific seasonal patterns (time fixed at month 60)",
+       x = "Month",
+       y = "Unemployment Rate",
+       color = "Education") +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Display plots
+p1
+p2
+```
+
+```{r demo-true-vs-estimated}
+# Compare true vs estimated parameters
+true_params <- data.frame(
+  education = c("phd", "masters", "bachelors"),
+  baseline_true = c(0.040, 0.050, 0.060),
+  seasonal_amp_true = c(0.005, 0.012, 0.020),
+  trend_slope_true = c(-0.0001, -0.0001, -0.0001)
+)
+
+# Extract estimated baselines from model
+baseline_est <- coef(model_demo)[1:3]
+names(baseline_est) <- c("phd", "masters", "bachelors")
+
+# Estimate seasonal amplitudes (peak-to-peak / 2)
+seasonal_amps <- seasonal_grid %>%
+  group_by(education) %>%
+  summarize(
+    seasonal_amp_est = (max(seasonal_pred) - min(seasonal_pred)) / 2,
+    .groups = "drop"
+  )
+
+# Estimate trend slopes using derivatives
+trend_slopes <- pred_grid %>%
+  group_by(education) %>%
+  arrange(time_index) %>%
+  summarize(
+    trend_slope_est = coef(lm(trend_pred ~ time_index))[2],
+    .groups = "drop"
+  )
+
+# Combine estimates
+estimated_params <- true_params %>%
+  left_join(
+    data.frame(education = names(baseline_est), baseline_est = as.numeric(baseline_est)),
+    by = "education"
+  ) %>%
+  left_join(seasonal_amps, by = "education") %>%
+  left_join(trend_slopes, by = "education")
+
+# Calculate recovery accuracy
+estimated_params <- estimated_params %>%
+  mutate(
+    baseline_error = baseline_est - baseline_true,
+    seasonal_error = seasonal_amp_est - seasonal_amp_true,
+    trend_error = trend_slope_est - trend_slope_true
+  )
+
+# Display comparison table
+kable(estimated_params %>%
+        select(education,
+               baseline_true, baseline_est, baseline_error,
+               seasonal_amp_true, seasonal_amp_est, seasonal_error,
+               trend_slope_true, trend_slope_est, trend_error),
+      digits = 6,
+      caption = "True vs Estimated Parameters: Single Simulation Example")
+
+cat("\n**Parameter Recovery Summary**:\n")
+cat(sprintf("- Max absolute baseline error: %.6f\n", max(abs(estimated_params$baseline_error))))
+cat(sprintf("- Max absolute seasonal amplitude error: %.6f\n", max(abs(estimated_params$seasonal_error))))
+cat(sprintf("- Max absolute trend slope error: %.6f\n", max(abs(estimated_params$trend_error))))
+```
+
 The core question this report addresses is: **Can we trust the confidence intervals for differences between education levels?** Tests 3-7 provide comprehensive validation.
 
 ## Test 3: Baseline Difference Coverage Validation {#test3}
@@ -112,7 +272,8 @@ baseline_coverage_results <- validate_difference_coverage(
   noise_sd = 0.002,
   difference_type = "baseline",
   seed = 2024,
-  verbose = TRUE
+  verbose = TRUE,
+  parallel = USE_PARALLEL
 )
 ```
 
@@ -180,7 +341,8 @@ trend_coverage_results <- validate_difference_coverage(
   noise_sd = 0.002,
   difference_type = "trend",
   seed = 2025,
-  verbose = TRUE
+  verbose = TRUE,
+  parallel = USE_PARALLEL
 )
 ```
 
@@ -192,6 +354,29 @@ kable(trend_coverage_results$summary_by_comparison, digits = 6,
 
 cat(sprintf("\n**Overall Coverage Rate**: %.1f%% (target: 95%%)\n",
             100 * trend_coverage_results$overall_coverage_rate))
+
+# Validation checks
+trend_coverage_ok <- trend_coverage_results$overall_coverage_rate >= 0.90 &&
+                     trend_coverage_results$overall_coverage_rate <= 1.00
+trend_bias_ok <- all(abs(trend_coverage_results$summary_by_comparison$bias) < 0.001)
+
+if (trend_coverage_ok && trend_bias_ok) {
+  cat("\n✓ **VALIDATION PASSED**: Trend slope difference CIs have proper coverage and minimal bias\n")
+  cat(sprintf("  - Coverage: %.1f%% (target: 90-100%%)\n",
+              100 * trend_coverage_results$overall_coverage_rate))
+  cat(sprintf("  - Max absolute bias: %.6f (threshold: <0.001)\n",
+              max(abs(trend_coverage_results$summary_by_comparison$bias))))
+} else {
+  cat("\n✗ **VALIDATION FAILED**: Coverage rate or bias outside acceptable range\n")
+  if (!trend_coverage_ok) {
+    cat(sprintf("  - Coverage: %.1f%% (target: 90-100%%)\n",
+                100 * trend_coverage_results$overall_coverage_rate))
+  }
+  if (!trend_bias_ok) {
+    cat(sprintf("  - Max absolute bias: %.6f (threshold: <0.001)\n",
+                max(abs(trend_coverage_results$summary_by_comparison$bias))))
+  }
+}
 ```
 
 ### Bias and Precision
@@ -253,22 +438,50 @@ false_positive_results <- test_false_positive_rate(
 ### Results
 
 ```{r fp-results}
-cat(sprintf("**False Positive Rates** (target: ≤5%%)\n\n"))
-cat(sprintf("- Baseline differences: %.1f%%\n",
+# Calculate expected FP rate for "any difference" test
+# Testing 3 pairs × 2 types = 6 hypotheses per simulation
+n_pairs <- 3
+n_types <- 2
+n_tests <- n_pairs * n_types
+alpha <- 0.05
+expected_fp_any <- 1 - (1 - alpha)^n_tests  # ~26.5%
+
+cat(sprintf("**False Positive Rates**\n\n"))
+cat(sprintf("- Baseline differences: %.1f%% (target: ≤5%%)\n",
             100 * false_positive_results$false_positive_rate_baseline))
-cat(sprintf("- Trend differences: %.1f%%\n",
+cat(sprintf("- Trend differences: %.1f%% (target: ≤5%%)\n",
             100 * false_positive_results$false_positive_rate_trend))
-cat(sprintf("- Any difference: %.1f%%\n",
-            100 * false_positive_results$false_positive_rate_any))
+cat(sprintf("- Any difference: %.1f%% (target: ≤%.1f%% for %d tests)\n",
+            100 * false_positive_results$false_positive_rate_any,
+            100 * expected_fp_any, n_tests))
+cat(sprintf("\n*Note: 'Any difference' tests %d hypotheses per simulation (3 pairs × 2 types).", n_tests))
+cat(sprintf("\nExpected FP rate without correction: 1-(1-%.2f)^%d = %.1f%%\n",
+            alpha, n_tests, 100 * expected_fp_any))
 
-# Validation check
-fp_ok <- (false_positive_results$false_positive_rate_baseline <= 0.10 &&
-          false_positive_results$false_positive_rate_trend <= 0.10)
+# Validation check with correct thresholds
+fp_baseline_ok <- false_positive_results$false_positive_rate_baseline <= 0.10
+fp_trend_ok <- false_positive_results$false_positive_rate_trend <= 0.10
+fp_any_ok <- false_positive_results$false_positive_rate_any <= (expected_fp_any * 1.2)  # Allow 20% wiggle room
 
-if (fp_ok) {
-  cat("\n✓ **VALIDATION PASSED**: False positive rates are acceptably low\n")
+if (fp_baseline_ok && fp_trend_ok && fp_any_ok) {
+  cat("\n✓ **VALIDATION PASSED**: False positive rates within expected ranges\n")
+  cat("  - Individual tests: ≤10%\n")
+  cat(sprintf("  - Multiple testing: ≤%.1f%%\n", 100 * expected_fp_any * 1.2))
 } else {
-  cat("\n✗ **VALIDATION CONCERN**: False positive rates exceed 10%\n")
+  cat("\n✗ **VALIDATION CONCERN**: Some false positive rates exceed thresholds\n")
+  if (!fp_baseline_ok) {
+    cat(sprintf("  - Baseline: %.1f%% (target: ≤10%%)\n",
+                100 * false_positive_results$false_positive_rate_baseline))
+  }
+  if (!fp_trend_ok) {
+    cat(sprintf("  - Trend: %.1f%% (target: ≤10%%)\n",
+                100 * false_positive_results$false_positive_rate_trend))
+  }
+  if (!fp_any_ok) {
+    cat(sprintf("  - Any: %.1f%% (target: ≤%.1f%%)\n",
+                100 * false_positive_results$false_positive_rate_any,
+                100 * expected_fp_any * 1.2))
+  }
 }
 ```
 
@@ -334,7 +547,7 @@ model_selection_results <- validate_model_selection_enhanced(
   ),
   seed = 4000,
   verbose = TRUE,
-  parallel = FALSE  # Sequential to avoid namespace issues in Quarto rendering
+  parallel = USE_PARALLEL  # Set in setup chunk
 )
 ```
 
