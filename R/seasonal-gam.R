@@ -1717,10 +1717,11 @@ extract_education_specific_trend <- function(model, education_level) {
 }
 
 
-#' Compute Differences Between Education-Specific Trends
+#' Compute Differences Between Education-Specific Unemployment LEVELS
 #'
-#' Computes pairwise differences between education-specific trends with
-#' proper uncertainty quantification using the joint model's variance-covariance matrix.
+#' Computes pairwise differences between predicted unemployment rates (levels)
+#' for different education groups, with proper uncertainty quantification using
+#' the joint model's variance-covariance matrix.
 #'
 #' @param model gam object from \code{fit_factor_smooth_gam}
 #' @param education_pairs List of character vectors. Each element is a pair of
@@ -1733,14 +1734,19 @@ extract_education_specific_trend <- function(model, education_level) {
 #' @return Data frame with columns:
 #'   \item{time_index}{Time index}
 #'   \item{comparison}{Character describing the comparison (e.g., "phd - masters")}
-#'   \item{difference}{Estimated difference in unemployment rate}
+#'   \item{difference}{Estimated difference in unemployment rate (percentage points)}
 #'   \item{se}{Standard error of the difference}
 #'   \item{lower}{Lower confidence limit}
 #'   \item{upper}{Upper confidence limit}
 #'   \item{significant}{Logical. Is difference significant at level alpha?}
 #'
 #' @details
-#' This function properly accounts for the correlation between predictions
+#' This function computes differences in predicted unemployment LEVELS:
+#'   diff(t) = f_educ1(t) - f_educ2(t)
+#'
+#' For differences in SLOPES (rates of change), use \code{compute_trend_slope_differences()}.
+#'
+#' The function properly accounts for the correlation between predictions
 #' for different education levels by using the full variance-covariance matrix
 #' from the joint model. This gives correct uncertainty quantification for
 #' differences, unlike taking differences of predictions from separate models.
@@ -1753,8 +1759,8 @@ extract_education_specific_trend <- function(model, education_level) {
 #' \dontrun{
 #' model <- fit_factor_smooth_gam(data, formula_type = "full")
 #'
-#' # Compare PhD to Bachelor's at yearly intervals
-#' diff_results <- compute_trend_differences(
+#' # Compare PhD to Bachelor's unemployment rates at yearly intervals
+#' diff_results <- compute_level_differences(
 #'   model,
 #'   education_pairs = list(c("phd", "bachelors")),
 #'   time_points = seq(1, 300, by = 12)
@@ -1767,8 +1773,10 @@ extract_education_specific_trend <- function(model, education_level) {
 #' abline(h = 0, col = "red")
 #' }
 #'
+#' @seealso \code{\link{compute_trend_slope_differences}} for differences in rates of change
+#'
 #' @export
-compute_trend_differences <- function(model,
+compute_level_differences <- function(model,
                                       education_pairs,
                                       time_points = NULL,
                                       simultaneous = FALSE,
@@ -1848,3 +1856,210 @@ compute_trend_differences <- function(model,
   # Combine all pairs
   do.call(rbind, results_list)
 }
+
+
+#' Compute Differences Between Education-Specific Trend SLOPES
+#'
+#' Computes pairwise differences between the rates of change (derivatives/slopes)
+#' of unemployment trends for different education groups. This uses finite differences
+#' to approximate derivatives and properly accounts for uncertainty.
+#'
+#' @param model gam object from \code{fit_factor_smooth_gam}
+#' @param education_pairs List of character vectors. Each element is a pair of
+#'   education levels to compare (e.g., \code{list(c("phd", "masters"))})
+#' @param time_points Numeric vector. Time index values to evaluate slope differences at.
+#'   If NULL, uses all unique time points from the model.
+#' @param eps Numeric. Step size for finite difference approximation (default: 0.1)
+#' @param simultaneous Logical. Use simultaneous confidence bands? (default: FALSE)
+#' @param alpha Numeric. Significance level (default: 0.05)
+#'
+#' @return Data frame with columns:
+#'   \item{time_index}{Time index}
+#'   \item{comparison}{Character describing the comparison (e.g., "phd - masters")}
+#'   \item{difference}{Estimated difference in unemployment rate slope (pp per month)}
+#'   \item{se}{Standard error of the difference}
+#'   \item{lower}{Lower confidence limit}
+#'   \item{upper}{Upper confidence limit}
+#'   \item{significant}{Logical. Is difference significant at level alpha?}
+#'
+#' @details
+#' This function computes differences in trend SLOPES (rates of change):
+#'   diff(t) = f'_educ1(t) - f'_educ2(t)
+#'
+#' Where f'(t) is the first derivative of unemployment rate with respect to time.
+#'
+#' For differences in LEVELS (unemployment rates themselves), use \code{compute_level_differences()}.
+#'
+#' The derivatives are approximated using central finite differences:
+#'   f'(t) ≈ (f(t + eps) - f(t - eps)) / (2 * eps)
+#'
+#' Standard errors are computed using the delta method with the full variance-covariance
+#' matrix from the joint model.
+#'
+#' For parameter recovery validation, when simulated trends are linear with slope β,
+#' this function estimates β, while \code{compute_level_differences()} estimates
+#' the level difference at a specific time point.
+#'
+#' @examples
+#' \dontrun{
+#' model <- fit_factor_smooth_gam(data, formula_type = "full")
+#'
+#' # Compare PhD to Bachelor's trend slopes at yearly intervals
+#' slope_diffs <- compute_trend_slope_differences(
+#'   model,
+#'   education_pairs = list(c("phd", "bachelors")),
+#'   time_points = seq(1, 300, by = 12)
+#' )
+#'
+#' # Plot slope differences with confidence bands
+#' plot(slope_diffs$time_index, slope_diffs$difference, type = "l",
+#'      ylab = "Difference in monthly trend (pp/month)")
+#' lines(slope_diffs$time_index, slope_diffs$lower, lty = 2)
+#' lines(slope_diffs$time_index, slope_diffs$upper, lty = 2)
+#' abline(h = 0, col = "red")
+#' }
+#'
+#' @seealso \code{\link{compute_level_differences}} for differences in unemployment levels
+#'
+#' @export
+compute_trend_slope_differences <- function(model,
+                                            education_pairs,
+                                            time_points = NULL,
+                                            eps = 0.1,
+                                            simultaneous = FALSE,
+                                            alpha = 0.05) {
+
+  education_var <- attr(model, "education_var")
+  if (is.null(education_var)) {
+    education_var <- "education"
+  }
+
+  # Use all time points if not specified
+  if (is.null(time_points)) {
+    time_points <- sort(unique(model$model$time_index))
+  }
+
+  # Remove time points too close to boundaries for central differences
+  time_points_orig <- time_points
+  time_points <- time_points[time_points >= min(model$model$time_index) + eps &
+                             time_points <= max(model$model$time_index) - eps]
+
+  # If no valid time points remain, error with helpful message
+  if (length(time_points) == 0) {
+    stop(sprintf(paste0(
+      "No valid time points remain after boundary filtering. ",
+      "Requested time_points: %s. ",
+      "Valid range: [%.2f, %.2f] with eps=%.2f. ",
+      "Try using time_points farther from boundaries or smaller eps."
+    ),
+    paste(time_points_orig, collapse=", "),
+    min(model$model$time_index) + eps,
+    max(model$model$time_index) - eps,
+    eps))
+  }
+
+  # Process each education pair
+  results_list <- lapply(education_pairs, function(pair) {
+    # Create prediction data at t-eps, t, and t+eps for both education levels
+    # Fix month at June (6) to isolate trend component
+    n <- length(time_points)
+
+    # Data for education 1
+    newdata_1_minus <- data.frame(
+      time_index = time_points - eps,
+      month = 6,
+      education = pair[1],
+      stringsAsFactors = FALSE
+    )
+    newdata_1_plus <- data.frame(
+      time_index = time_points + eps,
+      month = 6,
+      education = pair[1],
+      stringsAsFactors = FALSE
+    )
+
+    # Data for education 2
+    newdata_2_minus <- data.frame(
+      time_index = time_points - eps,
+      month = 6,
+      education = pair[2],
+      stringsAsFactors = FALSE
+    )
+    newdata_2_plus <- data.frame(
+      time_index = time_points + eps,
+      month = 6,
+      education = pair[2],
+      stringsAsFactors = FALSE
+    )
+
+    # Fix column name
+    names(newdata_1_minus)[3] <- education_var
+    names(newdata_1_plus)[3] <- education_var
+    names(newdata_2_minus)[3] <- education_var
+    names(newdata_2_plus)[3] <- education_var
+
+    # Combine all prediction data
+    newdata <- rbind(
+      newdata_1_minus,
+      newdata_1_plus,
+      newdata_2_minus,
+      newdata_2_plus
+    )
+
+    # Get linear predictor matrix
+    X <- predict(model, newdata = newdata, type = "lpmatrix")
+
+    # Extract rows for each group
+    X_1_minus <- X[1:n, , drop = FALSE]
+    X_1_plus <- X[(n + 1):(2 * n), , drop = FALSE]
+    X_2_minus <- X[(2 * n + 1):(3 * n), , drop = FALSE]
+    X_2_plus <- X[(3 * n + 1):(4 * n), , drop = FALSE]
+
+    # Compute derivative contrasts using central differences
+    # deriv_1 = (f_1(t+eps) - f_1(t-eps)) / (2*eps)
+    # deriv_2 = (f_2(t+eps) - f_2(t-eps)) / (2*eps)
+    # difference = deriv_1 - deriv_2
+    C_deriv_1 <- (X_1_plus - X_1_minus) / (2 * eps)
+    C_deriv_2 <- (X_2_plus - X_2_minus) / (2 * eps)
+    C <- C_deriv_1 - C_deriv_2
+
+    # Get slope difference estimates
+    diff <- as.numeric(C %*% coef(model))
+
+    # Variance of difference using full variance-covariance matrix
+    V <- vcov(model)
+    se <- sqrt(rowSums((C %*% V) * C))
+
+    # Compute confidence intervals
+    if (simultaneous) {
+      # Bonferroni correction for multiple comparisons
+      n_comparisons <- n * length(education_pairs)
+      crit <- qnorm(1 - alpha / (2 * n_comparisons))
+    } else {
+      # Pointwise confidence intervals
+      crit <- qnorm(1 - alpha / 2)
+    }
+
+    lower <- diff - crit * se
+    upper <- diff + crit * se
+    significant <- abs(diff) > crit * se
+
+    data.frame(
+      time_index = time_points,
+      comparison = paste(pair[1], "-", pair[2]),
+      difference = diff,
+      se = se,
+      lower = lower,
+      upper = upper,
+      significant = significant,
+      stringsAsFactors = FALSE
+    )
+  })
+
+  # Combine all pairs
+  do.call(rbind, results_list)
+}
+
+#' @rdname compute_level_differences
+#' @export
+compute_trend_differences <- compute_level_differences
