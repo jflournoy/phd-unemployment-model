@@ -85,10 +85,11 @@ All have the same trend (slight negative) to isolate seasonal recovery.
 
 ```{r sim-seasonal}
 # Simulate data with different seasonal amplitudes
+# Boundary-safe parameters: PhD min = 0.040 - 0.005 + (-0.0001*180) - 0.006 = 0.011 (safe!)
 sim_seasonal <- simulate_multi_education_unemployment(
   n_years = 15,
   education_levels = c("phd", "masters", "bachelors"),
-  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+  baseline_rates = c(phd = 0.040, masters = 0.050, bachelors = 0.060),
   seasonal_amplitudes = c(phd = 0.005, masters = 0.012, bachelors = 0.020),
   trend_slopes = c(phd = -0.0001, masters = -0.0001, bachelors = -0.0001),
   noise_sd = 0.002,
@@ -234,10 +235,14 @@ We simulate 15 years with **different trend slopes**:
 All have the same moderate seasonal amplitude to isolate trend recovery.
 
 ```{r sim-trend}
+# Boundary-safe parameters
+# PhD: 0.042 - 0.010 + (-0.0001*180) - 0.006 = 0.042 - 0.010 - 0.018 - 0.006 = 0.008 (safe!)
+# Masters: 0.075 - 0.010 + (-0.0003*180) - 0.006 = 0.075 - 0.010 - 0.054 - 0.006 = 0.005 (safe!)
+# Bachelors: 0.115 - 0.010 + (-0.0005*180) - 0.006 = 0.115 - 0.010 - 0.090 - 0.006 = 0.009 (safe!)
 sim_trend <- simulate_multi_education_unemployment(
   n_years = 15,
   education_levels = c("phd", "masters", "bachelors"),
-  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+  baseline_rates = c(phd = 0.042, masters = 0.075, bachelors = 0.115),
   seasonal_amplitudes = c(phd = 0.010, masters = 0.010, bachelors = 0.010),
   trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),
   noise_sd = 0.002,
@@ -372,10 +377,11 @@ When only seasonal patterns differ (shared trend), does model selection prefer t
 
 ```{r model-selection-seasonal}
 # Simulate with only seasonal differences
+# Boundary-safe: no trend, Bachelor's min = 0.065 - 0.025 - 0.006 = 0.034 (safe!)
 sim_seasonal_only <- simulate_multi_education_unemployment(
   n_years = 15,
   education_levels = c("phd", "masters", "bachelors"),
-  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+  baseline_rates = c(phd = 0.040, masters = 0.050, bachelors = 0.065),
   seasonal_amplitudes = c(phd = 0.005, masters = 0.015, bachelors = 0.025),
   trend_slopes = c(phd = 0, masters = 0, bachelors = 0),  # Same (no trend)!
   noise_sd = 0.002,
@@ -398,10 +404,11 @@ kable(aic_seasonal, digits = 2,
 When only trends differ (shared seasonality), does model selection prefer the correct model?
 
 ```{r model-selection-trend}
+# Boundary-safe: same as main trend test
 sim_trend_only <- simulate_multi_education_unemployment(
   n_years = 15,
   education_levels = c("phd", "masters", "bachelors"),
-  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+  baseline_rates = c(phd = 0.042, masters = 0.075, bachelors = 0.115),
   seasonal_amplitudes = c(phd = 0.010, masters = 0.010, bachelors = 0.010),  # Same!
   trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),
   noise_sd = 0.002,
@@ -421,10 +428,11 @@ kable(aic_trend, digits = 2,
 When both seasonal and trend patterns differ, does model selection prefer the full model?
 
 ```{r model-selection-full}
+# Boundary-safe: Bachelor's min = 0.125 - 0.025 + (-0.0005*180) - 0.006 = 0.004 (safe!)
 sim_both <- simulate_multi_education_unemployment(
   n_years = 15,
   education_levels = c("phd", "masters", "bachelors"),
-  baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+  baseline_rates = c(phd = 0.042, masters = 0.075, bachelors = 0.125),
   seasonal_amplitudes = c(phd = 0.005, masters = 0.015, bachelors = 0.025),
   trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),
   noise_sd = 0.002,
@@ -525,30 +533,33 @@ set.seed(20251113)
 # Function to run one simulation and return top model
 run_model_selection_sim <- function(scenario, sim_id) {
   if (scenario == "seasonal_only") {
+    # Boundary-safe: no trend, so baseline - amplitude - 3*noise = 0.040 - 0.025 - 0.006 = 0.009 (safe!)
     sim_data <- simulate_multi_education_unemployment(
       n_years = 15,
       education_levels = c("phd", "masters", "bachelors"),
-      baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+      baseline_rates = c(phd = 0.040, masters = 0.050, bachelors = 0.065),
       seasonal_amplitudes = c(phd = 0.005, masters = 0.015, bachelors = 0.025),
       trend_slopes = c(phd = 0, masters = 0, bachelors = 0),
       noise_sd = 0.002,
       seed = 1000 + sim_id
     )
   } else if (scenario == "trend_only") {
+    # Boundary-safe: Bachelor's min = 0.105 - 0.010 + (-0.0005*180) - 0.006 = 0.099 - 0.096 = 0.003 → need higher!
     sim_data <- simulate_multi_education_unemployment(
       n_years = 15,
       education_levels = c("phd", "masters", "bachelors"),
-      baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+      baseline_rates = c(phd = 0.042, masters = 0.070, bachelors = 0.115),
       seasonal_amplitudes = c(phd = 0.010, masters = 0.010, bachelors = 0.010),
       trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),
       noise_sd = 0.002,
       seed = 2000 + sim_id
     )
   } else {  # both
+    # Boundary-safe: Bachelor's min = 0.115 - 0.025 + (-0.0005*180) - 0.006 = 0.090 - 0.096 = -0.006 → need 0.125!
     sim_data <- simulate_multi_education_unemployment(
       n_years = 15,
       education_levels = c("phd", "masters", "bachelors"),
-      baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+      baseline_rates = c(phd = 0.042, masters = 0.075, bachelors = 0.125),
       seasonal_amplitudes = c(phd = 0.005, masters = 0.015, bachelors = 0.025),
       trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),
       noise_sd = 0.002,
