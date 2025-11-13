@@ -818,3 +818,163 @@ test_that("REGRESSION: all education levels have non-zero recovery", {
     label = "Bachelor's amplitude recovery error should be < 50%"
   )
 })
+
+
+# ==============================================================================
+# Test Suite 9: Regression Tests for fit_nested_model_sequence Bug
+# ==============================================================================
+
+test_that("REGRESSION: fit_nested_model_sequence models m4, m5, m6 include education factor", {
+  # This test would have caught BUG 4: Missing education factor in nested model sequence
+  # Models m4, m5, m6 were missing the education main effect, causing them to have
+  # only global intercepts and fail to properly distinguish education levels
+
+  sim_data <- create_multi_education_sim_data(n_months = 100)
+
+  # Fit nested model sequence
+  models <- fit_nested_model_sequence(sim_data)
+
+  # Test m4: education-specific trends + shared seasonality
+  m4_formula <- as.character(formula(models$m4))
+  expect_true(
+    grepl("education", m4_formula[3]),
+    label = "m4 formula should include education main effect"
+  )
+  expect_true(
+    any(grepl("education", names(coef(models$m4)))),
+    label = "m4 should have education-specific coefficients"
+  )
+
+  # Test m5: shared trend + education-specific seasonality
+  m5_formula <- as.character(formula(models$m5))
+  expect_true(
+    grepl("education", m5_formula[3]),
+    label = "m5 formula should include education main effect"
+  )
+  expect_true(
+    any(grepl("education", names(coef(models$m5)))),
+    label = "m5 should have education-specific coefficients"
+  )
+
+  # Test m6: full model (education-specific trends + seasonality)
+  m6_formula <- as.character(formula(models$m6))
+  expect_true(
+    grepl("education", m6_formula[3]),
+    label = "m6 formula should include education main effect"
+  )
+  expect_true(
+    any(grepl("education", names(coef(models$m6)))),
+    label = "m6 should have education-specific coefficients"
+  )
+})
+
+test_that("REGRESSION: model selection identifies correct structure with education effects", {
+  # This test verifies that with the education factor included, model selection
+  # correctly identifies the underlying data structure
+
+  # Scenario 1: Only seasonal differences (should prefer m5)
+  sim_seasonal_only <- simulate_multi_education_unemployment(
+    n_years = 10,
+    education_levels = c("phd", "masters", "bachelors"),
+    baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+    seasonal_amplitudes = c(phd = 0.005, masters = 0.015, bachelors = 0.025),  # Different!
+    trend_slopes = c(phd = 0, masters = 0, bachelors = 0),  # Same (no trend)
+    noise_sd = 0.002,
+    seed = 42
+  )
+
+  models_seasonal <- fit_nested_model_sequence(sim_seasonal_only)
+  aic_seasonal <- compare_nested_models(models_seasonal)
+
+  # m5 (education-specific seasonality) or m6 (full) should be in top 2
+  # (m6 might be close due to flexibility, but m5 should be competitive)
+  top_2 <- aic_seasonal$model[1:2]
+  expect_true(
+    "m5" %in% top_2 || "m6" %in% top_2,
+    label = "m5 or m6 should be in top 2 when only seasonality differs by education"
+  )
+
+  # Scenario 2: Only trend differences (should prefer m4)
+  sim_trend_only <- simulate_multi_education_unemployment(
+    n_years = 10,
+    education_levels = c("phd", "masters", "bachelors"),
+    baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+    seasonal_amplitudes = c(phd = 0.010, masters = 0.010, bachelors = 0.010),  # Same
+    trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),  # Different!
+    noise_sd = 0.002,
+    seed = 43
+  )
+
+  models_trend <- fit_nested_model_sequence(sim_trend_only)
+  aic_trend <- compare_nested_models(models_trend)
+
+  # m4 (education-specific trends) or m6 (full) should be in top 2
+  top_2_trend <- aic_trend$model[1:2]
+  expect_true(
+    "m4" %in% top_2_trend || "m6" %in% top_2_trend,
+    label = "m4 or m6 should be in top 2 when only trends differ by education"
+  )
+
+  # Scenario 3: Both differ (should prefer m6)
+  sim_both <- simulate_multi_education_unemployment(
+    n_years = 10,
+    education_levels = c("phd", "masters", "bachelors"),
+    baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+    seasonal_amplitudes = c(phd = 0.005, masters = 0.015, bachelors = 0.025),  # Different
+    trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005),  # Different
+    noise_sd = 0.002,
+    seed = 44
+  )
+
+  models_both <- fit_nested_model_sequence(sim_both)
+  aic_both <- compare_nested_models(models_both)
+
+  # m6 (full) should be best model
+  expect_equal(
+    aic_both$model[1],
+    "m6",
+    label = "m6 should be best when both trends and seasonality differ by education"
+  )
+})
+
+test_that("REGRESSION: nested models with education factor distinguish education levels", {
+  # Integration test: Verifies that with education factor included, models can
+  # actually distinguish between education levels and recover different patterns
+
+  sim_data <- simulate_multi_education_unemployment(
+    n_years = 10,
+    education_levels = c("low", "high"),
+    baseline_rates = c(low = 0.08, high = 0.02),  # Very different
+    seasonal_amplitudes = c(low = 0.005, high = 0.025),  # Very different
+    trend_slopes = c(low = 0.0005, high = -0.001),  # Opposite directions
+    noise_sd = 0.001,
+    seed = 45
+  )
+
+  models <- fit_nested_model_sequence(sim_data)
+
+  # Test m6 (full model) can distinguish education levels
+  # Extract predictions for each education level at fixed time points
+  newdata <- expand.grid(
+    time_index = 60,  # Midpoint
+    month = 6,  # June
+    education = c("low", "high")
+  )
+
+  pred_m6 <- predict(models$m6, newdata = newdata, type = "response")
+
+  # Predictions should be very different between low and high education
+  # (low has higher baseline: 0.08 vs 0.02)
+  expect_gt(
+    pred_m6[1],  # low education
+    pred_m6[2],  # high education
+    label = "m6 should predict higher unemployment for low education (higher baseline)"
+  )
+
+  # Difference should be substantial (at least 0.03 pp)
+  expect_gt(
+    pred_m6[1] - pred_m6[2],
+    0.03,
+    label = "m6 should show substantial difference between education levels"
+  )
+})
