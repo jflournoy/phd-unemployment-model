@@ -634,3 +634,187 @@ test_that("compare_unemployment_factor_smooth integrates with data processing", 
   # This test will use actual CPS data to ensure integration works
   # Will test after implementing the function
 })
+
+
+# ==============================================================================
+# Test Suite 8: Regression Tests for Critical Bugs
+# ==============================================================================
+
+test_that("REGRESSION: formulas include education factor for education-specific terms", {
+  # This test would have caught BUG 1: Missing education factor in formulas
+  # Without the education factor, models have only global intercept, causing
+  # 100% recovery errors for Masters and Bachelors
+
+  sim_data <- create_multi_education_sim_data(n_months = 100)
+
+  # Test each formula type that should have education-specific components
+  formula_types <- c("seasonal_by_education", "trend_by_education", "full")
+
+  for (ftype in formula_types) {
+    model <- fit_factor_smooth_gam(sim_data, formula_type = ftype)
+
+    # Check that formula includes education term
+    formula_str <- as.character(formula(model))
+    expect_true(
+      grepl("education", formula_str[3]),  # RHS of formula
+      info = paste("Formula type", ftype, "should include education term")
+    )
+
+    # Check that model has education-specific coefficients
+    # (Should have intercepts for each education level)
+    coef_names <- names(coef(model))
+    expect_true(
+      any(grepl("education", coef_names)),
+      info = paste("Model", ftype, "should have education-specific coefficients")
+    )
+  }
+})
+
+test_that("REGRESSION: extract_education_specific_seasonal returns correct education", {
+  # This test would have caught BUG 2: Wrong column extraction in seasonal function
+  # Function was always returning PhD's column regardless of education_level parameter
+
+  sim_data <- create_multi_education_sim_data(
+    n_months = 120,
+    seasonal_amplitudes = c(phd = 0.002, masters = 0.020, bachelors = 0.010)  # Very different!
+  )
+
+  model <- fit_factor_smooth_gam(sim_data, formula_type = "full")
+
+  # Extract for each education level
+  seas_phd <- extract_education_specific_seasonal(model, "phd")
+  seas_masters <- extract_education_specific_seasonal(model, "masters")
+  seas_bachelors <- extract_education_specific_seasonal(model, "bachelors")
+
+  # Compute amplitudes
+  amp_phd <- (max(seas_phd$seasonal_effect) - min(seas_phd$seasonal_effect)) / 2
+  amp_masters <- (max(seas_masters$seasonal_effect) - min(seas_masters$seasonal_effect)) / 2
+  amp_bachelors <- (max(seas_bachelors$seasonal_effect) - min(seas_bachelors$seasonal_effect)) / 2
+
+  # CRITICAL TEST: Masters should have LARGEST amplitude (0.020)
+  # If bug exists, all would return PhD's amplitude (0.002)
+  expect_gt(
+    amp_masters,
+    amp_phd,
+    label = "Masters amplitude should be larger than PhD (verifies correct column extraction)"
+  )
+
+  expect_gt(
+    amp_masters,
+    amp_bachelors,
+    label = "Masters amplitude should be larger than Bachelor's"
+  )
+
+  # Amplitudes should be non-zero for all education levels
+  expect_gt(amp_phd, 0, label = "PhD should have non-zero seasonal amplitude")
+  expect_gt(amp_masters, 0, label = "Masters should have non-zero seasonal amplitude")
+  expect_gt(amp_bachelors, 0, label = "Bachelors should have non-zero seasonal amplitude")
+})
+
+test_that("REGRESSION: extract_education_specific_trend returns correct education", {
+  # This test would have caught BUG 3: Wrong column extraction in trend function
+  # Function was always returning PhD's column regardless of education_level parameter
+
+  sim_data <- create_multi_education_sim_data(
+    n_months = 120,
+    trend_slopes = c(phd = 0.0001, masters = -0.0005, bachelors = 0.0003)  # Very different slopes!
+  )
+
+  model <- fit_factor_smooth_gam(sim_data, formula_type = "full")
+
+  # Extract trends
+  trend_phd <- extract_education_specific_trend(model, "phd")
+  trend_masters <- extract_education_specific_trend(model, "masters")
+  trend_bachelors <- extract_education_specific_trend(model, "bachelors")
+
+  # Estimate slopes from first and last 20% of data
+  estimate_slope <- function(trend_df) {
+    n <- nrow(trend_df)
+    n_segment <- max(20, floor(n * 0.2))
+    early_mean <- mean(trend_df$trend_effect[1:n_segment])
+    late_mean <- mean(trend_df$trend_effect[(n - n_segment + 1):n])
+    time_diff <- mean(trend_df$time_index[(n - n_segment + 1):n]) -
+                 mean(trend_df$time_index[1:n_segment])
+    (late_mean - early_mean) / time_diff
+  }
+
+  slope_phd <- estimate_slope(trend_phd)
+  slope_masters <- estimate_slope(trend_masters)
+  slope_bachelors <- estimate_slope(trend_bachelors)
+
+  # CRITICAL TEST: Masters should have NEGATIVE slope, others POSITIVE
+  # If bug exists, all would return PhD's slope (0.0001 positive)
+  expect_lt(
+    slope_masters,
+    0,
+    label = "Masters should have negative slope (verifies correct column extraction)"
+  )
+
+  expect_gt(
+    slope_phd,
+    0,
+    label = "PhD should have positive slope"
+  )
+
+  expect_gt(
+    slope_bachelors,
+    0,
+    label = "Bachelor's should have positive slope"
+  )
+
+  # Masters slope should be most negative
+  expect_lt(
+    slope_masters,
+    slope_phd - 0.0002,
+    label = "Masters slope should be substantially more negative than PhD"
+  )
+})
+
+test_that("REGRESSION: all education levels have non-zero recovery", {
+  # Integration test: Verifies that all three bugs are fixed
+  # Would catch any regression where Masters/Bachelors return zeros
+
+  sim_data <- create_multi_education_sim_data(
+    n_months = 150,
+    baseline_rates = c(phd = 0.025, masters = 0.035, bachelors = 0.045),
+    seasonal_amplitudes = c(phd = 0.008, masters = 0.015, bachelors = 0.022),
+    trend_slopes = c(phd = -0.0001, masters = -0.0003, bachelors = -0.0005)
+  )
+
+  true_amps <- attr(sim_data, "true_seasonal_amplitude")
+  true_slopes <- attr(sim_data, "true_trend_slope")
+
+  model <- fit_factor_smooth_gam(sim_data, formula_type = "full")
+
+  # Extract seasonal for all levels
+  seas_phd <- extract_education_specific_seasonal(model, "phd")
+  seas_masters <- extract_education_specific_seasonal(model, "masters")
+  seas_bachelors <- extract_education_specific_seasonal(model, "bachelors")
+
+  # Compute amplitudes
+  amp_phd <- (max(seas_phd$seasonal_effect) - min(seas_phd$seasonal_effect)) / 2
+  amp_masters <- (max(seas_masters$seasonal_effect) - min(seas_masters$seasonal_effect)) / 2
+  amp_bachelors <- (max(seas_bachelors$seasonal_effect) - min(seas_bachelors$seasonal_effect)) / 2
+
+  # CRITICAL: None should be zero (would indicate bug regression)
+  expect_gt(amp_phd, 0.001, label = "PhD amplitude should be non-negligible")
+  expect_gt(amp_masters, 0.001, label = "Masters amplitude should be non-negligible")
+  expect_gt(amp_bachelors, 0.001, label = "Bachelor's amplitude should be non-negligible")
+
+  # Check recovery quality (should be within 50% of true value)
+  expect_lt(
+    abs(amp_phd - true_amps["phd"]) / true_amps["phd"],
+    0.50,
+    label = "PhD amplitude recovery error should be < 50%"
+  )
+  expect_lt(
+    abs(amp_masters - true_amps["masters"]) / true_amps["masters"],
+    0.50,
+    label = "Masters amplitude recovery error should be < 50%"
+  )
+  expect_lt(
+    abs(amp_bachelors - true_amps["bachelors"]) / true_amps["bachelors"],
+    0.50,
+    label = "Bachelor's amplitude recovery error should be < 50%"
+  )
+})
