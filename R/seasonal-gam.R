@@ -1401,19 +1401,19 @@ fit_factor_smooth_gam <- function(data,
     )),
 
     "seasonal_by_education" = as.formula(paste0(
-      "unemployment_rate ~ ",
+      "unemployment_rate ~ ", education_var, " + ",
       "s(time_index, bs='cr', k=", k_trend, ") + ",
       "s(month, by=", education_var, ", bs='cc', k=", k_month, ")"
     )),
 
     "trend_by_education" = as.formula(paste0(
-      "unemployment_rate ~ ",
+      "unemployment_rate ~ ", education_var, " + ",
       "s(time_index, by=", education_var, ", bs='cr', k=", k_trend, ") + ",
       "s(month, bs='cc', k=", k_month, ")"
     )),
 
     "full" = as.formula(paste0(
-      "unemployment_rate ~ ",
+      "unemployment_rate ~ ", education_var, " + ",
       "s(time_index, by=", education_var, ", bs='cr', k=", k_trend, ") + ",
       "s(month, by=", education_var, ", bs='cc', k=", k_month, ")"
     ))
@@ -1592,11 +1592,12 @@ extract_education_specific_seasonal <- function(model, education_level) {
   # Get predictions with SE
   pred <- predict(model, newdata = newdata, type = "terms", se.fit = TRUE)
 
-  # Find the month smooth column
-  month_col_idx <- grep("month", colnames(pred$fit))
+  # Find the month smooth column for this specific education level
+  month_pattern <- paste0("month.*", education_level)
+  month_col_idx <- grep(month_pattern, colnames(pred$fit))
 
   if (length(month_col_idx) == 0) {
-    # No month smooth - return zeros
+    # No month smooth for this education - return zeros
     return(data.frame(
       month = 1:12,
       seasonal_effect = 0,
@@ -1660,11 +1661,12 @@ extract_education_specific_trend <- function(model, education_level) {
   # Get predictions with SE
   pred <- predict(model, newdata = newdata, type = "terms", se.fit = TRUE)
 
-  # Find the time_index smooth column
-  trend_col_idx <- grep("time_index", colnames(pred$fit))
+  # Find the time_index smooth column for this specific education level
+  trend_pattern <- paste0("time_index.*", education_level)
+  trend_col_idx <- grep(trend_pattern, colnames(pred$fit))
 
   if (length(trend_col_idx) == 0) {
-    # No trend smooth - return zeros
+    # No trend smooth for this education - return zeros
     return(data.frame(
       time_index = time_points,
       trend_effect = 0,
