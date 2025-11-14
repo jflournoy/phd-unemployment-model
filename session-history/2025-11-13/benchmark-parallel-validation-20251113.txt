@@ -1,0 +1,24 @@
+here() starts at /home/rstudio/code/phd-unemployment-model
+ℹ Loading phdunemployment
+
+=== Parallel Processing Benchmark ===
+
+Testing with smaller n_sims for faster benchmarking
+Available cores: 20
+Using cores: 19
+
+Running SEQUENTIAL validation (50 simulations)...
+Sequential time: 7.73 seconds
+
+=== PERFORMANCE ESTIMATES ===
+Measured sequential time: 7.73 seconds (50 sims)
+Time per simulation: 0.155 seconds
+
+Estimated time for 300 simulations:
+  Sequential: 0.8 minutes
+  Parallel (19 cores): 0.1 minutes (estimated)
+  Estimated speedup: 13.3x
+  Time saved: 0.7 minutes
+
+Note: Parallel processing in dev mode requires package installation.
+In production (with installed package), actual speedup should be ~70%% of core count.
