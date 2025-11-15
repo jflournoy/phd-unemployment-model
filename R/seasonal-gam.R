@@ -1361,10 +1361,16 @@ validate_parameter_recovery_coverage <- function(model, data, true_params,
 #' @param education_var Character. Name of education factor variable (default: "education")
 #' @param k_month Integer. Basis dimension for month smooth (default: 10)
 #' @param k_trend Integer. Basis dimension for time_index smooth (default: 20)
+#' @param shared_wiggliness Logical. If TRUE (default), uses same smoothing parameter
+#'   across all education levels via \code{id=} argument. This ensures all groups have
+#'   the same degree of wiggliness, making visual comparisons more appropriate.
+#'   If FALSE, each education level gets its own smoothing parameter, allowing
+#'   different degrees of smoothness.
 #'
 #' @return mgcv GAM model object with additional attributes:
 #'   \item{formula_type}{The model specification used}
 #'   \item{education_var}{Name of the education variable}
+#'   \item{shared_wiggliness}{Whether smoothing parameters are shared}
 #'
 #' @details
 #' This function fits a joint model for all education levels, which has several
@@ -1377,7 +1383,11 @@ validate_parameter_recovery_coverage <- function(model, data, true_params,
 #' }
 #'
 #' The factor smooth approach uses mgcv's \code{by=} argument to create
-#' education-specific smooths that share a common smoothness penalty structure.
+#' education-specific smooths. When \code{shared_wiggliness = TRUE} (recommended),
+#' the \code{id=} argument is used to share smoothing parameters across all factor
+#' levels, ensuring consistent wiggliness. This prevents some education levels from
+#' being over-smoothed while others are under-smoothed, which would make visual
+#' comparisons misleading.
 #'
 #' Model selection should compare nested specifications using AIC or
 #' cross-validation to determine the appropriate level of complexity.
@@ -1407,7 +1417,8 @@ fit_factor_smooth_gam <- function(data,
                                    formula_type = "full",
                                    education_var = "education",
                                    k_month = 10,
-                                   k_trend = 20) {
+                                   k_trend = 20,
+                                   shared_wiggliness = TRUE) {
 
   # Validate inputs
   if (!formula_type %in% c("shared", "seasonal_by_education", "trend_by_education", "full")) {
@@ -1424,6 +1435,7 @@ fit_factor_smooth_gam <- function(data,
   data[[education_var]] <- as.factor(data[[education_var]])
 
   # Build formula based on type
+  # When shared_wiggliness = TRUE, use id= to share smoothing parameters across factor levels
   formula <- switch(formula_type,
     "shared" = as.formula(paste0(
       "unemployment_rate ~ ", education_var, " + ",
@@ -1431,23 +1443,47 @@ fit_factor_smooth_gam <- function(data,
       "s(month, bs='cc', k=", k_month, ")"
     )),
 
-    "seasonal_by_education" = as.formula(paste0(
-      "unemployment_rate ~ ", education_var, " + ",
-      "s(time_index, bs='cr', k=", k_trend, ") + ",
-      "s(month, by=", education_var, ", bs='cc', k=", k_month, ")"
-    )),
+    "seasonal_by_education" = if (shared_wiggliness) {
+      as.formula(paste0(
+        "unemployment_rate ~ ", education_var, " + ",
+        "s(time_index, bs='cr', k=", k_trend, ") + ",
+        "s(month, by=", education_var, ", bs='cc', k=", k_month, ", id=1)"
+      ))
+    } else {
+      as.formula(paste0(
+        "unemployment_rate ~ ", education_var, " + ",
+        "s(time_index, bs='cr', k=", k_trend, ") + ",
+        "s(month, by=", education_var, ", bs='cc', k=", k_month, ")"
+      ))
+    },
 
-    "trend_by_education" = as.formula(paste0(
-      "unemployment_rate ~ ", education_var, " + ",
-      "s(time_index, by=", education_var, ", bs='cr', k=", k_trend, ") + ",
-      "s(month, bs='cc', k=", k_month, ")"
-    )),
+    "trend_by_education" = if (shared_wiggliness) {
+      as.formula(paste0(
+        "unemployment_rate ~ ", education_var, " + ",
+        "s(time_index, by=", education_var, ", bs='cr', k=", k_trend, ", id=1) + ",
+        "s(month, bs='cc', k=", k_month, ")"
+      ))
+    } else {
+      as.formula(paste0(
+        "unemployment_rate ~ ", education_var, " + ",
+        "s(time_index, by=", education_var, ", bs='cr', k=", k_trend, ") + ",
+        "s(month, bs='cc', k=", k_month, ")"
+      ))
+    },
 
-    "full" = as.formula(paste0(
-      "unemployment_rate ~ ", education_var, " + ",
-      "s(time_index, by=", education_var, ", bs='cr', k=", k_trend, ") + ",
-      "s(month, by=", education_var, ", bs='cc', k=", k_month, ")"
-    ))
+    "full" = if (shared_wiggliness) {
+      as.formula(paste0(
+        "unemployment_rate ~ ", education_var, " + ",
+        "s(time_index, by=", education_var, ", bs='cr', k=", k_trend, ", id=1) + ",
+        "s(month, by=", education_var, ", bs='cc', k=", k_month, ", id=2)"
+      ))
+    } else {
+      as.formula(paste0(
+        "unemployment_rate ~ ", education_var, " + ",
+        "s(time_index, by=", education_var, ", bs='cr', k=", k_trend, ") + ",
+        "s(month, by=", education_var, ", bs='cc', k=", k_month, ")"
+      ))
+    }
   )
 
   # Fit model using REML for smoothness selection
@@ -1456,6 +1492,7 @@ fit_factor_smooth_gam <- function(data,
   # Store metadata as attributes
   attr(model, "formula_type") <- formula_type
   attr(model, "education_var") <- education_var
+  attr(model, "shared_wiggliness") <- shared_wiggliness
 
   return(model)
 }
