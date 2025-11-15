@@ -132,6 +132,8 @@ models/*.RData
 _site/
 _book/
 *.qmd.html
+*_cache/
+*_files/
 
 # renv (R package management)
 renv/library/
