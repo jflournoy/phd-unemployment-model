@@ -1,0 +1,8 @@
+{
+  "checkInterval": 300000,
+  "notifications": {
+    "desktop": true,
+    "sound": true
+  },
+  "testsOnly": false
+}

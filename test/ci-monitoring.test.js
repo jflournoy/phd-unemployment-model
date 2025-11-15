@@ -30,32 +30,32 @@ describe('CI Monitoring Features', () => {
   });
 
   describe('Option 2: Desktop Notifications', () => {
-    const configPath = path.join(__dirname, '..', '.monitor-config.json');
-    
+    const configExamplePath = path.join(__dirname, '..', '.monitor-config.example.json');
+
     it('should have monitor config file', () => {
-      assert.ok(fs.existsSync(configPath), '.monitor-config.json should exist');
+      assert.ok(fs.existsSync(configExamplePath), '.monitor-config.example.json should exist');
     });
 
     it('should have desktop notifications enabled', () => {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      const config = JSON.parse(fs.readFileSync(configExamplePath, 'utf8'));
       assert.strictEqual(
-        config.notifications.desktop, 
-        true, 
-        'Desktop notifications should be enabled'
+        config.notifications.desktop,
+        true,
+        'Desktop notifications should be enabled by default'
       );
     });
 
     it('should have sound notifications configured', () => {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      const config = JSON.parse(fs.readFileSync(configExamplePath, 'utf8'));
       assert.strictEqual(
-        typeof config.notifications.sound, 
-        'boolean', 
+        typeof config.notifications.sound,
+        'boolean',
         'Sound notifications should be configured'
       );
     });
 
     it('should have reasonable check interval', () => {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      const config = JSON.parse(fs.readFileSync(configExamplePath, 'utf8'));
       assert.ok(
         config.checkInterval >= 60000 && config.checkInterval <= 600000,
         'Check interval should be between 1-10 minutes'
@@ -130,13 +130,13 @@ describe('CI Monitoring Features', () => {
   describe('Integration: All Options Working Together', () => {
     it('should have all three monitoring methods available', () => {
       const hygienePath = path.join(__dirname, '..', '.claude', 'commands', 'hygiene.md');
-      const configPath = path.join(__dirname, '..', '.monitor-config.json');
+      const configExamplePath = path.join(__dirname, '..', '.monitor-config.example.json');
       const hookPath = path.join(__dirname, '..', '.husky', 'pre-push');
-      
+
       const hygieneExists = fs.existsSync(hygienePath);
-      const configExists = fs.existsSync(configPath);
+      const configExists = fs.existsSync(configExamplePath);
       const hookExists = fs.existsSync(hookPath) || fs.existsSync('.git/hooks/pre-push');
-      
+
       assert.ok(
         hygieneExists && configExists && hookExists,
         'All three monitoring methods should be available'
