@@ -13,9 +13,20 @@ const assert = require('node:assert');
 const { execSync } = require('node:child_process');
 const fs = require('fs');
 
+// Check if R is available
+function isRAvailable() {
+  try {
+    execSync('which Rscript', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe('Report Evaluation Script', () => {
 
   const scriptPath = 'scripts/evaluate-report.R';
+  const hasR = isRAvailable();
 
   describe('Script Availability', () => {
     it('should have evaluate-report.R script', () => {
@@ -93,7 +104,9 @@ describe('Report Evaluation Script', () => {
   });
 
   describe('Script Functionality', () => {
-    it('should show usage when run without arguments', () => {
+    const testFn = hasR ? it : it.skip;
+
+    testFn('should show usage when run without arguments', () => {
       try {
         execSync('Rscript scripts/evaluate-report.R', { encoding: 'utf8' });
         assert.fail('Should exit with error when no arguments provided');
@@ -102,7 +115,7 @@ describe('Report Evaluation Script', () => {
       }
     });
 
-    it('should handle non-existent report file gracefully', () => {
+    testFn('should handle non-existent report file gracefully', () => {
       try {
         execSync('Rscript scripts/evaluate-report.R nonexistent-report.html 2>&1', { encoding: 'utf8' });
         assert.fail('Should exit with error for non-existent file');
