@@ -3,8 +3,9 @@ import js from '@eslint/js';
 export default [
   {
     ignores: [
-      'reports/*_files/**',
-      'reports/*.html',
+      'reports/**/*_files/**',
+      'reports/**/*_cache/**',
+      'reports/**/*.html',
       'node_modules/**'
     ]
   },

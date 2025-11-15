@@ -1,5 +1,9 @@
 
-# Quarto generated output (keep in git for viewing, but ignore for linting)
-reports/*_files/
-reports/*.html
+# NOTE: This file is not used - ESLint ignores are configured in eslint.config.js
+# ESLint flat config (eslint.config.js) ignores .eslintignore files
+#
+# Quarto generated output is ignored via eslint.config.js ignores:
+# - reports/**/*_files/**
+# - reports/**/*_cache/**
+# - reports/**/*.html
 
