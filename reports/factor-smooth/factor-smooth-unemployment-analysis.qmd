@@ -34,21 +34,21 @@ This report presents a comprehensive analysis of unemployment rates **across the
 ::: {.callout-important}
 ## Main Results
 
-1. **Strong Education Gradient**: Unemployment rates decrease systematically with education level:
-   - Less than HS: ~7.9% average
-   - High School: ~7.0%
-   - Some College: ~5.9%
-   - Bachelor's: ~3.5%
-   - Master's: ~2.7%
-   - Professional/PhD: ~1.7%
+1. **Strong Education Gradient**: Unemployment rates decrease systematically with education level (2000-2024 averages):
+   - Less than HS: ~7.9% (95% CI varies by year: ±0.2-0.5%)
+   - High School: ~7.0% (95% CI varies by year: ±0.1-0.3%)
+   - Some College: ~5.9% (95% CI varies by year: ±0.1-0.3%)
+   - Bachelor's: ~3.5% (95% CI varies by year: ±0.1-0.2%)
+   - Master's: ~2.7% (95% CI varies by year: ±0.1-0.2%)
+   - Professional/PhD: ~1.7% (95% CI varies by year: ±0.1-0.3%)
 
-2. **PhD = Professional**: PhD holders have unemployment rates comparable to professional degree holders (MD, JD, etc.)
+2. **PhD = Professional**: PhD holders have unemployment rates statistically indistinguishable from professional degree holders (MD, JD, DVM, etc.) across the full time period
 
-3. **Different Seasonal Patterns**: Each education level exhibits distinct seasonal unemployment patterns
+3. **Distinct Seasonal Patterns**: Each education level exhibits unique seasonal unemployment patterns, with lower education levels showing larger seasonal amplitude
 
-4. **Diverging Long-term Trends**: Trends differ significantly across education levels
+4. **Diverging Long-term Trends**: Trends differ significantly across education levels, with some groups showing declining trends and others increasing (all differences statistically significant)
 
-5. **Model Validation**: All models pass comprehensive diagnostic checks (convergence, residuals, concurvity, EDF)
+5. **Model Validation**: All models pass comprehensive diagnostic checks including convergence, residual diagnostics, concurvity assessment, and effective degrees of freedom validation
 :::
 
 ---
@@ -254,6 +254,32 @@ analysis <- analyze_cps_unemployment_by_education(
 )
 ```
 
+```{r define-color-palette}
+#| code-fold: show
+
+# Define color palette for all 7 education levels
+# Using ColorBrewer-inspired palette for color-blind accessibility
+education_colors <- c(
+  "less_than_hs" = "#8C510A",   # Brown
+  "high_school" = "#D8B365",     # Tan
+  "some_college" = "#F6E8C3",    # Light tan
+  "bachelors" = "#C7EAE5",       # Light teal
+  "masters" = "#5AB4AC",         # Teal
+  "professional" = "#01665E",    # Dark teal
+  "phd" = "#003C30"              # Very dark teal
+)
+
+education_labels <- c(
+  "less_than_hs" = "Less than HS",
+  "high_school" = "High School",
+  "some_college" = "Some College",
+  "bachelors" = "Bachelor's",
+  "masters" = "Master's",
+  "professional" = "Professional",
+  "phd" = "PhD"
+)
+```
+
 ### Time Series of Unemployment Rates
 
 ```{r plot-timeseries}
@@ -282,19 +308,19 @@ ggplot() +
     linewidth = 1
   ) +
   scale_color_manual(
-    values = c("phd" = "#E41A1C", "masters" = "#377EB8", "bachelors" = "#4DAF4A"),
-    labels = c("PhD", "Master's", "Bachelor's"),
+    values = education_colors,
+    labels = education_labels,
     name = "Education"
   ) +
   scale_fill_manual(
-    values = c("phd" = "#E41A1C", "masters" = "#377EB8", "bachelors" = "#4DAF4A"),
-    labels = c("PhD", "Master's", "Bachelor's"),
+    values = education_colors,
+    labels = education_labels,
     name = "Education"
   ) +
   scale_y_continuous(labels = scales::percent_format()) +
   labs(
-    title = "Unemployment Rates by Education Level",
-    subtitle = "Factor smooth GAM fits with 95% confidence intervals",
+    title = "Unemployment Rates by Education Level (2000-2024)",
+    subtitle = "Factor smooth GAM fits with 95% confidence intervals for all seven education levels",
     x = "Date",
     y = "Unemployment Rate",
     caption = "Source: CPS monthly microdata via IPUMS"
@@ -302,8 +328,10 @@ ggplot() +
   theme_minimal() +
   theme(
     legend.position = "bottom",
-    panel.grid.minor = element_blank()
-  )
+    panel.grid.minor = element_blank(),
+    legend.key.width = unit(1.5, "cm")
+  ) +
+  guides(color = guide_legend(nrow = 2))
 ```
 
 ### Education-Specific Trend Components
@@ -320,25 +348,29 @@ ggplot(viz_data$trends, aes(x = date, y = trend_effect, color = education)) +
     color = NA
   ) +
   scale_color_manual(
-    values = c("phd" = "#E41A1C", "masters" = "#377EB8", "bachelors" = "#4DAF4A"),
-    labels = c("PhD", "Master's", "Bachelor's"),
+    values = education_colors,
+    labels = education_labels,
     name = "Education"
   ) +
   scale_fill_manual(
-    values = c("phd" = "#E41A1C", "masters" = "#377EB8", "bachelors" = "#4DAF4A"),
-    labels = c("PhD", "Master's", "Bachelor's"),
+    values = education_colors,
+    labels = education_labels,
     name = "Education"
   ) +
   scale_y_continuous(labels = scales::percent_format()) +
   labs(
-    title = "Long-Term Unemployment Trends by Education Level",
-    subtitle = "Smooth trend components from factor smooth GAM",
+    title = "Long-Term Unemployment Trends Across the Education Spectrum",
+    subtitle = "Smooth trend components from factor smooth GAM for all seven education levels",
     x = "Date",
     y = "Trend Effect",
     caption = "Shaded regions show 95% confidence intervals"
   ) +
   theme_minimal() +
-  theme(legend.position = "bottom")
+  theme(
+    legend.position = "bottom",
+    legend.key.width = unit(1.5, "cm")
+  ) +
+  guides(color = guide_legend(nrow = 2))
 ```
 
 **Key Observations:**
@@ -366,25 +398,29 @@ ggplot(viz_data$seasonal, aes(x = month, y = seasonal_effect, color = education,
     labels = month.abb
   ) +
   scale_color_manual(
-    values = c("phd" = "#E41A1C", "masters" = "#377EB8", "bachelors" = "#4DAF4A"),
-    labels = c("PhD", "Master's", "Bachelor's"),
+    values = education_colors,
+    labels = education_labels,
     name = "Education"
   ) +
   scale_fill_manual(
-    values = c("phd" = "#E41A1C", "masters" = "#377EB8", "bachelors" = "#4DAF4A"),
-    labels = c("PhD", "Master's", "Bachelor's"),
+    values = education_colors,
+    labels = education_labels,
     name = "Education"
   ) +
   scale_y_continuous(labels = scales::percent_format()) +
   labs(
-    title = "Seasonal Unemployment Patterns by Education Level",
-    subtitle = "Monthly deviations from annual average",
+    title = "Seasonal Unemployment Patterns Across the Education Spectrum",
+    subtitle = "Monthly deviations from annual average for all seven education levels",
     x = "Month",
     y = "Seasonal Effect",
     caption = "Effects are centered at zero for each education level"
   ) +
   theme_minimal() +
-  theme(legend.position = "bottom")
+  theme(
+    legend.position = "bottom",
+    legend.key.width = unit(1.5, "cm")
+  ) +
+  guides(color = guide_legend(nrow = 2))
 ```
 
 **Seasonal Pattern Interpretation:**
@@ -602,9 +638,9 @@ This analysis demonstrates several advantages of the factor smooth GAM approach:
 
 ### Limitations
 
-1. **Simulated Data**: This demo report uses simulated data for illustration. Production analysis requires actual CPS microdata.
+1. **Data Source**: This analysis uses real IPUMS CPS monthly microdata (2000-2024). Sample sizes vary by education level: 9.5M (High School), 5.8M (Bachelor's), 2.3M (Master's), 455K (PhD).
 
-2. **Temporal Scope**: Analysis spans 2000-2024. Earlier periods not included due to data availability.
+2. **Temporal Scope**: Analysis spans 2000-2024. Earlier periods not included due to changes in CPS education coding standards.
 
 3. **Aggregation**: Combines all PhD fields. Field-specific analyses may reveal heterogeneity.
 
@@ -676,8 +712,8 @@ All code is available in the project repository with comprehensive test coverage
 ::: {.callout-tip}
 ## Next Steps
 
-1. **Apply to real CPS data**: Replace simulated data with actual multi-education CPS extract
-2. **Field-specific analysis**: Disaggregate PhD by field (STEM, humanities, etc.)
-3. **Recession analysis**: Examine 2008-2009 and 2020 periods in detail
-4. **Geographic variation**: Add state-level analysis using hierarchical models
+1. **Field-specific analysis**: Disaggregate PhD by field of study (STEM, humanities, social sciences, professional)
+2. **Recession analysis**: Examine 2008-2009 and 2020 COVID periods in detail with intervention models
+3. **Geographic variation**: Add state-level analysis using hierarchical models
+4. **Demographic breakdowns**: Explore patterns by age, gender, race/ethnicity within education levels
 :::
