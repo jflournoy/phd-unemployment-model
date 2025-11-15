@@ -300,18 +300,41 @@ validate_model_fit <- function(model, data) {
 #'
 #' Performs complete model validation combining convergence checks,
 #' residual diagnostics, concurvity assessment, EDF checks, and fit statistics.
+#' Validation thresholds adapt based on whether analyzing real data or simulations.
 #'
 #' @param model A fitted GAM model object
 #' @param data Data frame used to fit the model
+#' @param validation_type Character. Type of validation: "exploratory" for real data analysis
+#'   or "simulation" for parameter recovery validation. Affects interpretation of diagnostic tests.
+#'   Default: "exploratory"
 #' @param verbose Logical. Print validation summary? (default: TRUE)
 #'
 #' @return List with all validation components and overall summary
 #'
+#' @details
+#' Validation type affects diagnostic interpretation:
+#'
+#' **Exploratory (real data)**:
+#' - Normality test is informative but not a hard failure (use Q-Q plots instead)
+#' - Large samples (n > 5000) will reject normality even when residuals are nearly perfect
+#' - Autocorrelation test is critical for time series data
+#' - Heteroscedasticity is common in real data, not necessarily a failure
+#' - Convergence is always critical
+#'
+#' **Simulation (parameter recovery)**:
+#' - All diagnostic tests should ideally pass
+#' - Normality deviations may indicate model misspecification
+#' - Stricter interpretation of all diagnostics
+#'
 #' @export
-validate_gam_model <- function(model, data, verbose = TRUE) {
+validate_gam_model <- function(model, data,
+                               validation_type = c("exploratory", "simulation"),
+                               verbose = TRUE) {
   if (!inherits(model, "gam")) {
     stop("model must be a GAM object from mgcv::gam()")
   }
+
+  validation_type <- match.arg(validation_type)
 
   # Run all validation checks
   convergence <- validate_convergence(model)
@@ -320,28 +343,53 @@ validate_gam_model <- function(model, data, verbose = TRUE) {
   edf <- validate_edf(model, data)
   fit <- validate_model_fit(model, data)
 
-  # Overall summary
+  # Overall summary - issues and recommendations depend on validation type
   issues <- character(0)
   recommendations <- character(0)
+  warnings <- character(0)  # Non-critical issues
 
-  # Check convergence
+  # Check convergence (ALWAYS critical)
   if (!convergence$converged) {
     issues <- c(issues, "Model did not converge")
     recommendations <- c(recommendations, "Try increasing iteration limit or adjusting model complexity")
   }
 
-  # Check residuals
+  # Check residuals - interpretation depends on validation type
   if (!residuals_check$summary$all_checks_passed) {
-    issues <- c(issues, residuals_check$summary$issues)
+    # Normality test
+    if (!residuals_check$normality$passed) {
+      if (validation_type == "exploratory") {
+        # For real data, normality test is informative but not critical
+        warnings <- c(warnings, "Non-normal residuals detected (use Q-Q plots to assess severity)")
+        recommendations <- c(recommendations, "Review Q-Q plot - normality test may be overly sensitive with large samples")
+      } else {
+        # For simulations, normality deviations may indicate issues
+        issues <- c(issues, "Non-normal residuals detected")
+        recommendations <- c(recommendations, "Check model specification and data generating process")
+      }
+    }
+
+    # Autocorrelation test (important for both types)
     if (!residuals_check$autocorrelation$passed) {
+      issues <- c(issues, "Significant autocorrelation detected")
       recommendations <- c(recommendations, "Consider adding AR terms or using gamm() for autocorrelation")
     }
+
+    # Heteroscedasticity
     if (!residuals_check$heteroscedasticity$passed) {
-      recommendations <- c(recommendations, "Consider variance modeling or robust standard errors")
+      if (validation_type == "exploratory") {
+        # For real data, heteroscedasticity is common and not always problematic
+        warnings <- c(warnings, "Heteroscedasticity detected (GAMs are robust to moderate heteroscedasticity)")
+        recommendations <- c(recommendations, "Consider variance modeling if heteroscedasticity is severe")
+      } else {
+        # For simulations, this may indicate model issues
+        issues <- c(issues, "Heteroscedasticity detected")
+        recommendations <- c(recommendations, "Check if variance structure matches data generating process")
+      }
     }
   }
 
-  # Check concurvity
+  # Check concurvity (important for both types)
   if (concurvity$summary$high_concurvity) {
     issues <- c(issues, "High concurvity detected among smooth terms")
     recommendations <- c(recommendations, "Consider reducing model complexity or removing redundant smooths")
@@ -349,25 +397,46 @@ validate_gam_model <- function(model, data, verbose = TRUE) {
 
   # Check EDF
   if (edf$summary$overfitting_risk %in% c("moderate", "high")) {
-    issues <- c(issues, paste("Overfitting risk:", edf$summary$overfitting_risk))
-    recommendations <- c(recommendations, "Consider reducing basis dimensions (k) or using more penalization")
+    if (validation_type == "exploratory") {
+      warnings <- c(warnings, paste("Overfitting risk:", edf$summary$overfitting_risk))
+      recommendations <- c(recommendations, "Consider reducing basis dimensions (k) or using more penalization")
+    } else {
+      issues <- c(issues, paste("Overfitting risk:", edf$summary$overfitting_risk))
+      recommendations <- c(recommendations, "Reduce model complexity for simulation studies")
+    }
   }
 
-  # Check fit
+  # Check fit quality (interpretation differs by type)
   if (fit$summary$fit_quality == "poor") {
-    issues <- c(issues, "Poor model fit (R² < 0.5)")
-    recommendations <- c(recommendations, "Consider adding more predictors or interaction terms")
+    if (validation_type == "exploratory") {
+      # For real data, poor fit may be acceptable if model is appropriately simple
+      warnings <- c(warnings, "Poor model fit (R² < 0.5) - may be acceptable for complex real data")
+      recommendations <- c(recommendations, "Consider if model complexity is appropriate for research question")
+    } else {
+      # For simulations, poor fit suggests model-DGP mismatch
+      issues <- c(issues, "Poor model fit (R² < 0.5)")
+      recommendations <- c(recommendations, "Model may not match data generating process")
+    }
   }
 
   # Overall validation status
-  validation_passed <- length(issues) == 0
+  # For exploratory: only critical issues cause failure
+  # For simulation: both issues and severe warnings cause failure
+  validation_passed <- if (validation_type == "exploratory") {
+    length(issues) == 0
+  } else {
+    length(issues) == 0 && length(warnings) == 0
+  }
 
   overall_summary <- list(
     validation_passed = validation_passed,
-    issues_detected = if (length(issues) > 0) paste(issues, collapse = "; ") else "None",
+    validation_type = validation_type,
+    critical_issues = if (length(issues) > 0) paste(issues, collapse = "; ") else "None",
+    warnings = if (length(warnings) > 0) paste(warnings, collapse = "; ") else "None",
     recommendations = if (length(recommendations) > 0) paste(recommendations, collapse = "; ") else "None",
     n_checks = 5,
-    n_issues = length(issues)
+    n_critical_issues = length(issues),
+    n_warnings = length(warnings)
   )
 
   result <- list(
@@ -400,6 +469,11 @@ validate_gam_model <- function(model, data, verbose = TRUE) {
 print.gam_validation <- function(x, ...) {
   cat("\n=== GAM Model Validation Report ===\n\n")
 
+  # Show validation type if available
+  if (!is.null(x$overall_summary$validation_type)) {
+    cat("Validation Type:", toupper(x$overall_summary$validation_type), "\n")
+  }
+
   cat("Overall Status:", if (x$overall_summary$validation_passed) "✓ PASSED" else "✗ FAILED", "\n\n")
 
   cat("Convergence:\n")
@@ -430,9 +504,20 @@ print.gam_validation <- function(x, ...) {
   cat("  EDF ratio:", sprintf("%.1f%%", 100 * x$edf$edf_ratio), "\n")
   cat("  Overfitting risk:", x$edf$summary$overfitting_risk, "\n\n")
 
-  if (!x$overall_summary$validation_passed) {
-    cat("Issues Detected:\n")
-    cat("  ", x$overall_summary$issues_detected, "\n\n")
+  # Show critical issues
+  if (!is.null(x$overall_summary$critical_issues) && x$overall_summary$critical_issues != "None") {
+    cat("Critical Issues:\n")
+    cat("  ", x$overall_summary$critical_issues, "\n\n")
+  }
+
+  # Show warnings (for exploratory validation)
+  if (!is.null(x$overall_summary$warnings) && x$overall_summary$warnings != "None") {
+    cat("Warnings (informative):\n")
+    cat("  ", x$overall_summary$warnings, "\n\n")
+  }
+
+  # Show recommendations
+  if (!is.null(x$overall_summary$recommendations) && x$overall_summary$recommendations != "None") {
     cat("Recommendations:\n")
     cat("  ", x$overall_summary$recommendations, "\n\n")
   }

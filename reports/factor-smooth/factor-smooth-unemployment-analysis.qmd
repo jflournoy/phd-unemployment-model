@@ -190,10 +190,11 @@ Comprehensive diagnostic checks on the best-fitting model:
 best_model <- models_result$models[[models_result$best_model]]
 data_for_validation <- models_result$data
 
-# Run comprehensive validation
+# Run comprehensive validation for exploratory analysis on real data
 validation <- validate_gam_model(
   model = best_model,
   data = data_for_validation,
+  validation_type = "exploratory",
   verbose = FALSE
 )
 

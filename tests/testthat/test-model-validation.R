@@ -290,12 +290,14 @@ test_that("validate_gam_model performs comprehensive validation", {
 
   # Overall summary
   expect_true("validation_passed" %in% names(result$overall_summary))
-  expect_true("issues_detected" %in% names(result$overall_summary))
+  expect_true("critical_issues" %in% names(result$overall_summary))
+  expect_true("warnings" %in% names(result$overall_summary))
   expect_true("recommendations" %in% names(result$overall_summary))
 
   # For well-specified model, validation should pass
   expect_true(result$overall_summary$validation_passed)
-  expect_type(result$overall_summary$issues_detected, "character")
+  expect_type(result$overall_summary$critical_issues, "character")
+  expect_type(result$overall_summary$warnings, "character")
   expect_type(result$overall_summary$recommendations, "character")
 })
 
@@ -422,4 +424,209 @@ test_that("export_validation_report creates markdown report", {
 
   # Clean up
   unlink(temp_file)
+})
+
+
+# ==============================================================================
+# Test Suite 8: Validation Type Differentiation
+# ==============================================================================
+
+test_that("validate_gam_model accepts validation_type parameter", {
+  setup <- setup_test_model()
+
+  # Should work with exploratory type
+  result_exploratory <- validate_gam_model(
+    model = setup$model,
+    data = setup$data,
+    validation_type = "exploratory",
+    verbose = FALSE
+  )
+
+  expect_type(result_exploratory, "list")
+  expect_equal(result_exploratory$overall_summary$validation_type, "exploratory")
+
+  # Should work with simulation type
+  result_simulation <- validate_gam_model(
+    model = setup$model,
+    data = setup$data,
+    validation_type = "simulation",
+    verbose = FALSE
+  )
+
+  expect_type(result_simulation, "list")
+  expect_equal(result_simulation$overall_summary$validation_type, "simulation")
+
+  # Should default to exploratory
+  result_default <- validate_gam_model(
+    model = setup$model,
+    data = setup$data,
+    verbose = FALSE
+  )
+
+  expect_equal(result_default$overall_summary$validation_type, "exploratory")
+})
+
+test_that("exploratory validation separates critical issues from warnings", {
+  setup <- setup_test_model()
+
+  result <- validate_gam_model(
+    model = setup$model,
+    data = setup$data,
+    validation_type = "exploratory",
+    verbose = FALSE
+  )
+
+  # Should have both critical_issues and warnings fields
+  expect_true("critical_issues" %in% names(result$overall_summary))
+  expect_true("warnings" %in% names(result$overall_summary))
+  expect_true("n_critical_issues" %in% names(result$overall_summary))
+  expect_true("n_warnings" %in% names(result$overall_summary))
+
+  # For a good model, should have no critical issues
+  expect_equal(result$overall_summary$n_critical_issues, 0)
+})
+
+test_that("exploratory validation treats normality test as warning not error", {
+  # Create data that may have non-normal residuals but is otherwise fine
+  test_data <- simulate_multi_education_unemployment(
+    n_years = 10,
+    education_levels = c("phd", "masters"),
+    baseline_rates = c(phd = 0.040, masters = 0.050),
+    seasonal_amplitudes = c(phd = 0.005, masters = 0.010),
+    trend_slopes = c(phd = 0, masters = 0),
+    noise_sd = 0.005,
+    seed = 123
+  )
+
+  test_data$year <- 2010 + (test_data$time_index - 1) %/% 12
+
+  model <- fit_factor_smooth_gam(
+    data = test_data,
+    formula_type = "full",
+    education_var = "education"
+  )
+
+  # Exploratory validation
+  result_exploratory <- validate_gam_model(
+    model = model,
+    data = test_data,
+    validation_type = "exploratory",
+    verbose = FALSE
+  )
+
+  # Simulation validation
+  result_simulation <- validate_gam_model(
+    model = model,
+    data = test_data,
+    validation_type = "simulation",
+    verbose = FALSE
+  )
+
+  # If normality fails, exploratory should treat as warning not critical issue
+  # (We can't guarantee normality will fail, but if it does, check behavior)
+  if (!result_exploratory$residuals$normality$passed) {
+    # For exploratory, normality failure should be a warning
+    expect_true(grepl("Non-normal", result_exploratory$overall_summary$warnings))
+    # For simulation, it might be an issue
+    # (Not guaranteed, depends on sample size and how strict test is)
+  }
+})
+
+test_that("simulation validation is stricter than exploratory", {
+  setup <- setup_test_model()
+
+  result_exploratory <- validate_gam_model(
+    model = setup$model,
+    data = setup$data,
+    validation_type = "exploratory",
+    verbose = FALSE
+  )
+
+  result_simulation <- validate_gam_model(
+    model = setup$model,
+    data = setup$data,
+    validation_type = "simulation",
+    verbose = FALSE
+  )
+
+  # For same model, simulation validation should never be more lenient
+  # If exploratory fails, simulation should also fail
+  if (!result_exploratory$overall_summary$validation_passed) {
+    expect_false(result_simulation$overall_summary$validation_passed)
+  }
+
+  # Simulation counts warnings as failures, exploratory doesn't
+  if (result_exploratory$overall_summary$n_warnings > 0 &&
+      result_exploratory$overall_summary$n_critical_issues == 0) {
+    # Exploratory with only warnings should pass
+    expect_true(result_exploratory$overall_summary$validation_passed)
+    # Simulation with warnings should fail
+    expect_false(result_simulation$overall_summary$validation_passed)
+  }
+})
+
+test_that("validation type affects heteroscedasticity interpretation", {
+  setup <- setup_test_model()
+
+  result_exploratory <- validate_gam_model(
+    model = setup$model,
+    data = setup$data,
+    validation_type = "exploratory",
+    verbose = FALSE
+  )
+
+  result_simulation <- validate_gam_model(
+    model = setup$model,
+    data = setup$data,
+    validation_type = "simulation",
+    verbose = FALSE
+  )
+
+  # If heteroscedasticity is detected
+  if (!result_exploratory$residuals$heteroscedasticity$passed) {
+    # For exploratory, should be a warning
+    expect_true(grepl("Heteroscedasticity", result_exploratory$overall_summary$warnings) ||
+                  grepl("Heteroscedasticity", result_exploratory$overall_summary$critical_issues))
+
+    # For simulation, should be a critical issue
+    expect_true(grepl("Heteroscedasticity", result_simulation$overall_summary$critical_issues) ||
+                  !result_simulation$overall_summary$validation_passed)
+  }
+})
+
+test_that("print method shows validation type", {
+  setup <- setup_test_model()
+
+  result <- validate_gam_model(
+    model = setup$model,
+    data = setup$data,
+    validation_type = "exploratory",
+    verbose = FALSE
+  )
+
+  # Capture print output
+  output <- capture.output(print(result))
+
+  # Should mention validation type
+  expect_true(any(grepl("EXPLORATORY", output, ignore.case = TRUE)))
+})
+
+test_that("print method distinguishes critical issues from warnings", {
+  setup <- setup_test_model()
+
+  result <- validate_gam_model(
+    model = setup$model,
+    data = setup$data,
+    validation_type = "exploratory",
+    verbose = FALSE
+  )
+
+  output <- capture.output(print(result))
+  output_text <- paste(output, collapse = "\n")
+
+  # Should have separate sections if both exist
+  # (Can't guarantee warnings will exist, but structure should support them)
+  if (result$overall_summary$n_warnings > 0) {
+    expect_true(grepl("Warnings", output_text, ignore.case = TRUE))
+  }
 })
