@@ -1,6 +1,6 @@
 ---
-title: "PhD Unemployment Analysis Using Validated Factor Smooth GAMs"
-subtitle: "Joint Modeling of Education-Specific Unemployment Trends with Real IPUMS CPS Data, 2000-2024"
+title: "Education and Unemployment: Analysis Across the Full Education Spectrum"
+subtitle: "Joint Modeling Using Validated Factor Smooth GAMs on IPUMS CPS Data, 2000-2024"
 author: "PhD Unemployment Model"
 date: today
 format:
@@ -22,9 +22,9 @@ execute:
 
 ## Executive Summary
 
-This report presents a comprehensive analysis of PhD unemployment rates compared to Master's and Bachelor's degree holders using **validated factor smooth Generalized Additive Models (GAMs)**. Unlike separate models for each education level, our approach uses a **joint modeling framework** that:
+This report presents a comprehensive analysis of unemployment rates **across the full education spectrum** from less than high school to doctorate using **validated factor smooth Generalized Additive Models (GAMs)**. Unlike separate models for each education level, our approach uses a **joint modeling framework** that:
 
-- Pools information across education levels for more stable estimates
+- Models all seven education levels simultaneously for more stable estimates
 - Allows direct statistical comparison of trends with proper uncertainty quantification
 - Has been validated through extensive parameter recovery simulations
 - Includes comprehensive model diagnostics
@@ -34,10 +34,21 @@ This report presents a comprehensive analysis of PhD unemployment rates compared
 ::: {.callout-important}
 ## Main Results
 
-1. **Education Gradient**: PhD holders consistently show the lowest unemployment rates, followed by Master's and Bachelor's degree holders
-2. **Different Seasonal Patterns**: Each education level exhibits distinct seasonal unemployment patterns
-3. **Diverging Trends**: Long-term trends differ significantly across education levels
-4. **Model Validation**: All models pass comprehensive diagnostic checks (convergence, residuals, concurvity, EDF)
+1. **Strong Education Gradient**: Unemployment rates decrease systematically with education level:
+   - Less than HS: ~7.9% average
+   - High School: ~7.0%
+   - Some College: ~5.9%
+   - Bachelor's: ~3.5%
+   - Master's: ~2.7%
+   - Professional/PhD: ~1.7%
+
+2. **PhD = Professional**: PhD holders have unemployment rates comparable to professional degree holders (MD, JD, etc.)
+
+3. **Different Seasonal Patterns**: Each education level exhibits distinct seasonal unemployment patterns
+
+4. **Diverging Long-term Trends**: Trends differ significantly across education levels
+
+5. **Model Validation**: All models pass comprehensive diagnostic checks (convergence, residuals, concurvity, EDF)
 :::
 
 ---
@@ -47,9 +58,10 @@ This report presents a comprehensive analysis of PhD unemployment rates compared
 ### Data Source
 
 **Current Population Survey (CPS)** monthly microdata via IPUMS:
-- **Time period**: January 2000 - Present
-- **Sample**: Individuals with graduate degrees
+- **Time period**: January 2000 - December 2024
+- **Sample**: Full labor force across all education levels
 - **Unemployment definition**: Actively seeking work in reference week
+- **Sample sizes**: 9.5M (HS), 5.8M (Bachelor's), 2.3M (Master's), 455K (PhD)
 
 ### Education Levels
 
@@ -67,13 +79,14 @@ source(here("R", "seasonal-gam.R"))
 source(here("R", "real-data-analysis.R"))
 source(here("R", "model-validation.R"))
 
-# Define education levels
-education_levels <- c("phd", "masters", "bachelors")
+# Define education levels (full spectrum)
+education_levels <- c("less_than_hs", "high_school", "some_college",
+                      "bachelors", "masters", "professional", "phd")
 ```
 
 ### Statistical Model: Factor Smooth GAM
 
-We use a **factor smooth GAM** that jointly models all three education levels:
+We use a **factor smooth GAM** that jointly models all seven education levels across the full spectrum from less than high school to doctorate:
 
 $$
 \text{unemployment\_rate}_{it} = \beta_0 + \beta_i + s_i(\text{time\_index}_t) + s_i(\text{month}_t) + \epsilon_{it}
@@ -101,8 +114,8 @@ Where:
 ```{r load-data}
 #| cache: true
 
-# Load real CPS multi-education unemployment data
-data_file <- here::here("data", "multi-education-unemployment.rds")
+# Load real CPS full education spectrum unemployment data
+data_file <- here::here("data", "education-spectrum-unemployment.rds")
 
 cat("Data Summary:\n")
 cat("  Data source: IPUMS CPS (2000-2024)\n")
@@ -113,13 +126,16 @@ cps_data <- readRDS(data_file)
 
 cat("  Years:", min(cps_data$year, na.rm = TRUE), "-", max(cps_data$year, na.rm = TRUE), "\n")
 cat("  Observations:", nrow(cps_data), "\n")
-cat("  Education levels:", paste(unique(cps_data$education), collapse = ", "), "\n")
+cat("  Education levels (", length(unique(cps_data$education)), "):",
+    paste(unique(cps_data$education), collapse = ", "), "\n")
 cat("\n")
 
-# Show unemployment rate ranges by education
-for (educ in c("phd", "masters", "bachelors")) {
+# Show unemployment rate ranges by education (full spectrum)
+cat("Unemployment rates by education level:\n")
+for (educ in c("less_than_hs", "high_school", "some_college",
+               "bachelors", "masters", "professional", "phd")) {
   educ_data <- cps_data[cps_data$education == educ, ]
-  cat(sprintf("  %s: %.1f%% - %.1f%% (mean: %.1f%%)\n",
+  cat(sprintf("  %-15s: %.1f%% - %.1f%% (mean: %.1f%%)\n",
               educ,
               min(educ_data$unemployment_rate, na.rm = TRUE) * 100,
               max(educ_data$unemployment_rate, na.rm = TRUE) * 100,
@@ -405,20 +421,26 @@ kable(
 ### Pairwise Comparisons Over Time
 
 ```{r trend-differences}
-#| fig-height: 7
-#| fig-cap: "Figure 5: Unemployment differences between education levels with simultaneous 95% confidence bands"
+#| fig-height: 14
+#| fig-cap: "Figure 5: Unemployment differences between education levels with simultaneous 95% confidence bands (showing key comparisons with PhD)"
 
 # Extract trend differences
 diff_data <- analysis$trend_differences
 
-# Create comparison labels
-diff_data$comparison_label <- factor(
-  diff_data$comparison,
-  levels = unique(diff_data$comparison),
-  labels = c("PhD − Bachelor's", "PhD − Master's", "Master's − Bachelor's")
-)
+# Format comparison labels (convert underscores to spaces and capitalize)
+format_educ_label <- function(x) {
+  gsub("_", " ", tools::toTitleCase(x))
+}
 
-ggplot(diff_data, aes(x = as.Date(paste(year, month, 1, sep = "-")))) +
+diff_data$comparison_label <- sapply(diff_data$comparison, function(comp) {
+  parts <- strsplit(comp, " - ")[[1]]
+  paste(format_educ_label(parts[1]), "−", format_educ_label(parts[2]))
+})
+
+# Filter to show only comparisons involving PhD (most relevant for this analysis)
+diff_data_phd <- diff_data[grepl("phd", diff_data$comparison, ignore.case = TRUE), ]
+
+ggplot(diff_data_phd, aes(x = as.Date(paste(year, month, 1, sep = "-")))) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
   geom_ribbon(
     aes(ymin = lower, ymax = upper),
