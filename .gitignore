@@ -40,6 +40,9 @@ coverage/
 .monitor-previous.json
 .monitor-config.json
 
+# TDD session files
+.tdd-session-*.md
+
 # OS files
 .DS_Store
 .DS_Store?
