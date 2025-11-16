@@ -1,6 +1,6 @@
 ---
 title: "Education and Unemployment: Analysis Across the Full Education Spectrum"
-subtitle: "Joint Modeling Using Validated Factor Smooth GAMs on IPUMS CPS Data, 2000-2024"
+subtitle: "Joint Modeling Using Validated Factor Smooth GAMs on IPUMS CPS Data, 2000-2025"
 author: "PhD Unemployment Model"
 date: today
 format:
@@ -44,11 +44,13 @@ This report presents a comprehensive analysis of unemployment rates **across the
 
 2. **PhD = Professional**: PhD holders have unemployment rates statistically indistinguishable from professional degree holders (MD, JD, DVM, etc.) across the full time period
 
-3. **Distinct Seasonal Patterns**: Each education level exhibits unique seasonal unemployment patterns, with lower education levels showing larger seasonal amplitude
+3. **NEW: PhD Relative Positioning (2020-2024)**: Detailed trend comparisons show how PhD unemployment has evolved relative to each education level through 2024, with seasonal-independent trend analysis revealing recent labor market dynamics
 
-4. **Diverging Long-term Trends**: Trends differ significantly across education levels, with some groups showing declining trends and others increasing (all differences statistically significant)
+4. **Distinct Seasonal Patterns**: Each education level exhibits unique seasonal unemployment patterns, with lower education levels showing larger seasonal amplitude
 
-5. **Model Validation**: All models pass comprehensive diagnostic checks including convergence, residual diagnostics, concurvity assessment, and effective degrees of freedom validation
+5. **Diverging Long-term Trends**: Trends differ significantly across education levels, with some groups showing declining trends and others increasing (all differences statistically significant)
+
+6. **Model Validation**: All models pass comprehensive diagnostic checks including convergence, residual diagnostics, concurvity assessment, and effective degrees of freedom validation
 :::
 
 ---
@@ -103,7 +105,8 @@ Where:
 1. **Information pooling**: Borrows strength across education levels
 2. **Coherent uncertainty**: Accounts for correlation in estimating differences
 3. **Direct comparisons**: Built-in framework for testing differences
-4. **Validated approach**: Extensive simulation testing confirms accuracy
+4. **Shared smoothness**: All education levels use the same smoothing parameters (via `id=` argument), ensuring consistent wiggliness across groups for fair visual comparisons
+5. **Validated approach**: Extensive simulation testing confirms accuracy
 
 ---
 
@@ -179,6 +182,40 @@ kable(
 
 **Selected Model:** `r models_result$best_model` (lowest AIC)
 
+### Fitted Model Formula
+
+The selected model uses **shared smoothing parameters** across all education levels to ensure consistent wiggliness:
+
+```{r show-model-formula}
+# Get the best model for examination
+best_model <- models_result$models[[models_result$best_model]]
+
+# Display the actual model formula used
+cat("Model formula:\n")
+print(best_model$formula)
+
+cat("\n\nSmoothing parameter sharing:\n")
+# Check if model uses shared smoothing (id= argument)
+smooth_specs <- best_model$smooth
+for (i in seq_along(smooth_specs)) {
+  smooth <- smooth_specs[[i]]
+  if (!is.null(smooth$id)) {
+    cat(sprintf("  - %s: shared via id=%s\n", smooth$label, smooth$id))
+  }
+}
+
+# Verify shared wiggliness is actually implemented
+has_shared <- any(sapply(smooth_specs, function(s) !is.null(s$id)))
+if (!has_shared) {
+  warning("CRITICAL: Model does NOT use shared smoothing parameters (missing id=). ",
+          "Visual comparisons may be misleading due to different wiggliness across groups.")
+}
+```
+
+This ensures that all education levels have the same degree of wiggliness in their trends and seasonal patterns, making visual comparisons fair and interpretable.
+
+**Important**: The `id=` parameter in mgcv forces different factor levels to use the same smoothing parameter (λ). Without this, groups with more data get smoother fits, making visual comparisons misleading.
+
 ### Model Validation
 
 Comprehensive diagnostic checks on the best-fitting model:
@@ -249,7 +286,7 @@ analysis <- analyze_cps_unemployment_by_education(
   data_file = data_file,
   education_levels = education_levels,
   start_year = 2000,
-  end_year = 2024,
+  end_year = 2025,  # Include 2025 data (through August)
   save_models = FALSE,
   save_results = FALSE
 )
@@ -374,11 +411,172 @@ ggplot(viz_data$trends, aes(x = date, y = trend_effect, color = education)) +
   guides(color = guide_legend(nrow = 2))
 ```
 
-**Key Observations:**
+### PhD Unemployment: Trend Comparisons with Other Education Levels
 
-- **PhD trends**: `r if(mean(tail(viz_data$trends[viz_data$trends$education == "phd",]$trend_effect, 12)) < mean(head(viz_data$trends[viz_data$trends$education == "phd",]$trend_effect, 12))) "Declining" else "Increasing"` over the period
-- **Master's trends**: Show `r if(sd(viz_data$trends[viz_data$trends$education == "masters",]$trend_effect) > sd(viz_data$trends[viz_data$trends$education == "phd",]$trend_effect)) "more" else "less"` variability than PhD
-- **Bachelor's trends**: Consistently higher than graduate degrees
+::: {.callout-important}
+## Focus: Recent PhD Labor Market Trends
+
+This section examines **seasonal-independent trends** in PhD unemployment relative to each other education level, focusing on 2024 and available 2025 data (through August 2025).
+:::
+
+```{r phd-trend-comparisons}
+#| fig-height: 16
+#| fig-cap: "Figure 3b: PhD unemployment trends compared to each education level (seasonal-independent, 2024-2025)"
+
+# Extract PhD trend data
+phd_trends <- viz_data$trends[viz_data$trends$education == "phd", ]
+phd_trends$phd_trend <- phd_trends$trend_effect
+phd_trends$phd_se <- phd_trends$se
+
+# Create comparison plots for each education level
+# Each comparison will have TWO panels: trends + difference
+all_plots <- list()
+
+for (edu in setdiff(education_levels, "phd")) {
+  # Get comparison education level data
+  comp_trends <- viz_data$trends[viz_data$trends$education == edu, ]
+
+  # Merge with PhD data
+  comp_data <- merge(
+    phd_trends[, c("date", "phd_trend", "phd_se")],
+    comp_trends[, c("date", "trend_effect", "se")],
+    by = "date"
+  )
+  names(comp_data)[names(comp_data) == "trend_effect"] <- "comp_trend"
+  names(comp_data)[names(comp_data) == "se"] <- "comp_se"
+
+  # Calculate difference
+  comp_data$difference <- comp_data$comp_trend - comp_data$phd_trend
+  comp_data$diff_se <- sqrt(comp_data$phd_se^2 + comp_data$comp_se^2)
+
+  # Focus on 2024-2025 period
+  recent_data <- comp_data[comp_data$date >= as.Date("2024-01-01"), ]
+
+  # Debug: check date range (only print once)
+  if (edu == "less_than_hs") {
+    cat(sprintf("\nDate range in plots: %s to %s\n",
+                format(min(recent_data$date), "%Y-%m-%d"),
+                format(max(recent_data$date), "%Y-%m-%d")))
+  }
+
+  # Panel 1: Both trends on same plot
+  p1 <- ggplot(recent_data, aes(x = date)) +
+    # Comparison education level
+    geom_ribbon(
+      aes(ymin = comp_trend - 1.96 * comp_se, ymax = comp_trend + 1.96 * comp_se),
+      alpha = 0.15,
+      fill = education_colors[[edu]]
+    ) +
+    geom_line(aes(y = comp_trend, color = "Comparison"), linewidth = 1) +
+    # PhD
+    geom_ribbon(
+      aes(ymin = phd_trend - 1.96 * phd_se, ymax = phd_trend + 1.96 * phd_se),
+      alpha = 0.15,
+      fill = education_colors[["phd"]]
+    ) +
+    geom_line(aes(y = phd_trend, color = "PhD"), linewidth = 1) +
+    scale_color_manual(
+      values = c("Comparison" = education_colors[[edu]], "PhD" = education_colors[["phd"]]),
+      labels = c("Comparison" = education_labels[[edu]], "PhD" = "PhD")
+    ) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 0.01)) +
+    labs(
+      title = sprintf("PhD vs %s: Trend Levels", education_labels[[edu]]),
+      x = NULL,
+      y = "Unemployment Rate (trend)",
+      color = NULL
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(face = "bold", size = 10),
+      axis.text = element_text(size = 8),
+      legend.position = "bottom",
+      legend.text = element_text(size = 8)
+    )
+
+  # Panel 2: Difference
+  p2 <- ggplot(recent_data, aes(x = date)) +
+    geom_ribbon(
+      aes(ymin = difference - 1.96 * diff_se, ymax = difference + 1.96 * diff_se),
+      alpha = 0.2,
+      fill = education_colors[[edu]]
+    ) +
+    geom_line(aes(y = difference), color = education_colors[[edu]], linewidth = 1) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 0.01)) +
+    labs(
+      title = sprintf("Difference (%s - PhD)", education_labels[[edu]]),
+      x = NULL,
+      y = "Trend Difference (pp)"
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(face = "bold", size = 10),
+      axis.text = element_text(size = 8)
+    )
+
+  # Add both panels to the list
+  all_plots[[paste0(edu, "_trends")]] <- p1
+  all_plots[[paste0(edu, "_diff")]] <- p2
+}
+
+# Arrange all plots: 2 columns (trends | difference), 6 rows (one per comparison)
+gridExtra::grid.arrange(grobs = all_plots, ncol = 2, byrow = TRUE)
+```
+
+#### Interpretation: PhD Labor Market Positioning (2024-2025)
+
+```{r phd-recent-summary}
+#| echo: false
+
+# Calculate recent changes for each comparison
+focus_start <- as.Date("2024-01-01")
+recent_end <- max(viz_data$trends$date)
+
+phd_focus <- viz_data$trends[viz_data$trends$education == "phd" &
+                             viz_data$trends$date >= focus_start, ]
+
+for (edu in setdiff(education_levels, "phd")) {
+  comp_focus <- viz_data$trends[viz_data$trends$education == edu &
+                                viz_data$trends$date >= focus_start, ]
+
+  # Latest values (most recent data)
+  latest_phd <- tail(phd_focus$trend_effect, 1)
+  latest_comp <- tail(comp_focus$trend_effect, 1)
+  latest_diff <- latest_comp - latest_phd
+
+  # Starting values (Jan 2024)
+  start_phd <- phd_focus$trend_effect[1]
+  start_comp <- comp_focus$trend_effect[1]
+  start_diff <- start_comp - start_phd
+
+  # Change within 2024-2025
+  change_in_gap <- latest_diff - start_diff
+
+  cat(sprintf("**%s vs PhD (as of %s):**\n",
+              education_labels[[edu]],
+              format(recent_end, "%b %Y")))
+  cat(sprintf("- Current trend difference: %.3f%% (PhD is %.3f%% %s)\n",
+              abs(latest_diff) * 100,
+              abs(latest_diff) * 100,
+              if(latest_diff > 0) "lower" else "higher"))
+  cat(sprintf("- Gap %s by %.3f%% since Jan 2024\n",
+              if(abs(change_in_gap) < 0.0001) "unchanged" else if(change_in_gap > 0) "widened" else "narrowed",
+              abs(change_in_gap) * 100))
+  cat(sprintf("- Latest PhD trend: %.3f%%, Latest %s trend: %.3f%%\n\n",
+              latest_phd * 100,
+              education_labels[[edu]],
+              latest_comp * 100))
+}
+```
+
+::: {.callout-note}
+## Key Insight: PhD Relative Position
+
+Positive values indicate the comparison group has **higher** trend unemployment than PhDs (PhD advantage). Negative values indicate PhDs have **higher** trend unemployment (PhD disadvantage).
+
+The shaded bands show 95% confidence intervals - when bands don't cross zero, the difference is statistically significant.
+:::
 
 ### Seasonal Patterns
 
