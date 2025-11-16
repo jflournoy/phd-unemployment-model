@@ -423,58 +423,72 @@ This section shows **trend predictions** (excluding seasonal effects but includi
 #| fig-height: 16
 #| fig-cap: "Figure 3b: PhD unemployment trends compared to each education level (seasonal-independent, 2024-2025)"
 
-# Extract PhD trend data
-phd_trends <- viz_data$trends[viz_data$trends$education == "phd", ]
-phd_trends$phd_trend <- phd_trends$trend_effect
-phd_trends$phd_se <- phd_trends$se
+# Get the best model from analysis
+best_model <- analysis$best_model
+
+# Get visualization data
+viz_data <- analysis$visualization_data
+
+# Create prediction data for 2024-2025 at a fixed month (June) to remove seasonality
+pred_dates <- seq(as.Date("2024-01-01"), max(viz_data$fitted$date), by = "month")
+
+# Create grid for all education levels
+pred_grid <- expand.grid(
+  date = pred_dates,
+  education = factor(education_levels, levels = education_levels)
+)
+
+# Add time_index and fixed month (June = 6 to remove seasonality)
+pred_grid$time_index <- as.numeric(pred_grid$date - min(viz_data$fitted$date)) / 30.44 + 1
+pred_grid$month <- 6  # Fixed month to remove seasonal component
+
+# Get predictions with SE (includes intercept)
+preds <- predict(best_model, newdata = pred_grid, type = "response", se.fit = TRUE)
+pred_grid$predicted_rate <- preds$fit
+pred_grid$se <- preds$se.fit
+
+# Extract PhD predictions
+phd_preds <- pred_grid[pred_grid$education == "phd", ]
+phd_preds$phd_rate <- phd_preds$predicted_rate
+phd_preds$phd_se <- phd_preds$se
 
 # Create comparison plots for each education level
 # Each comparison will have TWO panels: trends + difference
 all_plots <- list()
 
 for (edu in setdiff(education_levels, "phd")) {
-  # Get comparison education level data
-  comp_trends <- viz_data$trends[viz_data$trends$education == edu, ]
+  # Get comparison education level predictions
+  comp_preds <- pred_grid[pred_grid$education == edu, ]
 
   # Merge with PhD data
   comp_data <- merge(
-    phd_trends[, c("date", "phd_trend", "phd_se")],
-    comp_trends[, c("date", "trend_effect", "se")],
+    phd_preds[, c("date", "phd_rate", "phd_se")],
+    comp_preds[, c("date", "predicted_rate", "se")],
     by = "date"
   )
-  names(comp_data)[names(comp_data) == "trend_effect"] <- "comp_trend"
+  names(comp_data)[names(comp_data) == "predicted_rate"] <- "comp_rate"
   names(comp_data)[names(comp_data) == "se"] <- "comp_se"
 
   # Calculate difference
-  comp_data$difference <- comp_data$comp_trend - comp_data$phd_trend
+  comp_data$difference <- comp_data$comp_rate - comp_data$phd_rate
   comp_data$diff_se <- sqrt(comp_data$phd_se^2 + comp_data$comp_se^2)
 
-  # Focus on 2024-2025 period
-  recent_data <- comp_data[comp_data$date >= as.Date("2024-01-01"), ]
-
-  # Debug: check date range (only print once)
-  if (edu == "less_than_hs") {
-    cat(sprintf("\nDate range in plots: %s to %s\n",
-                format(min(recent_data$date), "%Y-%m-%d"),
-                format(max(recent_data$date), "%Y-%m-%d")))
-  }
-
-  # Panel 1: Both trends on same plot
-  p1 <- ggplot(recent_data, aes(x = date)) +
+  # Panel 1: Both predicted rates on same plot
+  p1 <- ggplot(comp_data, aes(x = date)) +
     # Comparison education level
     geom_ribbon(
-      aes(ymin = comp_trend - 1.96 * comp_se, ymax = comp_trend + 1.96 * comp_se),
+      aes(ymin = comp_rate - 1.96 * comp_se, ymax = comp_rate + 1.96 * comp_se),
       alpha = 0.15,
       fill = education_colors[[edu]]
     ) +
-    geom_line(aes(y = comp_trend, color = "Comparison"), linewidth = 1) +
+    geom_line(aes(y = comp_rate, color = "Comparison"), linewidth = 1) +
     # PhD
     geom_ribbon(
-      aes(ymin = phd_trend - 1.96 * phd_se, ymax = phd_trend + 1.96 * phd_se),
+      aes(ymin = phd_rate - 1.96 * phd_se, ymax = phd_rate + 1.96 * phd_se),
       alpha = 0.15,
       fill = education_colors[["phd"]]
     ) +
-    geom_line(aes(y = phd_trend, color = "PhD"), linewidth = 1) +
+    geom_line(aes(y = phd_rate, color = "PhD"), linewidth = 1) +
     scale_color_manual(
       values = c("Comparison" = education_colors[[edu]], "PhD" = education_colors[["phd"]]),
       labels = c("Comparison" = education_labels[[edu]], "PhD" = "PhD")
@@ -494,8 +508,8 @@ for (edu in setdiff(education_levels, "phd")) {
       legend.text = element_text(size = 8)
     )
 
-  # Panel 2: Difference
-  p2 <- ggplot(recent_data, aes(x = date)) +
+  # Panel 2: Difference in predicted rates
+  p2 <- ggplot(comp_data, aes(x = date)) +
     geom_ribbon(
       aes(ymin = difference - 1.96 * diff_se, ymax = difference + 1.96 * diff_se),
       alpha = 0.2,
@@ -516,7 +530,7 @@ for (edu in setdiff(education_levels, "phd")) {
     )
 
   # Add both panels to the list
-  all_plots[[paste0(edu, "_trends")]] <- p1
+  all_plots[[paste0(edu, "_pred")]] <- p1
   all_plots[[paste0(edu, "_diff")]] <- p2
 }
 
@@ -529,25 +543,22 @@ gridExtra::grid.arrange(grobs = all_plots, ncol = 2, byrow = TRUE)
 ```{r phd-recent-summary}
 #| echo: false
 
-# Calculate recent changes for each comparison
-focus_start <- as.Date("2024-01-01")
-recent_end <- max(viz_data$trends$date)
+# Calculate recent changes for each comparison using the prediction data
+recent_end <- max(pred_grid$date)
 
-phd_focus <- viz_data$trends[viz_data$trends$education == "phd" &
-                             viz_data$trends$date >= focus_start, ]
+phd_recent <- phd_preds
 
 for (edu in setdiff(education_levels, "phd")) {
-  comp_focus <- viz_data$trends[viz_data$trends$education == edu &
-                                viz_data$trends$date >= focus_start, ]
+  comp_recent <- pred_grid[pred_grid$education == edu, ]
 
   # Latest values (most recent data)
-  latest_phd <- tail(phd_focus$trend_effect, 1)
-  latest_comp <- tail(comp_focus$trend_effect, 1)
+  latest_phd <- tail(phd_recent$phd_rate, 1)
+  latest_comp <- tail(comp_recent$predicted_rate, 1)
   latest_diff <- latest_comp - latest_phd
 
   # Starting values (Jan 2024)
-  start_phd <- phd_focus$trend_effect[1]
-  start_comp <- comp_focus$trend_effect[1]
+  start_phd <- phd_recent$phd_rate[1]
+  start_comp <- comp_recent$predicted_rate[1]
   start_diff <- start_comp - start_phd
 
   # Change within 2024-2025
