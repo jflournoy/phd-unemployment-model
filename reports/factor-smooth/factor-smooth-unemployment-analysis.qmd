@@ -411,12 +411,12 @@ ggplot(viz_data$trends, aes(x = date, y = trend_effect, color = education)) +
   guides(color = guide_legend(nrow = 2))
 ```
 
-### PhD Unemployment: Trend Comparisons with Other Education Levels
+### PhD vs Other Education Levels: Predicted Unemployment Rates
 
 ::: {.callout-important}
 ## Focus: Recent PhD Labor Market Trends
 
-This section examines **seasonal-independent trends** in PhD unemployment relative to each other education level, focusing on 2024 and available 2025 data (through August 2025).
+This section shows **trend predictions** (excluding seasonal effects but including overall intercept) in PhD unemployment relative to each other education level, focusing on 2024 and available 2025 data (through August 2025).
 :::
 
 ```{r phd-trend-comparisons}
@@ -479,11 +479,11 @@ for (edu in setdiff(education_levels, "phd")) {
       values = c("Comparison" = education_colors[[edu]], "PhD" = education_colors[["phd"]]),
       labels = c("Comparison" = education_labels[[edu]], "PhD" = "PhD")
     ) +
-    scale_y_continuous(labels = scales::percent_format(accuracy = 0.01)) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
     labs(
-      title = sprintf("PhD vs %s: Trend Levels", education_labels[[edu]]),
+      title = sprintf("PhD vs %s: Predicted Unemployment Rate", education_labels[[edu]]),
       x = NULL,
-      y = "Unemployment Rate (trend)",
+      y = "Predicted Unemployment Rate",
       color = NULL
     ) +
     theme_minimal() +
@@ -503,11 +503,11 @@ for (edu in setdiff(education_levels, "phd")) {
     ) +
     geom_line(aes(y = difference), color = education_colors[[edu]], linewidth = 1) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
-    scale_y_continuous(labels = scales::percent_format(accuracy = 0.01)) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
     labs(
       title = sprintf("Difference (%s - PhD)", education_labels[[edu]]),
       x = NULL,
-      y = "Trend Difference (pp)"
+      y = "Difference in Predicted Rate (pp)"
     ) +
     theme_minimal() +
     theme(
@@ -556,14 +556,14 @@ for (edu in setdiff(education_levels, "phd")) {
   cat(sprintf("**%s vs PhD (as of %s):**\n",
               education_labels[[edu]],
               format(recent_end, "%b %Y")))
-  cat(sprintf("- Current trend difference: %.3f%% (PhD is %.3f%% %s)\n",
+  cat(sprintf("- Current difference: %.2f%% (PhD is %.2f%% %s)\n",
               abs(latest_diff) * 100,
               abs(latest_diff) * 100,
               if(latest_diff > 0) "lower" else "higher"))
-  cat(sprintf("- Gap %s by %.3f%% since Jan 2024\n",
+  cat(sprintf("- Gap %s by %.2f%% since Jan 2024\n",
               if(abs(change_in_gap) < 0.0001) "unchanged" else if(change_in_gap > 0) "widened" else "narrowed",
               abs(change_in_gap) * 100))
-  cat(sprintf("- Latest PhD trend: %.3f%%, Latest %s trend: %.3f%%\n\n",
+  cat(sprintf("- Latest PhD rate: %.2f%%, Latest %s rate: %.2f%%\n\n",
               latest_phd * 100,
               education_labels[[edu]],
               latest_comp * 100))
@@ -573,181 +573,17 @@ for (edu in setdiff(education_levels, "phd")) {
 ::: {.callout-note}
 ## Key Insight: PhD Relative Position
 
-Positive values indicate the comparison group has **higher** trend unemployment than PhDs (PhD advantage). Negative values indicate PhDs have **higher** trend unemployment (PhD disadvantage).
+Positive values indicate the comparison group has **higher** predicted unemployment than PhDs (PhD advantage). Negative values indicate PhDs have **higher** predicted unemployment (PhD disadvantage).
 
 The shaded bands show 95% confidence intervals - when bands don't cross zero, the difference is statistically significant.
+
+**Note**: These predictions include the overall intercept but exclude seasonal effects, showing the underlying trend in unemployment rates.
 :::
 
-### PhD vs Other Education Levels: Full Predicted Unemployment Rates
 
-::: {.callout-important}
-## Predicted Values: Complete Model Estimates
+---
 
-This section shows **full model predictions** (trend + seasonality + all components) comparing PhD unemployment rates to each other education level for 2024-2025.
-:::
-
-```{r phd-predicted-comparisons}
-#| fig-height: 16
-#| fig-cap: "Figure 3c: PhD unemployment predictions vs each education level (full model, 2024-2025)"
-
-# Get predictions from the best model (m6)
-best_model <- analysis$models$m6
-
-# Create prediction data for 2024-2025
-pred_dates <- seq(as.Date("2024-01-01"), max(analysis$data$date), by = "month")
-pred_data <- expand.grid(
-  date = pred_dates,
-  education = factor(education_levels, levels = education_levels)
-)
-
-# Add time_index and month
-pred_data$time_index <- as.numeric(pred_data$date - min(analysis$data$date)) / 30.44 + 1
-pred_data$month <- as.numeric(format(pred_data$date, "%m"))
-
-# Get predictions with SE
-preds <- predict(best_model, newdata = pred_data, type = "response", se.fit = TRUE)
-pred_data$predicted_rate <- preds$fit
-pred_data$se <- preds$se.fit
-
-# Extract PhD predictions
-phd_preds <- pred_data[pred_data$education == "phd", ]
-phd_preds$phd_rate <- phd_preds$predicted_rate
-phd_preds$phd_se <- phd_preds$se
-
-# Create comparison plots
-all_pred_plots <- list()
-
-for (edu in setdiff(education_levels, "phd")) {
-  # Get comparison education level predictions
-  comp_preds <- pred_data[pred_data$education == edu, ]
-
-  # Merge with PhD data
-  comp_data <- merge(
-    phd_preds[, c("date", "phd_rate", "phd_se")],
-    comp_preds[, c("date", "predicted_rate", "se")],
-    by = "date"
-  )
-  names(comp_data)[names(comp_data) == "predicted_rate"] <- "comp_rate"
-  names(comp_data)[names(comp_data) == "se"] <- "comp_se"
-
-  # Calculate difference
-  comp_data$difference <- comp_data$comp_rate - comp_data$phd_rate
-  comp_data$diff_se <- sqrt(comp_data$phd_se^2 + comp_data$comp_se^2)
-
-  # Panel 1: Both predicted rates on same plot
-  p1 <- ggplot(comp_data, aes(x = date)) +
-    # Comparison education level
-    geom_ribbon(
-      aes(ymin = comp_rate - 1.96 * comp_se, ymax = comp_rate + 1.96 * comp_se),
-      alpha = 0.15,
-      fill = education_colors[[edu]]
-    ) +
-    geom_line(aes(y = comp_rate, color = "Comparison"), linewidth = 1) +
-    # PhD
-    geom_ribbon(
-      aes(ymin = phd_rate - 1.96 * phd_se, ymax = phd_rate + 1.96 * phd_se),
-      alpha = 0.15,
-      fill = education_colors[["phd"]]
-    ) +
-    geom_line(aes(y = phd_rate, color = "PhD"), linewidth = 1) +
-    scale_color_manual(
-      values = c("Comparison" = education_colors[[edu]], "PhD" = education_colors[["phd"]]),
-      labels = c("Comparison" = education_labels[[edu]], "PhD" = "PhD")
-    ) +
-    scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
-    labs(
-      title = sprintf("PhD vs %s: Predicted Unemployment Rate", education_labels[[edu]]),
-      x = NULL,
-      y = "Predicted Unemployment Rate",
-      color = NULL
-    ) +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(face = "bold", size = 10),
-      axis.text = element_text(size = 8),
-      legend.position = "bottom",
-      legend.text = element_text(size = 8)
-    )
-
-  # Panel 2: Difference in predicted rates
-  p2 <- ggplot(comp_data, aes(x = date)) +
-    geom_ribbon(
-      aes(ymin = difference - 1.96 * diff_se, ymax = difference + 1.96 * diff_se),
-      alpha = 0.2,
-      fill = education_colors[[edu]]
-    ) +
-    geom_line(aes(y = difference), color = education_colors[[edu]], linewidth = 1) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
-    scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
-    labs(
-      title = sprintf("Difference (%s - PhD)", education_labels[[edu]]),
-      x = NULL,
-      y = "Rate Difference (pp)"
-    ) +
-    theme_minimal() +
-    theme(
-      plot.title = element_text(face = "bold", size = 10),
-      axis.text = element_text(size = 8)
-    )
-
-  # Add both panels to the list
-  all_pred_plots[[paste0(edu, "_predicted")]] <- p1
-  all_pred_plots[[paste0(edu, "_diff")]] <- p2
-}
-
-# Arrange all plots: 2 columns (predictions | difference), 6 rows
-gridExtra::grid.arrange(grobs = all_pred_plots, ncol = 2, byrow = TRUE)
-```
-
-#### Predicted Rate Summary (2024-2025)
-
-```{r phd-predicted-summary}
-#| echo: false
-
-# Calculate summary statistics for predicted rates
-for (edu in setdiff(education_levels, "phd")) {
-  comp_preds <- pred_data[pred_data$education == edu, ]
-  phd_subset <- pred_data[pred_data$education == "phd", ]
-
-  # Latest values
-  latest_phd <- tail(phd_subset$predicted_rate, 1)
-  latest_comp <- tail(comp_preds$predicted_rate, 1)
-  latest_diff <- latest_comp - latest_phd
-
-  # Average over 2024-2025
-  avg_phd <- mean(phd_subset$predicted_rate)
-  avg_comp <- mean(comp_preds$predicted_rate)
-  avg_diff <- avg_comp - avg_phd
-
-  cat(sprintf("**%s vs PhD (Predicted Rates):**\n", education_labels[[edu]]))
-  cat(sprintf("- Latest PhD rate: %.2f%%, Latest %s rate: %.2f%%\n",
-              latest_phd * 100,
-              education_labels[[edu]],
-              latest_comp * 100))
-  cat(sprintf("- Current difference: %.2f%% (PhD is %.2f%% %s)\n",
-              abs(latest_diff) * 100,
-              abs(latest_diff) * 100,
-              if(latest_diff > 0) "lower" else "higher"))
-  cat(sprintf("- 2024-2025 average PhD: %.2f%%, average %s: %.2f%%\n",
-              avg_phd * 100,
-              education_labels[[edu]],
-              avg_comp * 100))
-  cat(sprintf("- Average gap: %.2f%%\n\n",
-              abs(avg_diff) * 100))
-}
-```
-
-::: {.callout-note}
-## Predicted Rates vs Trend-Only Comparisons
-
-The **predicted rates** (above) include seasonal fluctuations and show the actual expected unemployment rate at each point in time.
-
-The **trend comparisons** (previous section) show only the long-term trend component after removing seasonality, making it easier to see secular changes.
-
-Both perspectives are valuable:
-- **Predicted rates**: Answer "What is the actual unemployment rate now?"
-- **Trends**: Answer "What is the underlying direction after accounting for seasonal variation?"
-:::
+## Seasonal and Prediction Analysis
 
 ### Seasonal Patterns
 
