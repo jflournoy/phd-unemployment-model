@@ -4,10 +4,12 @@
 
 Commands are organized by frequency of use and purpose:
 
-### All Commands (14 total)
+### All Commands (16 total)
 - `commit` - Atomic commits with quality checks (1-3 files)
 - `docs` - Documentation maintenance
 - `docs-explain` - Educational documentation walkthrough
+- `evaluate-report` - Evaluate statistical report quality (simulation & exploratory)
+- `fix-permissions` - Fix Docker file ownership permissions
 - `hygiene` - Code quality checks
 - `learn` - Capture insights and learnings
 - `maintainability` - Code quality analysis
@@ -15,6 +17,7 @@ Commands are organized by frequency of use and purpose:
 - `next` - Get workflow guidance
 - `push` - Git push with validations
 - `reflect` - Periodic reflection
+- `render` - Render Quarto documents (QMD) to HTML
 - `retrospective` - Session analysis
 - `session-history` - Session preservation
 - `tdd` - Test-driven development
