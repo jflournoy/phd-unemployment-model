@@ -429,17 +429,24 @@ best_model <- analysis$best_model
 # Get visualization data
 viz_data <- analysis$visualization_data
 
-# Create prediction data for 2024-2025 at a fixed month (June) to remove seasonality
-pred_dates <- seq(as.Date("2024-01-01"), max(viz_data$fitted$date), by = "month")
+# Get actual data to extract correct time_index values
+actual_data <- analysis$data
 
-# Create grid for all education levels
+# Filter for 2024-2025 period
+recent_data <- actual_data[actual_data$year >= 2024, ]
+
+# Get unique time points (one per month)
+time_lookup <- unique(recent_data[, c("year", "month", "time_index")])
+time_lookup$date <- as.Date(paste(time_lookup$year, time_lookup$month, 1, sep = "-"))
+
+# Create grid for all education levels using actual time_index values
 pred_grid <- expand.grid(
-  date = pred_dates,
+  time_index = time_lookup$time_index,
   education = factor(education_levels, levels = education_levels)
 )
 
-# Add time_index and fixed month (June = 6 to remove seasonality)
-pred_grid$time_index <- as.numeric(pred_grid$date - min(viz_data$fitted$date)) / 30.44 + 1
+# Add date and fixed month (June = 6 to remove seasonality)
+pred_grid <- merge(pred_grid, time_lookup[, c("time_index", "date")], by = "time_index")
 pred_grid$month <- 6  # Fixed month to remove seasonal component
 
 # Get predictions with SE (includes intercept)
