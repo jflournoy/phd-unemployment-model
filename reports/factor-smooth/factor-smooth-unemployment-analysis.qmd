@@ -331,8 +331,8 @@ ggplot() +
   geom_point(
     data = viz_data$observed,
     aes(x = date, y = unemployment_rate, color = education),
-    alpha = 0.3,
-    size = 0.5
+    alpha = 0.5,
+    size = 0.8
   ) +
   # Fitted values with confidence intervals
   geom_ribbon(
@@ -343,7 +343,7 @@ ggplot() +
   geom_line(
     data = viz_data$fitted,
     aes(x = date, y = fitted, color = education),
-    linewidth = 1
+    linewidth = 1.2
   ) +
   scale_color_manual(
     values = education_colors,
@@ -379,7 +379,7 @@ ggplot() +
 #| fig-cap: "Figure 3: Estimated trend components show long-term changes in unemployment"
 
 ggplot(viz_data$trends, aes(x = date, y = trend_effect, color = education)) +
-  geom_line(linewidth = 1) +
+  geom_line(linewidth = 1.2) +
   geom_ribbon(
     aes(ymin = trend_effect - 1.96 * se, ymax = trend_effect + 1.96 * se, fill = education),
     alpha = 0.2,
