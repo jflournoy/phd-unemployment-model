@@ -414,14 +414,21 @@ ggplot(viz_data$trends, aes(x = date, y = trend_effect, color = education)) +
 ### PhD vs Other Education Levels: Predicted Unemployment Rates
 
 ::: {.callout-important}
-## Focus: Recent PhD Labor Market Trends
+## Focus: PhD Labor Market Trends
 
-This section shows **trend predictions** (excluding seasonal effects but including overall intercept) in PhD unemployment relative to each other education level, focusing on 2024 and available 2025 data (through August 2025).
+This section compares PhD unemployment to each education level using the **full time series (2000-2025)**. Each panel shows:
+
+- **Points**: Observed monthly unemployment rates
+- **Faint lines**: Full model predictions (including seasonality)
+- **Bold lines**: Trend predictions at month=6 (seasonal effects removed)
+- **Right panel**: Trend-based differences with 95% confidence intervals
+
+This visualization reveals both short-term seasonal fluctuations and long-term structural trends.
 :::
 
 ```{r phd-trend-comparisons}
 #| fig-height: 16
-#| fig-cap: "Figure 3b: PhD unemployment trends compared to each education level (seasonal-independent, 2024-2025)"
+#| fig-cap: "Figure 3b: PhD unemployment compared to each education level (full time series with data)"
 
 # Get the best model from analysis
 best_model <- analysis$best_model
@@ -432,95 +439,148 @@ viz_data <- analysis$visualization_data
 # Get actual data with the REAL time_index values used in model fitting
 actual_data <- analysis$data
 
-# Filter for 2024-2025 period
-recent_data <- actual_data[actual_data$year >= 2024, ]
+# Use FULL time period (not just 2024-2025)
+all_time_periods <- unique(actual_data[, c("year", "month", "time_index")])
+all_time_periods <- all_time_periods[order(all_time_periods$year, all_time_periods$month), ]
+all_time_periods$date <- as.Date(paste(all_time_periods$year, all_time_periods$month, 1, sep = "-"))
 
-# Get unique time points with their ACTUAL time_index values from the fitted model
-# This is critical - we need the same time_index scale the model was trained on
-time_periods <- unique(recent_data[, c("year", "month", "time_index")])
-time_periods <- time_periods[order(time_periods$year, time_periods$month), ]
-time_periods$date <- as.Date(paste(time_periods$year, time_periods$month, 1, sep = "-"))
+# Create TWO prediction grids:
+# 1. Trend predictions (month=6, removes seasonality)
+# 2. Full predictions (actual months, includes seasonality)
 
-# Create grid for all education levels
-# CRITICAL: time_index uses ACTUAL values from data (for s(time_index) trend)
-#           month is FIXED to 6 (for s(month) seasonal component only)
-pred_grid <- expand.grid(
-  time_index = unique(time_periods$time_index),  # Use actual time_index values
-  month = 6,  # Fixed month to remove seasonal variation
+# Grid 1: Trend predictions (seasonal-independent)
+trend_grid <- expand.grid(
+  time_index = unique(all_time_periods$time_index),
+  month = 6,  # Fixed month to remove seasonal component
   education = factor(education_levels, levels = education_levels)
 )
+trend_grid <- merge(trend_grid, all_time_periods[, c("time_index", "date")], by = "time_index")
 
-# Add date information for plotting (each time_index maps to a specific year-month)
-pred_grid <- merge(pred_grid, time_periods[, c("time_index", "date")], by = "time_index")
+# Get trend predictions
+trend_preds <- predict(best_model, newdata = trend_grid, type = "response", se.fit = TRUE)
+trend_grid$trend_rate <- trend_preds$fit
+trend_grid$trend_se <- trend_preds$se.fit
 
-# Get predictions with SE (includes intercept)
-preds <- predict(best_model, newdata = pred_grid, type = "response", se.fit = TRUE)
-pred_grid$predicted_rate <- preds$fit
-pred_grid$se <- preds$se.fit
+# Grid 2: Full predictions (includes seasonality)
+full_grid <- expand.grid(
+  time_index = unique(all_time_periods$time_index),
+  month = all_time_periods$month[match(unique(all_time_periods$time_index), all_time_periods$time_index)],
+  education = factor(education_levels, levels = education_levels)
+)
+full_grid <- merge(full_grid, all_time_periods[, c("time_index", "date", "month")],
+                   by = c("time_index", "month"))
 
-# Extract PhD predictions
-phd_preds <- pred_grid[pred_grid$education == "phd", ]
-phd_preds$phd_rate <- phd_preds$predicted_rate
-phd_preds$phd_se <- phd_preds$se
+# Get full predictions
+full_preds <- predict(best_model, newdata = full_grid, type = "response", se.fit = TRUE)
+full_grid$full_rate <- full_preds$fit
 
 # Create comparison plots for each education level
-# Each comparison will have TWO panels: trends + difference
 all_plots <- list()
 
 for (edu in setdiff(education_levels, "phd")) {
-  # Get comparison education level predictions
-  comp_preds <- pred_grid[pred_grid$education == edu, ]
+  # Get observed data for this comparison from viz_data
+  obs_phd <- viz_data$observed[viz_data$observed$education == "phd", c("date", "unemployment_rate")]
+  obs_phd$education_label <- "PhD"
 
-  # Merge with PhD data
-  comp_data <- merge(
-    phd_preds[, c("date", "phd_rate", "phd_se")],
-    comp_preds[, c("date", "predicted_rate", "se")],
-    by = "date"
-  )
-  names(comp_data)[names(comp_data) == "predicted_rate"] <- "comp_rate"
-  names(comp_data)[names(comp_data) == "se"] <- "comp_se"
+  obs_comp <- viz_data$observed[viz_data$observed$education == edu, c("date", "unemployment_rate")]
+  obs_comp$education_label <- education_labels[[edu]]
 
-  # Calculate difference
-  comp_data$difference <- comp_data$comp_rate - comp_data$phd_rate
-  comp_data$diff_se <- sqrt(comp_data$phd_se^2 + comp_data$comp_se^2)
+  obs_data <- rbind(obs_phd, obs_comp)
 
-  # Panel 1: Both predicted rates on same plot
-  p1 <- ggplot(comp_data, aes(x = date)) +
-    # Comparison education level
-    geom_ribbon(
-      aes(ymin = comp_rate - 1.96 * comp_se, ymax = comp_rate + 1.96 * comp_se),
-      alpha = 0.15,
-      fill = education_colors[[edu]]
+  # Get trend predictions
+  trend_phd <- trend_grid[trend_grid$education == "phd", c("date", "trend_rate", "trend_se")]
+  trend_comp <- trend_grid[trend_grid$education == edu, c("date", "trend_rate", "trend_se")]
+
+  # Get full predictions
+  full_phd <- full_grid[full_grid$education == "phd", c("date", "full_rate")]
+  full_comp <- full_grid[full_grid$education == edu, c("date", "full_rate")]
+
+  # Panel 1: Rates with observed data, full predictions, and trend predictions
+  p1 <- ggplot() +
+    # Observed data points
+    geom_point(
+      data = obs_data,
+      aes(x = date, y = unemployment_rate, color = education_label),
+      alpha = 0.3,
+      size = 0.5
     ) +
-    geom_line(aes(y = comp_rate, color = "Comparison"), linewidth = 1) +
-    # PhD
+    # Full predictions (faint lines showing seasonality)
+    geom_line(
+      data = full_phd,
+      aes(x = date, y = full_rate),
+      color = education_colors[["phd"]],
+      alpha = 0.3,
+      linewidth = 0.5
+    ) +
+    geom_line(
+      data = full_comp,
+      aes(x = date, y = full_rate),
+      color = education_colors[[edu]],
+      alpha = 0.3,
+      linewidth = 0.5
+    ) +
+    # Trend predictions (bold lines, no seasonality)
     geom_ribbon(
-      aes(ymin = phd_rate - 1.96 * phd_se, ymax = phd_rate + 1.96 * phd_se),
+      data = trend_phd,
+      aes(x = date, ymin = trend_rate - 1.96 * trend_se, ymax = trend_rate + 1.96 * trend_se),
       alpha = 0.15,
       fill = education_colors[["phd"]]
     ) +
-    geom_line(aes(y = phd_rate, color = "PhD"), linewidth = 1) +
+    geom_line(
+      data = trend_phd,
+      aes(x = date, y = trend_rate, linetype = "Trend (no seasonality)"),
+      color = education_colors[["phd"]],
+      linewidth = 1
+    ) +
+    geom_ribbon(
+      data = trend_comp,
+      aes(x = date, ymin = trend_rate - 1.96 * trend_se, ymax = trend_rate + 1.96 * trend_se),
+      alpha = 0.15,
+      fill = education_colors[[edu]]
+    ) +
+    geom_line(
+      data = trend_comp,
+      aes(x = date, y = trend_rate, linetype = "Trend (no seasonality)"),
+      color = education_colors[[edu]],
+      linewidth = 1
+    ) +
     scale_color_manual(
-      values = c("Comparison" = education_colors[[edu]], "PhD" = education_colors[["phd"]]),
-      labels = c("Comparison" = education_labels[[edu]], "PhD" = "PhD")
+      values = setNames(c(education_colors[["phd"]], education_colors[[edu]]),
+                        c("PhD", education_labels[[edu]])),
+      name = "Observed"
+    ) +
+    scale_linetype_manual(
+      values = c("Trend (no seasonality)" = "solid"),
+      name = ""
     ) +
     scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
     labs(
-      title = sprintf("PhD vs %s: Predicted Unemployment Rate", education_labels[[edu]]),
+      title = sprintf("PhD vs %s: Unemployment Rates", education_labels[[edu]]),
+      subtitle = "Points = observed, faint lines = full fit, bold = trend (month=6)",
       x = NULL,
-      y = "Predicted Unemployment Rate",
-      color = NULL
+      y = "Unemployment Rate"
     ) +
     theme_minimal() +
     theme(
       plot.title = element_text(face = "bold", size = 10),
+      plot.subtitle = element_text(size = 8),
       axis.text = element_text(size = 8),
       legend.position = "bottom",
-      legend.text = element_text(size = 8)
+      legend.text = element_text(size = 8),
+      legend.box = "vertical"
     )
 
-  # Panel 2: Difference in predicted rates
-  p2 <- ggplot(comp_data, aes(x = date)) +
+  # Panel 2: Trend difference
+  trend_diff_data <- merge(
+    trend_phd[, c("date", "trend_rate", "trend_se")],
+    trend_comp[, c("date", "trend_rate", "trend_se")],
+    by = "date",
+    suffixes = c("_phd", "_comp")
+  )
+  trend_diff_data$difference <- trend_diff_data$trend_rate_comp - trend_diff_data$trend_rate_phd
+  trend_diff_data$diff_se <- sqrt(trend_diff_data$trend_se_phd^2 + trend_diff_data$trend_se_comp^2)
+
+  p2 <- ggplot(trend_diff_data, aes(x = date)) +
     geom_ribbon(
       aes(ymin = difference - 1.96 * diff_se, ymax = difference + 1.96 * diff_se),
       alpha = 0.2,
@@ -530,13 +590,15 @@ for (edu in setdiff(education_levels, "phd")) {
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
     scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
     labs(
-      title = sprintf("Difference (%s - PhD)", education_labels[[edu]]),
+      title = sprintf("Trend Difference (%s - PhD)", education_labels[[edu]]),
+      subtitle = "Based on seasonal-independent predictions (month=6)",
       x = NULL,
-      y = "Difference in Predicted Rate (pp)"
+      y = "Difference in Unemployment Rate (pp)"
     ) +
     theme_minimal() +
     theme(
       plot.title = element_text(face = "bold", size = 10),
+      plot.subtitle = element_text(size = 8),
       axis.text = element_text(size = 8)
     )
 
@@ -545,7 +607,7 @@ for (edu in setdiff(education_levels, "phd")) {
   all_plots[[paste0(edu, "_diff")]] <- p2
 }
 
-# Arrange all plots: 2 columns (trends | difference), 6 rows (one per comparison)
+# Arrange all plots: 2 columns (rates | difference), 6 rows (one per comparison)
 gridExtra::grid.arrange(grobs = all_plots, ncol = 2, byrow = TRUE)
 ```
 
