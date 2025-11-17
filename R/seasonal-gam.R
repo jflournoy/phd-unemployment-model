@@ -290,16 +290,11 @@ simulate_multi_education_unemployment <- function(n_years = 5,
 fit_seasonal_gam <- function(data,
                               k_month = 12,
                               k_trend = 20,
-                              family = "gaussian") {
+                              family = "gaussian",
+                              response_formula = NULL) {
   # Validate inputs
   if (!is.data.frame(data)) {
     stop("data must be a data frame")
-  }
-
-  required_vars <- c("time_index", "month", "unemployment_rate")
-  missing_vars <- setdiff(required_vars, names(data))
-  if (length(missing_vars) > 0) {
-    stop("data missing required variables: ", paste(missing_vars, collapse = ", "))
   }
 
   # Check if mgcv package is available
@@ -307,12 +302,57 @@ fit_seasonal_gam <- function(data,
     stop("mgcv package required. Install with: install.packages('mgcv')")
   }
 
+  # Build formula based on response type
+  if (!is.null(response_formula)) {
+    # Binomial format: response_formula should be like quote(cbind(n_unemployed, n_employed))
+    # Or user can pass directly like: fit_seasonal_gam(data, response_formula = quote(cbind(...)))
+
+    # Try to deparse the response formula
+    if (is.call(response_formula) || is.name(response_formula)) {
+      response_str <- deparse(response_formula)
+      response_vars <- all.vars(response_formula)
+    } else if (is.character(response_formula)) {
+      response_str <- response_formula
+      # Parse to extract variables
+      response_expr <- parse(text = response_formula)[[1]]
+      response_vars <- all.vars(response_expr)
+    } else {
+      stop("response_formula must be a call, name, or character string")
+    }
+
+    # Validate required variables
+    required_vars <- c("time_index", "month", response_vars)
+    missing_vars <- setdiff(required_vars, names(data))
+    if (length(missing_vars) > 0) {
+      stop("data missing required variables: ", paste(missing_vars, collapse = ", "))
+    }
+
+    # Build full formula
+    formula_str <- sprintf(
+      "%s ~ s(time_index, bs = 'cr', k = %d) + s(month, bs = 'cc', k = %d)",
+      response_str, k_trend, k_month
+    )
+    formula_obj <- as.formula(formula_str, env = parent.frame())
+  } else {
+    # Backward compatibility: unemployment_rate format
+    required_vars <- c("time_index", "month", "unemployment_rate")
+
+    missing_vars <- setdiff(required_vars, names(data))
+    if (length(missing_vars) > 0) {
+      stop("data missing required variables: ", paste(missing_vars, collapse = ", "))
+    }
+
+    formula_obj <- as.formula(sprintf(
+      "unemployment_rate ~ s(time_index, bs = 'cr', k = %d) + s(month, bs = 'cc', k = %d)",
+      k_trend, k_month
+    ))
+  }
+
   # Fit GAM with cyclic spline for month and smooth trend
   # bs = "cc" = cyclic cubic spline (ensures Dec-Jan continuity)
   # bs = "cr" = cubic regression spline (flexible trend)
   model <- mgcv::gam(
-    unemployment_rate ~ s(time_index, bs = "cr", k = k_trend) +
-                        s(month, bs = "cc", k = k_month),
+    formula_obj,
     data = data,
     family = family,
     method = "REML"  # Restricted Maximum Likelihood for smoothness selection
