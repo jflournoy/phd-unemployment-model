@@ -259,7 +259,7 @@ test_that("fixed month predictions remove seasonality", {
 
   analysis <- analyze_cps_unemployment_by_education(
     data_file = data_file,
-    education_levels = c("phd"),
+    education_levels = c("phd", "masters"),
     start_year = 2020,
     end_year = 2024,
     save_models = FALSE,
