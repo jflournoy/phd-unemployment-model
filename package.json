@@ -71,7 +71,7 @@
     "test:verbose": "node --test --test-reporter=spec test/*.test.js",
     "test:coverage": "node --test --experimental-test-coverage test/*.test.js",
     "test:watch": "node --test --watch test/*.test.js",
-    "test:r": "Rscript -e 'testthat::test_dir(\"tests/testthat\")'",
+    "test:r": "Rscript -e 'devtools::test()'",
     "test:r:coverage": "Rscript -e 'covr::package_coverage()'",
     "// R Commands": "=== R development commands ===",
     "r:check": "R CMD check .",
