@@ -2139,3 +2139,206 @@ compute_trend_slope_differences <- function(model,
 #' @rdname compute_level_differences
 #' @export
 compute_trend_differences <- compute_level_differences
+
+#' Compute GAM Trend Derivatives for Visualization
+#'
+#' Computes first derivatives (slopes/velocities) of unemployment trends for each
+#' education level. This function is designed for visualization and interpretation
+#' of trend rate of change patterns.
+#'
+#' @param model gam object from \code{fit_factor_smooth_gam}
+#' @param education_levels Character vector of education levels to compute derivatives for
+#' @param time_points Numeric vector of time index values to evaluate derivatives at.
+#'   If NULL, uses all unique time points from model data (with boundary trimming).
+#' @param eps Numeric. Step size for finite difference approximation (default: 0.1)
+#' @param alpha Numeric. Significance level for confidence intervals (default: 0.05)
+#'
+#' @return Data frame with columns:
+#'   \item{time_index}{Time index}
+#'   \item{education}{Education level}
+#'   \item{derivative}{Estimated first derivative (rate of change in unemployment per time unit)}
+#'   \item{se}{Standard error of the derivative}
+#'   \item{lower}{Lower confidence limit}
+#'   \item{upper}{Upper confidence limit}
+#'   \item{significant}{Logical. Is derivative significantly different from zero?}
+#'
+#' @details
+#' Derivatives are computed using central finite differences:
+#'   f'(t) ≈ (f(t + eps) - f(t - eps)) / (2 * eps)
+#'
+#' Standard errors use the delta method with the model's variance-covariance matrix.
+#'
+#' Positive derivatives indicate increasing unemployment (positive slope/velocity),
+#' negative derivatives indicate decreasing unemployment (negative slope/velocity).
+#'
+#' Note: This computes the first derivative (rate of change, velocity), not the
+#' second derivative (acceleration).
+#'
+#' @export
+compute_gam_derivatives <- function(model,
+                                   education_levels,
+                                   time_points = NULL,
+                                   eps = 0.1,
+                                   alpha = 0.05) {
+
+  education_var <- attr(model, "education_var")
+  if (is.null(education_var)) {
+    education_var <- "education"
+  }
+
+  # Use all time points if not specified
+  if (is.null(time_points)) {
+    time_points <- sort(unique(model$model$time_index))
+  }
+
+  # Remove boundary points for central differences
+  time_points <- time_points[time_points >= min(model$model$time_index) + eps &
+                             time_points <= max(model$model$time_index) - eps]
+
+  if (length(time_points) == 0) {
+    stop("No valid time points remain after boundary filtering. Try smaller eps or different time_points.")
+  }
+
+  # Compute derivatives for each education level
+  results_list <- lapply(education_levels, function(edu) {
+    n <- length(time_points)
+
+    # Create prediction data at t-eps and t+eps
+    # Fix month at June (6) to isolate trend component
+    newdata_minus <- data.frame(
+      time_index = time_points - eps,
+      month = 6,
+      education = edu,
+      stringsAsFactors = FALSE
+    )
+    newdata_plus <- data.frame(
+      time_index = time_points + eps,
+      month = 6,
+      education = edu,
+      stringsAsFactors = FALSE
+    )
+
+    # Fix column name
+    names(newdata_minus)[3] <- education_var
+    names(newdata_plus)[3] <- education_var
+
+    # Get linear predictor matrix
+    X_minus <- predict(model, newdata = newdata_minus, type = "lpmatrix")
+    X_plus <- predict(model, newdata = newdata_plus, type = "lpmatrix")
+
+    # Compute derivative using central differences
+    C <- (X_plus - X_minus) / (2 * eps)
+
+    # Get derivative estimates
+    deriv <- as.numeric(C %*% coef(model))
+
+    # Variance using full variance-covariance matrix
+    V <- vcov(model)
+    se <- sqrt(rowSums((C %*% V) * C))
+
+    # Confidence intervals
+    crit <- qnorm(1 - alpha / 2)
+    lower <- deriv - crit * se
+    upper <- deriv + crit * se
+
+    # Test if significantly different from zero
+    significant <- (lower > 0 | upper < 0)
+
+    data.frame(
+      time_index = time_points,
+      education = edu,
+      derivative = deriv,
+      se = se,
+      lower = lower,
+      upper = upper,
+      significant = significant,
+      stringsAsFactors = FALSE
+    )
+  })
+
+  # Combine all education levels
+  do.call(rbind, results_list)
+}
+
+#' Plot GAM Trend Derivatives
+#'
+#' Creates a ggplot visualization of unemployment trend derivatives with
+#' confidence intervals. Highlights periods where unemployment is significantly
+#' increasing or decreasing.
+#'
+#' @param derivatives Data frame from \code{compute_gam_derivatives}
+#' @param education_colors Named vector of colors for education levels
+#' @param education_labels Named vector of labels for education levels
+#' @param title Character. Plot title (optional)
+#' @param subtitle Character. Plot subtitle (optional)
+#'
+#' @return ggplot object
+#'
+#' @details
+#' The plot shows:
+#' - Line: Estimated first derivative (rate of change, slope, velocity)
+#' - Ribbon: 95% confidence interval
+#' - Horizontal line at zero: Reference for no change (constant unemployment)
+#' - Color coding by significance (if significant column present)
+#'
+#' Positive values = increasing unemployment (positive slope)
+#' Negative values = decreasing unemployment (negative slope)
+#' Zero = constant unemployment (no change)
+#'
+#' @export
+plot_gam_derivatives <- function(derivatives,
+                                education_colors = NULL,
+                                education_labels = NULL,
+                                title = "Unemployment Trend Derivatives",
+                                subtitle = "Rate of change in unemployment over time") {
+
+  # Load ggplot2
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Package 'ggplot2' is required for plotting")
+  }
+
+  # Apply labels if provided
+  if (!is.null(education_labels)) {
+    derivatives$education_label <- education_labels[derivatives$education]
+  } else {
+    derivatives$education_label <- derivatives$education
+  }
+
+  # Create base plot
+  p <- ggplot2::ggplot(derivatives, ggplot2::aes(x = time_index, y = derivative, color = education_label, fill = education_label))
+
+  # Add confidence ribbon
+  p <- p + ggplot2::geom_ribbon(
+    ggplot2::aes(ymin = lower, ymax = upper),
+    alpha = 0.2,
+    color = NA
+  )
+
+  # Add derivative line
+  p <- p + ggplot2::geom_line(linewidth = 1)
+
+  # Add reference line at zero
+  p <- p + ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "gray30")
+
+  # Apply colors if provided
+  if (!is.null(education_colors)) {
+    p <- p + ggplot2::scale_color_manual(values = education_colors, name = "Education")
+    p <- p + ggplot2::scale_fill_manual(values = education_colors, name = "Education")
+  }
+
+  # Labels and theme
+  p <- p + ggplot2::labs(
+    title = title,
+    subtitle = subtitle,
+    x = "Time Index",
+    y = "Derivative (change in unemployment rate per time unit)"
+  )
+
+  p <- p + ggplot2::theme_minimal()
+  p <- p + ggplot2::theme(
+    legend.position = "bottom",
+    panel.grid.minor = ggplot2::element_blank()
+  )
+
+  p
+}
