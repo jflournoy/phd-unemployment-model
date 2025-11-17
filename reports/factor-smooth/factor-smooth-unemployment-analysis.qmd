@@ -555,10 +555,16 @@ for (edu in setdiff(education_levels, "phd")) {
     ) +
     scale_y_log10(
       labels = scales::percent_format(accuracy = 0.1),
-      breaks = c(0.01, 0.02, 0.03, 0.05, 0.08, 0.10, 0.15)
+      breaks = c(0.0025, 0.005, 0.01, 0.02, 0.03, 0.05, 0.08, 0.10, 0.15),
+      limits = c(0.0025, 0.15)
+    ) +
+    scale_x_date(
+      limits = as.Date(c("2020-01-01", "2025-12-31")),
+      date_breaks = "1 year",
+      date_labels = "%Y"
     ) +
     labs(
-      title = sprintf("PhD vs %s: Unemployment Rates", education_labels[[edu]]),
+      title = sprintf("PhD vs %s: Unemployment Rates (2020-2025)", education_labels[[edu]]),
       subtitle = "Points = observed, faint lines = full fit, bold = trend (month=6). Log scale.",
       x = NULL,
       y = "Unemployment Rate (log scale)"
@@ -592,8 +598,13 @@ for (edu in setdiff(education_levels, "phd")) {
     geom_line(aes(y = difference), color = education_colors[[edu]], linewidth = 1) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
     scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
+    scale_x_date(
+      limits = as.Date(c("2020-01-01", "2025-12-31")),
+      date_breaks = "1 year",
+      date_labels = "%Y"
+    ) +
     labs(
-      title = sprintf("Trend Difference (%s - PhD)", education_labels[[edu]]),
+      title = sprintf("Trend Difference (%s - PhD, 2020-2025)", education_labels[[edu]]),
       subtitle = "Based on seasonal-independent predictions (month=6)",
       x = NULL,
       y = "Difference in Unemployment Rate (pp)"
