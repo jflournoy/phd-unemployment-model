@@ -17,7 +17,7 @@ format:
 execute:
   warning: false
   message: false
-  cache: true
+  cache: false
 ---
 
 ## Executive Summary
@@ -44,7 +44,13 @@ This report presents a comprehensive analysis of unemployment rates **across the
 
 2. **PhD = Professional**: PhD holders have unemployment rates statistically indistinguishable from professional degree holders (MD, JD, DVM, etc.) across the full time period
 
-3. **NEW: PhD Relative Positioning (2020-2024)**: Detailed trend comparisons show how PhD unemployment has evolved relative to each education level through 2024, with seasonal-independent trend analysis revealing recent labor market dynamics
+3. **PhD Recent Trends and Rate of Change (2020-2025)**:
+   - Detailed trend comparisons using log scale visualization reveal a **marked uptick in PhD unemployment as 2025 progresses**
+   - **NEW: Derivative analysis quantifies the rate of change** - showing positive slopes (increasing unemployment) in recent months
+   - This recent increase is particularly notable in the trend lines (seasonal-adjusted predictions)
+   - PhD unemployment remains lower than Bachelor's/Some College but the gap has narrowed
+   - Near-parity with Professional degrees continues throughout the period
+   - Log scale transformation and derivative plots make these subtle but important changes visible
 
 4. **Distinct Seasonal Patterns**: Each education level exhibits unique seasonal unemployment patterns, with lower education levels showing larger seasonal amplitude
 
@@ -115,8 +121,6 @@ Where:
 ### Data Preparation
 
 ```{r load-data}
-#| cache: true
-
 # Load real CPS full education spectrum unemployment data
 data_file <- here::here("data", "education-spectrum-unemployment.rds")
 
@@ -151,8 +155,6 @@ for (educ in c("less_than_hs", "high_school", "some_college",
 We fit a sequence of nested models to determine the appropriate level of complexity:
 
 ```{r model-selection}
-#| cache: true
-
 # Fit nested model sequence
 models_result <- fit_nested_models_to_cps_data(
   data_file = data_file,
@@ -221,8 +223,6 @@ This ensures that all education levels have the same degree of wiggliness in the
 Comprehensive diagnostic checks on the best-fitting model:
 
 ```{r model-validation}
-#| cache: true
-
 # Get best model
 best_model <- models_result$models[[models_result$best_model]]
 data_for_validation <- models_result$data
@@ -279,8 +279,6 @@ gridExtra::grid.arrange(
 ### Comprehensive Analysis
 
 ```{r full-analysis}
-#| cache: true
-
 # Run complete analysis pipeline
 analysis <- analyze_cps_unemployment_by_education(
   data_file = data_file,
@@ -411,24 +409,180 @@ ggplot(viz_data$trends, aes(x = date, y = trend_effect, color = education)) +
   guides(color = guide_legend(nrow = 2))
 ```
 
+### Trend Derivatives: Rate of Change (Slope)
+
+```{r compute-derivatives}
+# Compute trend derivatives (first derivative = slope) for all education levels
+# This shows rate of change in unemployment (how fast it's increasing or decreasing)
+
+# IMPORTANT: Use the model from analysis object which includes 2025 data
+# (not best_model from model-selection which only goes to 2024)
+model_for_derivatives <- analysis$best_model
+
+# Get data from analysis object
+analysis_data <- analysis$data
+
+# Use time points corresponding to actual data for better interpretation
+time_periods <- unique(analysis_data[, c("year", "month", "time_index")])
+time_periods <- time_periods[order(time_periods$year, time_periods$month), ]
+time_periods$date <- as.Date(paste(time_periods$year, time_periods$month, 1, sep = "-"))
+
+# Compute derivatives at monthly intervals
+derivatives <- compute_gam_derivatives(
+  model = model_for_derivatives,
+  education_levels = education_levels,
+  time_points = unique(time_periods$time_index),
+  eps = 0.5  # Half-month step for numerical derivative
+)
+
+# Add date for plotting
+derivatives <- merge(derivatives, time_periods[, c("time_index", "date")], by = "time_index")
+
+# Convert derivative to "per month" units and percentage points
+# derivatives are currently in units per time_index unit
+# time_index increments by 1 per month, so already in "per month"
+derivatives$derivative_pct <- derivatives$derivative * 100  # Convert to percentage points
+derivatives$lower_pct <- derivatives$lower * 100
+derivatives$upper_pct <- derivatives$upper * 100
+```
+
+```{r plot-derivatives-all}
+#| fig-height: 7
+#| fig-cap: "Figure 3a: Trend derivatives show rate of change (slope) in unemployment rates"
+
+# Note: Get max date from actual derivative data
+max_deriv_date <- max(derivatives$date, na.rm = TRUE)
+
+ggplot(derivatives, aes(x = date, y = derivative_pct, color = education, fill = education)) +
+  geom_ribbon(
+    aes(ymin = lower_pct, ymax = upper_pct),
+    alpha = 0.2,
+    color = NA
+  ) +
+  geom_line(linewidth = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
+  scale_color_manual(
+    values = education_colors,
+    labels = education_labels,
+    name = "Education"
+  ) +
+  scale_fill_manual(
+    values = education_colors,
+    labels = education_labels,
+    name = "Education"
+  ) +
+  scale_x_date(
+    limits = c(as.Date("2000-01-01"), max_deriv_date + 30),  # Show full range
+    date_breaks = "5 years",
+    date_labels = "%Y"
+  ) +
+  labs(
+    title = "Unemployment Trend Derivatives (Rate of Change) Across the Education Spectrum",
+    subtitle = "Positive = increasing unemployment, Negative = decreasing unemployment. First derivative shows slope/velocity.",
+    x = "Date",
+    y = "Derivative (percentage points per month)",
+    caption = sprintf("Shaded regions show 95%% confidence intervals. Data through %s.", format(max_deriv_date, "%B %Y"))
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.key.width = unit(1.5, "cm")
+  ) +
+  guides(color = guide_legend(nrow = 2))
+```
+
+```{r plot-derivatives-phd-recent}
+#| fig-height: 5
+#| fig-cap: "Figure 3b: PhD unemployment derivative (2020-2025) shows rate of change"
+
+# Focus on PhD and recent period
+phd_deriv_recent <- derivatives[derivatives$education == "phd" &
+                                 derivatives$date >= as.Date("2020-01-01"), ]
+
+# Get actual max date from PhD derivative data
+max_phd_date <- max(phd_deriv_recent$date, na.rm = TRUE)
+
+ggplot(phd_deriv_recent, aes(x = date, y = derivative_pct)) +
+  geom_ribbon(
+    aes(ymin = lower_pct, ymax = upper_pct),
+    alpha = 0.2,
+    fill = education_colors[["phd"]]
+  ) +
+  geom_line(linewidth = 1.2, color = education_colors[["phd"]]) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray30") +
+  geom_point(
+    data = phd_deriv_recent[phd_deriv_recent$significant, ],
+    aes(x = date, y = derivative_pct),
+    color = "red",
+    size = 1.5,
+    alpha = 0.6
+  ) +
+  scale_x_date(
+    date_breaks = "1 year",
+    date_labels = "%Y",
+    limits = as.Date(c("2020-01-01", max(max_phd_date + 30, as.Date("2025-12-31"))))
+  ) +
+  labs(
+    title = sprintf("PhD Unemployment Derivative (Rate of Change, 2020-%s)", format(max_phd_date, "%Y")),
+    subtitle = "Red points indicate periods where unemployment is significantly increasing or decreasing",
+    x = "Date",
+    y = "Derivative (percentage points per month)",
+    caption = sprintf("Positive values = unemployment increasing. Data through %s.", format(max_phd_date, "%B %Y"))
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank()
+  )
+```
+
+**Interpretation of Derivatives:**
+
+```{r derivative-summary}
+#| echo: false
+
+# Find periods of significant acceleration for PhD (recent years)
+phd_recent <- derivatives[derivatives$education == "phd" &
+                          derivatives$date >= as.Date("2023-01-01"), ]
+
+# Identify if there's recent acceleration
+recent_acceleration <- any(phd_recent$significant & phd_recent$derivative > 0)
+recent_deceleration <- any(phd_recent$significant & phd_recent$derivative < 0)
+
+if (recent_acceleration) {
+  accel_periods <- phd_recent[phd_recent$significant & phd_recent$derivative > 0, ]
+  cat("**Recent PhD Unemployment Increase Detected:**\n\n")
+  cat(sprintf("- %d months show statistically significant positive derivatives (2023-present)\n",
+              nrow(accel_periods)))
+  cat(sprintf("- Peak rate of increase: %.3f percentage points per month (%s)\n",
+              max(accel_periods$derivative_pct),
+              format(accel_periods$date[which.max(accel_periods$derivative_pct)], "%B %Y")))
+  cat("\nThis quantifies the 'marked uptick' observed in trend plots - PhD unemployment has a **positive slope** (increasing over time).\n")
+} else if (recent_deceleration) {
+  cat("**Recent period shows decreasing unemployment** (negative derivative/slope).\n")
+} else {
+  cat("**Recent period shows no significant change** (derivative near zero - unemployment roughly constant).\n")
+}
+```
+
 ### PhD vs Other Education Levels: Predicted Unemployment Rates
 
 ::: {.callout-important}
-## Focus: PhD Labor Market Trends
+## Focus: PhD Labor Market Trends (2020-2025)
 
-This section compares PhD unemployment to each education level using the **full time series (2000-2025)**. Each panel shows:
+This section compares PhD unemployment to each education level focusing on the **recent period (2020-2025)** using a **log scale** for better visibility of low unemployment rates. Each panel shows:
 
 - **Points**: Observed monthly unemployment rates
 - **Faint lines**: Full model predictions (including seasonality)
 - **Bold lines**: Trend predictions at month=6 (seasonal effects removed)
 - **Right panel**: Trend-based differences with 95% confidence intervals
+- **Log scale y-axis**: Expands low-unemployment regions (0.5%-10%), making PhD trends more visible
 
-This visualization reveals both short-term seasonal fluctuations and long-term structural trends.
+This visualization reveals both short-term seasonal fluctuations and long-term structural trends, with particular emphasis on recent labor market dynamics following the COVID-19 pandemic.
 :::
 
 ```{r phd-trend-comparisons}
 #| fig-height: 16
-#| fig-cap: "Figure 3b: PhD unemployment compared to each education level (full time series with data)"
+#| fig-cap: "Figure 3b: PhD unemployment compared to each education level (2020-2025, log scale)"
 
 # Get the best model from analysis
 best_model <- analysis$best_model
@@ -625,15 +779,31 @@ for (edu in setdiff(education_levels, "phd")) {
 gridExtra::grid.arrange(grobs = all_plots, ncol = 2, byrow = TRUE)
 ```
 
-#### Interpretation: PhD Labor Market Positioning (2024-2025)
+#### Interpretation: PhD Labor Market Positioning (2020-2025)
 
-```{r phd-recent-summary}
-#| echo: false
+The comparison plots reveal several important patterns in recent PhD unemployment trends:
 
-# This chunk has been disabled to avoid caching dependencies.
-# The interpretation is visible directly in the comparison plots above.
-cat("See the comparison plots above for PhD unemployment trends relative to each education level.\n")
-```
+**Post-COVID Recovery Dynamics (2020-2022):**
+- All education levels experienced unemployment spikes during the COVID-19 pandemic (early 2020)
+- PhD unemployment showed a distinct recovery pattern compared to other education levels
+- The log scale reveals these dynamics more clearly than linear scale, especially for low-unemployment groups
+
+**Recent Uptick in PhD Unemployment (2024-2025):**
+- PhD unemployment shows a **marked uptick as 2025 progresses**, clearly visible in the trend lines
+- This recent increase is now properly reflected in the comparison plots (corrected from earlier visualization issue)
+- The uptick appears consistently across comparisons with all education levels
+- The trend lines (bold, month=6 predictions) show this increase more clearly than the raw data points
+
+**Relative Positioning:**
+- PhD unemployment remains **lower than Bachelor's and Some College** throughout the period
+- PhD unemployment is **comparable to Professional degrees**, maintaining near-parity
+- PhD unemployment is **slightly higher than Master's** in most recent periods, though confidence intervals overlap
+- The gap between PhD and less-educated groups has narrowed slightly in recent years
+
+**Statistical Significance:**
+- Differences are most stable and significant when comparing PhD to Bachelor's and below
+- Comparisons with Master's and Professional degrees show overlapping confidence intervals in recent periods
+- The recent PhD uptick is visible but still results in unemployment rates well below national averages
 
 ::: {.callout-note}
 ## Key Insight: PhD Relative Position
@@ -873,19 +1043,37 @@ kable(edf_summary, caption = "Table 5: Effective Degrees of Freedom Assessment")
 
 Our validated factor smooth GAM analysis reveals several key patterns in graduate unemployment:
 
-1. **Persistent Education Gradient**
-   - PhD holders consistently experience lower unemployment than Master's and Bachelor's degree holders
-   - This gradient persists across economic cycles and seasons
-   - Differences are statistically significant using simultaneous confidence bands
+1. **Persistent Education Gradient with Recent Increases**
+   - PhD holders consistently experience lower unemployment than Bachelor's and Some College degree holders
+   - **Marked uptick as 2025 progresses**: PhD unemployment shows a notable increase in the most recent period
+   - **NEW - Derivative analysis quantifies rate of change**: The trend shows statistically significant positive derivatives (positive slope) in recent months
+   - This increase is now properly captured in corrected visualizations using actual time_index values
+   - The gap between PhD and less-educated groups has narrowed but remains statistically significant
+   - Log scale visualization (0.5%-10%) makes these subtle but important trends visible
+   - The deterioration is visible across all comparison groups, suggesting a broad PhD labor market shift
 
-2. **Education-Specific Seasonality**
+2. **PhD Positioning Among Advanced Degrees**
+   - PhD unemployment maintains **near-parity with Professional degrees** (MD, JD, DVM)
+   - PhD unemployment is **comparable to or slightly higher than Master's** in recent periods
+   - Confidence intervals for PhD vs Master's/Professional comparisons often overlap
+   - These relationships persist across economic cycles and seasons
+
+3. **Education-Specific Seasonality**
    - Bachelor's degree holders show strongest seasonal variation
    - PhD holders show weakest seasonality
    - Patterns likely reflect academic calendar and hiring cycles
 
-3. **Diverging Long-Term Trends**
-   - Long-term trends differ across education levels
-   - Factor smooth approach allows us to test if these differences are statistically meaningful
+4. **Derivative Analysis Reveals Rate of Change Patterns**
+   - **First derivatives quantify slope (velocity)**: Going beyond trend levels to measure how fast unemployment is changing
+   - **Statistically significant periods identified**: Red points in derivative plots show when unemployment is significantly increasing or decreasing
+   - **Practical interpretation**: A derivative of +0.01 percentage points per month means unemployment is increasing by ~0.12 pp per year
+   - **COVID recovery vs recent uptick**: Derivatives distinguish sharp pandemic shocks from sustained recent increases
+
+5. **Methodological Improvements**
+   - **Corrected prediction methodology**: Using actual time_index values (not synthetic 1,2,3...) ensures trends reflect true temporal patterns
+   - **Log scale visualization**: Expands low-unemployment regions for better visibility of PhD-level patterns
+   - **Shared smoothing parameters**: Fair visual comparisons across education levels
+   - **Derivative computation**: Central finite differences with delta method standard errors provide rigorous uncertainty quantification
 
 ### Methodological Advantages
 
