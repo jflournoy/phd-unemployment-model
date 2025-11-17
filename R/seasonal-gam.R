@@ -1505,6 +1505,10 @@ fit_factor_smooth_gam <- function(data,
 #' Used for model selection and comparison.
 #'
 #' @param data Combined data frame with all education levels
+#' @param shared_wiggliness Logical. If TRUE (default), use id= parameter to share
+#'   smoothing parameters across education levels in models m4, m5, and m6. This
+#'   ensures consistent wiggliness for fair visual comparisons. If FALSE, each
+#'   education level gets its own smoothing parameters.
 #'
 #' @return Named list of gam objects (m0 through m6):
 #'   \item{m0}{Null model (intercept only)}
@@ -1530,35 +1534,70 @@ fit_factor_smooth_gam <- function(data,
 #' @seealso \code{\link{compare_nested_models}}
 #'
 #' @export
-fit_nested_model_sequence <- function(data) {
-  list(
-    m0 = mgcv::gam(unemployment_rate ~ 1, data = data, method = "REML"),
+fit_nested_model_sequence <- function(data, shared_wiggliness = TRUE) {
 
-    m1 = mgcv::gam(unemployment_rate ~ education, data = data, method = "REML"),
+  if (shared_wiggliness) {
+    # Use id= to share smoothing parameters across education levels
+    # This ensures consistent wiggliness for fair visual comparisons
+    list(
+      m0 = mgcv::gam(unemployment_rate ~ 1, data = data, method = "REML"),
 
-    m2 = mgcv::gam(unemployment_rate ~ education + s(time_index),
-                   data = data, method = "REML"),
+      m1 = mgcv::gam(unemployment_rate ~ education, data = data, method = "REML"),
 
-    m3 = mgcv::gam(unemployment_rate ~ education +
-                     s(time_index) +
-                     s(month, bs = "cc"),
-                   data = data, method = "REML"),
+      m2 = mgcv::gam(unemployment_rate ~ education + s(time_index),
+                     data = data, method = "REML"),
 
-    m4 = mgcv::gam(unemployment_rate ~ education +
-                     s(time_index, by = education) +
-                     s(month, bs = "cc"),
-                   data = data, method = "REML"),
+      m3 = mgcv::gam(unemployment_rate ~ education +
+                       s(time_index) +
+                       s(month, bs = "cc"),
+                     data = data, method = "REML"),
 
-    m5 = mgcv::gam(unemployment_rate ~ education +
-                     s(time_index) +
-                     s(month, by = education, bs = "cc"),
-                   data = data, method = "REML"),
+      m4 = mgcv::gam(unemployment_rate ~ education +
+                       s(time_index, by = education, id = 1) +
+                       s(month, bs = "cc"),
+                     data = data, method = "REML"),
 
-    m6 = mgcv::gam(unemployment_rate ~ education +
-                     s(time_index, by = education) +
-                     s(month, by = education, bs = "cc"),
-                   data = data, method = "REML")
-  )
+      m5 = mgcv::gam(unemployment_rate ~ education +
+                       s(time_index) +
+                       s(month, by = education, bs = "cc", id = 1),
+                     data = data, method = "REML"),
+
+      m6 = mgcv::gam(unemployment_rate ~ education +
+                       s(time_index, by = education, id = 1) +
+                       s(month, by = education, bs = "cc", id = 2),
+                     data = data, method = "REML")
+    )
+  } else {
+    # Original behavior: each education level gets its own smoothing parameters
+    list(
+      m0 = mgcv::gam(unemployment_rate ~ 1, data = data, method = "REML"),
+
+      m1 = mgcv::gam(unemployment_rate ~ education, data = data, method = "REML"),
+
+      m2 = mgcv::gam(unemployment_rate ~ education + s(time_index),
+                     data = data, method = "REML"),
+
+      m3 = mgcv::gam(unemployment_rate ~ education +
+                       s(time_index) +
+                       s(month, bs = "cc"),
+                     data = data, method = "REML"),
+
+      m4 = mgcv::gam(unemployment_rate ~ education +
+                       s(time_index, by = education) +
+                       s(month, bs = "cc"),
+                     data = data, method = "REML"),
+
+      m5 = mgcv::gam(unemployment_rate ~ education +
+                       s(time_index) +
+                       s(month, by = education, bs = "cc"),
+                     data = data, method = "REML"),
+
+      m6 = mgcv::gam(unemployment_rate ~ education +
+                       s(time_index, by = education) +
+                       s(month, by = education, bs = "cc"),
+                     data = data, method = "REML")
+    )
+  }
 }
 
 
