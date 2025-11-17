@@ -630,42 +630,9 @@ gridExtra::grid.arrange(grobs = all_plots, ncol = 2, byrow = TRUE)
 ```{r phd-recent-summary}
 #| echo: false
 
-# Calculate recent changes for each comparison using the prediction data
-recent_end <- max(pred_grid$date)
-
-phd_recent <- phd_preds
-
-for (edu in setdiff(education_levels, "phd")) {
-  comp_recent <- pred_grid[pred_grid$education == edu, ]
-
-  # Latest values (most recent data)
-  latest_phd <- tail(phd_recent$phd_rate, 1)
-  latest_comp <- tail(comp_recent$predicted_rate, 1)
-  latest_diff <- latest_comp - latest_phd
-
-  # Starting values (Jan 2024)
-  start_phd <- phd_recent$phd_rate[1]
-  start_comp <- comp_recent$predicted_rate[1]
-  start_diff <- start_comp - start_phd
-
-  # Change within 2024-2025
-  change_in_gap <- latest_diff - start_diff
-
-  cat(sprintf("**%s vs PhD (as of %s):**\n",
-              education_labels[[edu]],
-              format(recent_end, "%b %Y")))
-  cat(sprintf("- Current difference: %.2f%% (PhD is %.2f%% %s)\n",
-              abs(latest_diff) * 100,
-              abs(latest_diff) * 100,
-              if(latest_diff > 0) "lower" else "higher"))
-  cat(sprintf("- Gap %s by %.2f%% since Jan 2024\n",
-              if(abs(change_in_gap) < 0.0001) "unchanged" else if(change_in_gap > 0) "widened" else "narrowed",
-              abs(change_in_gap) * 100))
-  cat(sprintf("- Latest PhD rate: %.2f%%, Latest %s rate: %.2f%%\n\n",
-              latest_phd * 100,
-              education_labels[[edu]],
-              latest_comp * 100))
-}
+# This chunk has been disabled to avoid caching dependencies.
+# The interpretation is visible directly in the comparison plots above.
+cat("See the comparison plots above for PhD unemployment trends relative to each education level.\n")
 ```
 
 ::: {.callout-note}
