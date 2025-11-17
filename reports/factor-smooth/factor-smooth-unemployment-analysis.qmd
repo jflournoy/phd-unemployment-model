@@ -298,12 +298,12 @@ analysis <- analyze_cps_unemployment_by_education(
 # Define color palette for all 7 education levels
 # Using ColorBrewer-inspired palette for color-blind accessibility
 education_colors <- c(
-  "less_than_hs" = "#E41A1C",    # Bright red
-  "high_school" = "#FF7F00",     # Bright orange
-  "some_college" = "#A65628",    # Brown
-  "bachelors" = "#4DAF4A",       # Green
-  "masters" = "#377EB8",         # Blue
-  "professional" = "#984EA3",    # Purple
+  "less_than_hs" = "#CC0000",    # Dark red
+  "high_school" = "#FF6600",     # Dark orange
+  "some_college" = "#996633",    # Dark brown
+  "bachelors" = "#339933",       # Dark green
+  "masters" = "#0066CC",         # Dark blue
+  "professional" = "#993399",    # Dark purple
   "phd" = "#000000"              # Black
 )
 
@@ -501,23 +501,23 @@ for (edu in setdiff(education_levels, "phd")) {
     geom_point(
       data = obs_data,
       aes(x = date, y = unemployment_rate, color = education_label),
-      alpha = 0.3,
-      size = 0.5
+      alpha = 0.5,
+      size = 0.8
     ) +
     # Full predictions (faint lines showing seasonality)
     geom_line(
       data = full_phd,
       aes(x = date, y = full_rate),
       color = education_colors[["phd"]],
-      alpha = 0.3,
-      linewidth = 0.5
+      alpha = 0.4,
+      linewidth = 0.6
     ) +
     geom_line(
       data = full_comp,
       aes(x = date, y = full_rate),
       color = education_colors[[edu]],
-      alpha = 0.3,
-      linewidth = 0.5
+      alpha = 0.4,
+      linewidth = 0.6
     ) +
     # Trend predictions (bold lines, no seasonality)
     geom_ribbon(
