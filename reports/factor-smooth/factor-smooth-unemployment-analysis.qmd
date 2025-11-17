@@ -553,12 +553,15 @@ for (edu in setdiff(education_levels, "phd")) {
       values = c("Trend (no seasonality)" = "solid"),
       name = ""
     ) +
-    scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
+    scale_y_log10(
+      labels = scales::percent_format(accuracy = 0.1),
+      breaks = c(0.01, 0.02, 0.03, 0.05, 0.08, 0.10, 0.15)
+    ) +
     labs(
       title = sprintf("PhD vs %s: Unemployment Rates", education_labels[[edu]]),
-      subtitle = "Points = observed, faint lines = full fit, bold = trend (month=6)",
+      subtitle = "Points = observed, faint lines = full fit, bold = trend (month=6). Log scale.",
       x = NULL,
-      y = "Unemployment Rate"
+      y = "Unemployment Rate (log scale)"
     ) +
     theme_minimal() +
     theme(
