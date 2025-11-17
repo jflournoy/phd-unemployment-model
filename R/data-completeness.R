@@ -4,6 +4,8 @@
 #' diagnostic reports.
 #'
 #' Uses data.table for efficient operations on large datasets.
+#' @importFrom data.table .N .SD
+NULL
 
 #' Generate Completeness Report
 #'
@@ -96,7 +98,7 @@ generate_completeness_report <- function(data,
   vars_in_data <- required_vars[required_vars %in% names(dt)]
 
   # Count observations per year-month
-  obs_counts <- dt[, .(n_obs = .N), by = .(year = YEAR, month = MONTH)]
+  obs_counts <- dt[, list(n_obs = .N), by = list(year = YEAR, month = MONTH)]
 
   # Calculate missing value statistics
   if (length(vars_in_data) > 0) {
@@ -109,7 +111,7 @@ generate_completeness_report <- function(data,
         n_missing_vars = n_vars_with_missing,
         pct_complete = if (total_vals > 0) ((total_vals - missing_vals) / total_vals) * 100 else 0
       )
-    }, by = .(year = YEAR, month = MONTH), .SDcols = vars_in_data]
+    }, by = list(year = YEAR, month = MONTH), .SDcols = vars_in_data]
 
     # Merge counts with missing stats
     result_dt <- data.table::merge.data.table(
