@@ -429,25 +429,29 @@ best_model <- analysis$best_model
 # Get visualization data
 viz_data <- analysis$visualization_data
 
-# Get actual data to extract correct time_index values
+# Get actual data with the REAL time_index values used in model fitting
 actual_data <- analysis$data
 
 # Filter for 2024-2025 period
 recent_data <- actual_data[actual_data$year >= 2024, ]
 
-# Get unique time points (one per month)
-time_lookup <- unique(recent_data[, c("year", "month", "time_index")])
-time_lookup$date <- as.Date(paste(time_lookup$year, time_lookup$month, 1, sep = "-"))
+# Get unique time points with their ACTUAL time_index values from the fitted model
+# This is critical - we need the same time_index scale the model was trained on
+time_periods <- unique(recent_data[, c("year", "month", "time_index")])
+time_periods <- time_periods[order(time_periods$year, time_periods$month), ]
+time_periods$date <- as.Date(paste(time_periods$year, time_periods$month, 1, sep = "-"))
 
-# Create grid for all education levels using actual time_index values
+# Create grid for all education levels
+# CRITICAL: time_index uses ACTUAL values from data (for s(time_index) trend)
+#           month is FIXED to 6 (for s(month) seasonal component only)
 pred_grid <- expand.grid(
-  time_index = time_lookup$time_index,
+  time_index = unique(time_periods$time_index),  # Use actual time_index values
+  month = 6,  # Fixed month to remove seasonal variation
   education = factor(education_levels, levels = education_levels)
 )
 
-# Add date and fixed month (June = 6 to remove seasonality)
-pred_grid <- merge(pred_grid, time_lookup[, c("time_index", "date")], by = "time_index")
-pred_grid$month <- 6  # Fixed month to remove seasonal component
+# Add date information for plotting (each time_index maps to a specific year-month)
+pred_grid <- merge(pred_grid, time_periods[, c("time_index", "date")], by = "time_index")
 
 # Get predictions with SE (includes intercept)
 preds <- predict(best_model, newdata = pred_grid, type = "response", se.fit = TRUE)
