@@ -6,42 +6,6 @@
 #' @name phdunemployment-package
 NULL
 
-#' Calculate unemployment rate
-#'
-#' Calculate the unemployment rate as a proportion from employment counts
-#'
-#' @param data A data frame with columns `employed` and `unemployed`
-#' @return Numeric vector of unemployment rates (proportions)
-#' @export
-#' @examples
-#' \dontrun{
-#' data <- data.frame(employed = 90, unemployed = 10)
-#' calculate_unemployment_rate(data)
-#' }
-calculate_unemployment_rate <- function(data) {
-  # Validate inputs
-  if (!all(c("employed", "unemployed") %in% names(data))) {
-    stop("Data must contain 'employed' and 'unemployed' columns")
-  }
-
-  if (any(data$employed < 0) || any(data$unemployed < 0)) {
-    stop("Employment counts cannot be negative")
-  }
-
-  # Calculate labor force and rate
-  labor_force <- data$employed + data$unemployed
-
-  # Handle zero labor force
-  if (any(labor_force == 0)) {
-    warning("Some observations have zero labor force")
-    rate <- ifelse(labor_force == 0, NA_real_, data$unemployed / labor_force)
-  } else {
-    rate <- data$unemployed / labor_force
-  }
-
-  return(rate)
-}
-
 #' Validate model convergence diagnostics
 #'
 #' Check that a brms model has converged based on standard diagnostics
