@@ -447,3 +447,73 @@ test_that("binomial works with factor smooth + shared smoothing parameters", {
   expect_true(summary(model_m6)$dev.expl > 0.5,
               info = "Should explain >50% deviance")
 })
+
+# ==============================================================================
+# ADDITIONAL PARAMETER RECOVERY TESTS
+# ==============================================================================
+
+test_that("quasi-binomial detects and estimates overdispersion correctly", {
+  # Test for overdispersion parameter recovery using beta-binomial data
+  # Overdispersion occurs when variance > np(1-p), common in real CPS data
+  # due to unmodeled heterogeneity across observations
+  set.seed(2829)
+
+  test_data <- data.frame(
+    time_index = 1:60,
+    month = rep(1:12, 5)
+  )
+
+  # Beta-binomial data generation parameters
+  true_p_mean <- 0.05  # Mean unemployment rate
+  n_obs <- 60
+  n_total <- 1000
+
+  # Generate overdispersion using Beta distribution for probabilities
+  # Beta(alpha, beta) parameterization: alpha = p*phi, beta = (1-p)*phi
+  # phi = concentration parameter (lower phi = more variance = more overdispersion)
+  # Expected overdispersion ≈ (n*p*(1-p))/(phi+1) relative to binomial
+  phi <- 20  # Concentration parameter
+  alpha_param <- true_p_mean * phi
+  beta_param <- (1 - true_p_mean) * phi
+
+  # Draw varying probabilities (creates extra-binomial variation)
+  true_probs <- rbeta(n_obs, alpha_param, beta_param)
+
+  # Generate binomial counts with varying probabilities
+  test_data$n_unemployed <- rbinom(n_obs, size = n_total, prob = true_probs)
+  test_data$n_employed <- n_total - test_data$n_unemployed
+
+  # Fit both binomial (assumes no overdispersion) and quasi-binomial models
+  model_binomial <- fit_seasonal_gam(
+    test_data,
+    response_formula = quote(cbind(n_unemployed, n_employed)),
+    family = "binomial",
+    k_trend = 5,
+    k_month = 6
+  )
+
+  model_quasibinomial <- fit_seasonal_gam(
+    test_data,
+    response_formula = quote(cbind(n_unemployed, n_employed)),
+    family = "quasibinomial",
+    k_trend = 5,
+    k_month = 6
+  )
+
+  # Validate overdispersion parameter estimation
+  dispersion_est <- summary(model_quasibinomial)$dispersion
+
+  expect_true(dispersion_est > 1.0,
+              info = paste("Overdispersion parameter should be > 1.0 for overdispersed data, got", round(dispersion_est, 3)))
+
+  expect_true(dispersion_est > 1.2,
+              info = "Should detect substantial overdispersion (phi > 1.2)")
+
+  # Validate that SEs properly reflect overdispersion
+  # Quasi-binomial adjusts SEs by sqrt(dispersion), so SEs should be larger
+  se_binomial <- predict(model_binomial, type = "response", se.fit = TRUE)$se.fit
+  se_quasibinomial <- predict(model_quasibinomial, type = "response", se.fit = TRUE)$se.fit
+
+  expect_true(mean(se_quasibinomial) > mean(se_binomial),
+              info = paste("Quasi-binomial SEs should be larger than binomial SEs. QBinom:", round(mean(se_quasibinomial), 5), "vs Binom:", round(mean(se_binomial), 5)))
+})
