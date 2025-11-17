@@ -1,15 +1,18 @@
 #!/usr/bin/env Rscript
-#' Evaluate Parameter Recovery and Validation Reports
+#' Evaluate Statistical Reports (Simulation and Exploratory)
 #'
 #' Comprehensive evaluation of statistical reports for quality, completeness,
-#' and adherence to validation best practices based on project learnings.
+#' and adherence to best practices. Automatically detects report type:
+#'   - SIMULATION: Parameter recovery, coverage validation, method testing
+#'   - EXPLORATORY: Real data analysis, applied modeling
 #'
 #' Usage:
-#'   Rscript scripts/evaluate-report.R <report-file> [--verbose]
+#'   Rscript scripts/evaluate-report.R <report-file> [--verbose] [--type=TYPE]
 #'
 #' Example:
 #'   Rscript scripts/evaluate-report.R reports/factor-smooth-parameter-recovery.qmd
-#'   Rscript scripts/evaluate-report.R reports/factor-smooth-parameter-recovery.html --verbose
+#'   Rscript scripts/evaluate-report.R reports/factor-smooth-unemployment-analysis.html
+#'   Rscript scripts/evaluate-report.R report.qmd --verbose --type=exploratory
 
 suppressPackageStartupMessages({
   library(xml2)
@@ -89,113 +92,232 @@ extract_report_content <- function(file_path) {
   )
 }
 
-#' Check Coverage Validation Quality
+#' Detect Report Type
 #'
-#' @param content Report content list
-#' @return List with check results and score
-check_coverage_validation <- function(content) {
+#' Automatically detects whether a report is a simulation/validation study
+#' or an exploratory analysis of real data.
+#'
+#' @param content Report content list from extract_report_content()
+#' @return Character: "simulation" or "exploratory"
+detect_report_type <- function(content) {
   text <- tolower(content$text_content)
   code <- tolower(paste(content$code_chunks, collapse = "\n"))
 
-  checks <- list(
-    has_coverage_section = any(grepl("coverage", content$sections, ignore.case = TRUE)),
-    mentions_95_percent = grepl("95%", text) || grepl("0.95", text),
-    proper_methodology = grepl("validate_difference_coverage|validate.*coverage", code),
-    anti_pattern_avoided = !grepl("testing.*training.*data|reusing.*training", text),
-    tests_differences = grepl("difference.*coverage|pairwise.*comparison", text),
-    adequate_n_sims = any(grepl("n_sims?\\s*=\\s*[2-9][0-9]{2,}", code))  # n >= 200
+  # Strong indicators of simulation report
+  simulation_indicators <- c(
+    grepl("parameter recovery|coverage validation|simulation study", text),
+    grepl("validate.*coverage|coverage.*validation", text),
+    grepl("n_sims?\\s*=|simulate.*data|data.*generat", code),
+    grepl("dgp|data generating process", text),
+    grepl("bias.*precision|monte carlo", text),
+    any(grepl("parameter recovery|coverage|simulation", content$sections, ignore.case = TRUE))
   )
 
-  # Calculate score
-  score <- sum(unlist(checks)) / length(checks)
+  # Strong indicators of exploratory/real data report
+  exploratory_indicators <- c(
+    grepl("validation_type\\s*=\\s*['\"]exploratory['\"]", code),
+    grepl("cps.*data|ipums|real.*data.*analysis", text),
+    grepl("data source|current population survey", text),
+    grepl("applied.*analysis|exploratory.*analysis", text),
+    any(grepl("results|findings|discussion|conclusion", content$sections, ignore.case = TRUE))
+  )
 
-  # Identify issues
-  issues <- character(0)
-  if (!checks$has_coverage_section) {
-    issues <- c(issues, "Missing coverage validation section")
+  simulation_score <- sum(simulation_indicators)
+  exploratory_score <- sum(exploratory_indicators)
+
+  # Default to exploratory if ambiguous (safer default)
+  if (simulation_score > exploratory_score) {
+    return("simulation")
+  } else {
+    return("exploratory")
   }
-  if (!checks$proper_methodology) {
-    issues <- c(issues, "No evidence of proper coverage validation methodology")
+}
+
+#' Check Coverage Validation Quality
+#'
+#' @param content Report content list
+#' @param report_type Character: "simulation" or "exploratory"
+#' @return List with check results and score
+check_coverage_validation <- function(content, report_type = "simulation") {
+  text <- tolower(content$text_content)
+  code <- tolower(paste(content$code_chunks, collapse = "\n"))
+
+  if (report_type == "simulation") {
+    # Strict checks for simulation/validation reports
+    checks <- list(
+      has_coverage_section = any(grepl("coverage", content$sections, ignore.case = TRUE)),
+      mentions_95_percent = grepl("95%", text) || grepl("0.95", text),
+      proper_methodology = grepl("validate_difference_coverage|validate.*coverage", code),
+      # Check for anti-pattern: testing on training data WITHOUT generating new data
+      anti_pattern_avoided = !grepl("test.*on.*training|reuse.*training", text) ||
+                            grepl("new.*dataset|generate.*new.*data|held.*out", text),
+      tests_differences = grepl("difference.*coverage|pairwise.*comparison", text),
+      adequate_n_sims = any(grepl("n_sims?\\s*=\\s*[2-9][0-9]{2,}", code))  # n >= 200
+    )
+
+    issues <- character(0)
+    if (!checks$has_coverage_section) {
+      issues <- c(issues, "Missing coverage validation section")
+    }
+    if (!checks$proper_methodology) {
+      issues <- c(issues, "No evidence of proper coverage validation methodology")
+    }
+    if (!checks$anti_pattern_avoided) {
+      issues <- c(issues, "CRITICAL: Testing on training data without generating new datasets (anti-pattern)")
+    }
+    if (!checks$adequate_n_sims) {
+      issues <- c(issues, "Insufficient simulation runs (recommend n >= 200)")
+    }
+
+  } else {
+    # Adapted checks for exploratory/real data reports
+    checks <- list(
+      has_validation = grepl("validate_gam_model|validation|diagnostic", code),
+      has_confidence_intervals = grepl("95%|confidence.*interval|uncertainty", text),
+      model_diagnostics = grepl("residual|convergence|gam\\.check", code),
+      no_overfitting = grepl("cross.*validation|held.*out|test.*data", text) ||
+                       grepl("edf|effective.*degrees", text),
+      proper_inference = grepl("simultaneous|bonferroni|multiple.*comparison", text) ||
+                        grepl("confidence.*band", text),
+      adequate_sample_size = grepl("sample.*size|n\\s*=|observations", text)
+    )
+
+    issues <- character(0)
+    if (!checks$has_validation) {
+      issues <- c(issues, "No model validation diagnostics")
+    }
+    if (!checks$model_diagnostics) {
+      issues <- c(issues, "Missing diagnostic checks (residuals, convergence)")
+    }
+    if (!checks$has_confidence_intervals) {
+      issues <- c(issues, "No uncertainty quantification (confidence intervals)")
+    }
   }
-  if (!checks$anti_pattern_avoided) {
-    issues <- c(issues, "CRITICAL: May be testing on training data (anti-pattern)")
-  }
-  if (!checks$adequate_n_sims) {
-    issues <- c(issues, "Insufficient simulation runs (recommend n >= 200)")
-  }
+
+  score <- sum(unlist(checks)) / length(checks)
 
   list(
     score = score,
     checks = checks,
     issues = issues,
-    grade = if (score >= 0.8) "Pass" else if (score >= 0.6) "Conditional" else "Fail"
+    grade = if (score >= 0.8) "Pass" else if (score >= 0.6) "Conditional" else "Fail",
+    report_type = report_type
   )
 }
 
-#' Check DGP Consistency
+#' Check DGP Consistency (Simulation) or Data Documentation (Exploratory)
 #'
 #' @param content Report content list
+#' @param report_type Character: "simulation" or "exploratory"
 #' @return List with check results
-check_dgp_consistency <- function(content) {
+check_dgp_consistency <- function(content, report_type = "simulation") {
   text <- tolower(content$text_content)
   code <- paste(content$code_chunks, collapse = "\n")
 
-  checks <- list(
-    documents_parameters = grepl("baseline_rate|seasonal_amplitude|trend_slope", code),
-    explicit_values = length(gregexpr("=\\s*c?\\(", code)[[1]]) >= 3,  # Multiple param assignments
-    mentions_consistency = grepl("same.*parameters?|consistent.*dgp|matching.*parameters?", text, ignore.case = TRUE),
-    documents_defaults = grepl("default|omitting", text, ignore.case = TRUE),
-    has_seed = grepl("seed\\s*=", code, ignore.case = TRUE)
-  )
+  if (report_type == "simulation") {
+    # For simulations: check DGP consistency
+    checks <- list(
+      documents_parameters = grepl("baseline_rate|seasonal_amplitude|trend_slope", code),
+      explicit_values = length(gregexpr("=\\s*c?\\(", code)[[1]]) >= 3,
+      mentions_consistency = grepl("same.*parameters?|consistent.*dgp|matching.*parameters?", text, ignore.case = TRUE),
+      documents_defaults = grepl("default|omitting", text, ignore.case = TRUE),
+      has_seed = grepl("seed\\s*=", code, ignore.case = TRUE)
+    )
+
+    issues <- character(0)
+    if (!checks$documents_parameters) {
+      issues <- c(issues, "DGP parameters not clearly documented")
+    }
+    if (!checks$mentions_consistency) {
+      issues <- c(issues, "No discussion of DGP consistency across simulations")
+    }
+
+  } else {
+    # For exploratory: check data source documentation
+    checks <- list(
+      documents_data_source = grepl("data source|source:|ipums|cps|survey", text, ignore.case = TRUE),
+      time_period = grepl("\\d{4}.*\\d{4}|time period|years?:", text),
+      sample_size = grepl("sample.*size|observations|n\\s*=|respondents", text),
+      data_availability = grepl("available|repository|reproducib", text),
+      preprocessing = grepl("preprocess|clean|transform|filter", text, ignore.case = TRUE)
+    )
+
+    issues <- character(0)
+    if (!checks$documents_data_source) {
+      issues <- c(issues, "Data source not clearly documented")
+    }
+    if (!checks$time_period) {
+      issues <- c(issues, "Time period not specified")
+    }
+    if (!checks$sample_size) {
+      issues <- c(issues, "Sample size not reported")
+    }
+  }
 
   score <- sum(unlist(checks)) / length(checks)
-
-  issues <- character(0)
-  if (!checks$documents_parameters) {
-    issues <- c(issues, "DGP parameters not clearly documented")
-  }
-  if (!checks$mentions_consistency) {
-    issues <- c(issues, "No discussion of DGP consistency across simulations")
-  }
 
   list(
     score = score,
     checks = checks,
     issues = issues,
-    grade = if (score >= 0.8) "Pass" else if (score >= 0.6) "Conditional" else "Fail"
+    grade = if (score >= 0.8) "Pass" else if (score >= 0.6) "Conditional" else "Fail",
+    report_type = report_type
   )
 }
 
-#' Check Bias Quantification
+#' Check Bias Quantification (Simulation) or Uncertainty (Exploratory)
 #'
 #' @param content Report content list
+#' @param report_type Character: "simulation" or "exploratory"
 #' @return List with check results
-check_bias_quantification <- function(content) {
+check_bias_quantification <- function(content, report_type = "simulation") {
   text <- tolower(content$text_content)
 
-  checks <- list(
-    reports_bias = grepl("bias|systematic.*error", text),
-    reports_precision = grepl("precision|standard deviation|sd\\(", text),
-    has_bias_plots = grepl("bias.*distribution|distribution.*bias", text),
-    symmetric_check = grepl("symmetric|centered|zero", text),
-    relative_bias = grepl("percent|relative|ratio", text)
-  )
+  if (report_type == "simulation") {
+    # For simulations: check bias quantification
+    checks <- list(
+      reports_bias = grepl("bias|systematic.*error", text),
+      reports_precision = grepl("precision|standard deviation|sd\\(", text),
+      has_bias_plots = grepl("bias.*distribution|distribution.*bias", text),
+      symmetric_check = grepl("symmetric|centered|zero", text),
+      relative_bias = grepl("percent|relative|ratio", text)
+    )
+
+    issues <- character(0)
+    if (!checks$reports_bias) {
+      issues <- c(issues, "No bias quantification reported")
+    }
+    if (!checks$has_bias_plots) {
+      issues <- c(issues, "Missing bias distribution visualizations")
+    }
+
+  } else {
+    # For exploratory: check uncertainty quantification
+    checks <- list(
+      has_confidence_intervals = grepl("confidence.*interval|95%.*ci|uncertainty", text),
+      has_standard_errors = grepl("standard.*error|se\\s*=|stderr", text),
+      shows_variability = grepl("variance|variability|uncertainty", text),
+      plots_uncertainty = grepl("ribbon|errorbar|confidence.*band", text),
+      discusses_precision = grepl("precision|accuracy|reliable", text)
+    )
+
+    issues <- character(0)
+    if (!checks$has_confidence_intervals) {
+      issues <- c(issues, "No confidence intervals reported")
+    }
+    if (!checks$plots_uncertainty) {
+      issues <- c(issues, "Missing uncertainty visualization (ribbons, error bars)")
+    }
+  }
 
   score <- sum(unlist(checks)) / length(checks)
-
-  issues <- character(0)
-  if (!checks$reports_bias) {
-    issues <- c(issues, "No bias quantification reported")
-  }
-  if (!checks$has_bias_plots) {
-    issues <- c(issues, "Missing bias distribution visualizations")
-  }
 
   list(
     score = score,
     checks = checks,
     issues = issues,
-    grade = if (score >= 0.7) "Pass" else if (score >= 0.5) "Conditional" else "Fail"
+    grade = if (score >= 0.7) "Pass" else if (score >= 0.5) "Conditional" else "Fail",
+    report_type = report_type
   )
 }
 
@@ -269,18 +391,32 @@ check_visualization_quality <- function(content) {
 #' Check Report Structure
 #'
 #' @param content Report content list
+#' @param report_type Character: "simulation" or "exploratory"
 #' @return List with check results
-check_report_structure <- function(content) {
+check_report_structure <- function(content, report_type = "simulation") {
   sections_lower <- tolower(content$sections)
 
-  required_sections <- c(
-    overview = "overview|introduction",
-    why_matters = "why.*matter|motivation|importance",
-    model_spec = "model.*specification|formula",
-    coverage = "coverage|validation",
-    bias = "bias|accuracy",
-    interpretation = "interpretation|conclusion|discussion"
-  )
+  if (report_type == "simulation") {
+    # Simulation report structure
+    required_sections <- c(
+      overview = "overview|introduction|executive summary",
+      why_matters = "why.*matter|motivation|importance",
+      model_spec = "model.*specification|formula|dgp",
+      coverage = "coverage|validation",
+      bias = "bias|accuracy|precision",
+      interpretation = "interpretation|conclusion|discussion"
+    )
+  } else {
+    # Exploratory report structure
+    required_sections <- c(
+      overview = "overview|introduction|executive summary|abstract",
+      methods = "method|data|model|approach",
+      results = "result|finding|analysis",
+      model_validation = "validation|diagnostic|model.*check",
+      interpretation = "discussion|conclusion|interpretation",
+      reproducibility = "reproducib|session.*info|code.*availab"
+    )
+  }
 
   checks <- lapply(required_sections, function(pattern) {
     any(grepl(pattern, sections_lower))
@@ -298,41 +434,67 @@ check_report_structure <- function(content) {
     score = score,
     checks = checks,
     issues = issues,
-    grade = if (score >= 0.8) "Pass" else if (score >= 0.6) "Conditional" else "Fail"
+    grade = if (score >= 0.8) "Pass" else if (score >= 0.6) "Conditional" else "Fail",
+    report_type = report_type
   )
 }
 
 #' Check Statistical Rigor
 #'
 #' @param content Report content list
+#' @param report_type Character: "simulation" or "exploratory"
 #' @return List with check results
-check_statistical_rigor <- function(content) {
+check_statistical_rigor <- function(content, report_type = "simulation") {
   text <- tolower(content$text_content)
   code <- paste(content$code_chunks, collapse = "\n")
 
-  checks <- list(
-    adequate_n = any(grepl("n_sims?\\s*=\\s*[1-9][0-9]{2,}", code)),  # n >= 100
-    proper_ci_construction = grepl("vcov|covariance|standard.*error", text),
-    multiple_comparisons = grepl("multiple.*comparison|bonferroni|false.*discovery", text),
-    realistic_params = grepl("cps|real.*data|observed.*rate", text, ignore.case = TRUE),
-    parallel_support = grepl("parallel\\s*=|future|furrr", code)
-  )
+  if (report_type == "simulation") {
+    # For simulations: check simulation rigor
+    checks <- list(
+      adequate_n = any(grepl("n_sims?\\s*=\\s*[1-9][0-9]{2,}", code)),  # n >= 100
+      proper_ci_construction = grepl("vcov|covariance|standard.*error", text),
+      multiple_comparisons = grepl("multiple.*comparison|bonferroni|false.*discovery", text),
+      realistic_params = grepl("cps|real.*data|observed.*rate", text, ignore.case = TRUE),
+      parallel_support = grepl("parallel\\s*=|future|furrr", code)
+    )
+
+    issues <- character(0)
+    if (!checks$adequate_n) {
+      issues <- c(issues, "Insufficient simulations (recommend n >= 100)")
+    }
+    if (!checks$proper_ci_construction) {
+      issues <- c(issues, "No discussion of proper SE/CI construction")
+    }
+
+  } else {
+    # For exploratory: check analytical rigor
+    checks <- list(
+      model_selection = grepl("aic|bic|model.*selection|nested.*model", text),
+      proper_inference = grepl("p.*value|significance|hypothesis.*test", text) ||
+                        grepl("confidence.*interval|credible.*interval", text),
+      multiple_comparisons = grepl("multiple.*comparison|bonferroni|simultaneous", text) ||
+                            grepl("family.*wise|false.*discovery", text),
+      sample_size_discussion = grepl("sample.*size|power|precision", text),
+      robustness_checks = grepl("robust|sensitivity|diagnostic", text)
+    )
+
+    issues <- character(0)
+    if (!checks$model_selection) {
+      issues <- c(issues, "No model selection justification (AIC, BIC, nested comparison)")
+    }
+    if (!checks$proper_inference) {
+      issues <- c(issues, "Limited statistical inference discussion")
+    }
+  }
 
   score <- sum(unlist(checks)) / length(checks)
-
-  issues <- character(0)
-  if (!checks$adequate_n) {
-    issues <- c(issues, "Insufficient simulations (recommend n >= 100)")
-  }
-  if (!checks$proper_ci_construction) {
-    issues <- c(issues, "No discussion of proper SE/CI construction")
-  }
 
   list(
     score = score,
     checks = checks,
     issues = issues,
-    grade = if (score >= 0.6) "Pass" else if (score >= 0.4) "Conditional" else "Fail"
+    grade = if (score >= 0.6) "Pass" else if (score >= 0.4) "Conditional" else "Fail",
+    report_type = report_type
   )
 }
 
@@ -377,19 +539,28 @@ check_documentation_quality <- function(content) {
 #'
 #' @param file_path Path to report file
 #' @param verbose Print detailed diagnostics
+#' @param report_type Character: "auto" (default), "simulation", or "exploratory"
 #' @return Invisible list with results
-evaluate_report <- function(file_path, verbose = FALSE) {
+evaluate_report <- function(file_path, verbose = FALSE, report_type = "auto") {
 
   cat("\n")
   cat("========================================\n")
-  cat("  Parameter Recovery Report Evaluation\n")
+  cat("  Statistical Report Evaluation\n")
   cat("========================================\n\n")
 
-  cat("Report:", basename(file_path), "\n\n")
+  cat("Report:", basename(file_path), "\n")
 
   # Extract content
   if (verbose) cat("Extracting report content...\n")
   content <- extract_report_content(file_path)
+
+  # Detect report type if not specified
+  if (report_type == "auto") {
+    report_type <- detect_report_type(content)
+    if (verbose) cat(sprintf("Auto-detected report type: %s\n", toupper(report_type)))
+  }
+
+  cat("Type:", toupper(report_type), "\n\n")
 
   if (verbose) {
     cat(sprintf("  Found %d sections\n", length(content$sections)))
@@ -398,17 +569,17 @@ evaluate_report <- function(file_path, verbose = FALSE) {
     cat("\n")
   }
 
-  # Run all checks
+  # Run all checks with report type
   if (verbose) cat("Running evaluation checks...\n\n")
 
   results <- list(
-    coverage = check_coverage_validation(content),
-    dgp_consistency = check_dgp_consistency(content),
-    bias = check_bias_quantification(content),
+    coverage = check_coverage_validation(content, report_type),
+    dgp_consistency = check_dgp_consistency(content, report_type),
+    bias = check_bias_quantification(content, report_type),
     false_positive = check_false_positive_control(content),
     visualization = check_visualization_quality(content),
-    structure = check_report_structure(content),
-    rigor = check_statistical_rigor(content),
+    structure = check_report_structure(content, report_type),
+    rigor = check_statistical_rigor(content, report_type),
     documentation = check_documentation_quality(content)
   )
 
@@ -429,13 +600,40 @@ evaluate_report <- function(file_path, verbose = FALSE) {
 
   cat(sprintf("Overall Grade: %s (%.0f%%)\n\n", overall_grade, overall_score * 100))
 
-  # Category scores
+  # Category scores with context-aware labels
   cat("Category Scores:\n")
   cat("----------------\n")
+
+  # Define friendly category names based on report type
+  category_labels <- if (report_type == "simulation") {
+    list(
+      coverage = "Coverage Validation",
+      dgp_consistency = "DGP Consistency",
+      bias = "Bias Quantification",
+      false_positive = "False Positive Control",
+      visualization = "Visualization Quality",
+      structure = "Report Structure",
+      rigor = "Statistical Rigor",
+      documentation = "Documentation Quality"
+    )
+  } else {
+    list(
+      coverage = "Model Validation",
+      dgp_consistency = "Data Documentation",
+      bias = "Uncertainty Quantification",
+      false_positive = "Statistical Inference",
+      visualization = "Visualization Quality",
+      structure = "Report Structure",
+      rigor = "Statistical Rigor",
+      documentation = "Documentation Quality"
+    )
+  }
+
   for (name in names(results)) {
     result <- results[[name]]
-    cat(sprintf("  %-20s %5.0f%%  [%s]\n",
-                paste0(toupper(substring(name, 1, 1)), substring(name, 2), ":"),
+    label <- category_labels[[name]]
+    cat(sprintf("  %-28s %5.0f%%  [%s]\n",
+                paste0(label, ":"),
                 result$score * 100,
                 result$grade))
   }
@@ -531,18 +729,36 @@ if (!interactive()) {
   args <- commandArgs(trailingOnly = TRUE)
 
   if (length(args) == 0) {
-    cat("Usage: Rscript scripts/evaluate-report.R <report-file> [--verbose]\n")
-    cat("\nExample:\n")
+    cat("Usage: Rscript scripts/evaluate-report.R <report-file> [OPTIONS]\n")
+    cat("\nOptions:\n")
+    cat("  --verbose         Show detailed diagnostics\n")
+    cat("  --type=TYPE       Force report type: 'simulation' or 'exploratory' (default: auto-detect)\n")
+    cat("\nExamples:\n")
     cat("  Rscript scripts/evaluate-report.R reports/factor-smooth-parameter-recovery.html\n")
-    cat("  Rscript scripts/evaluate-report.R reports/parameter-recovery-validation.qmd --verbose\n")
+    cat("  Rscript scripts/evaluate-report.R reports/factor-smooth-unemployment-analysis.qmd --verbose\n")
+    cat("  Rscript scripts/evaluate-report.R report.qmd --type=exploratory\n")
     quit(status = 1)
   }
 
   report_file <- args[1]
   verbose <- "--verbose" %in% args
 
+  # Extract report type if specified
+  type_args <- grep("^--type=", args, value = TRUE)
+  report_type <- if (length(type_args) > 0) {
+    gsub("^--type=", "", type_args[1])
+  } else {
+    "auto"
+  }
+
+  # Validate report type
+  if (!report_type %in% c("auto", "simulation", "exploratory")) {
+    cat("Error: Invalid report type. Must be 'auto', 'simulation', or 'exploratory'\n")
+    quit(status = 1)
+  }
+
   tryCatch({
-    result <- evaluate_report(report_file, verbose = verbose)
+    result <- evaluate_report(report_file, verbose = verbose, report_type = report_type)
 
     # Exit with status based on grade
     if (result$overall_grade == "FAIL") {
