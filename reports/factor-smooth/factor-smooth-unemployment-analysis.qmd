@@ -298,13 +298,13 @@ analysis <- analyze_cps_unemployment_by_education(
 # Define color palette for all 7 education levels
 # Using ColorBrewer-inspired palette for color-blind accessibility
 education_colors <- c(
-  "less_than_hs" = "#D73027",    # Red (highest unemployment)
-  "high_school" = "#FC8D59",     # Orange
-  "some_college" = "#E0C520",    # Gold/yellow-ochre
-  "bachelors" = "#91CF60",       # Yellow-green
-  "masters" = "#4575B4",         # Blue
-  "professional" = "#762A83",    # Purple
-  "phd" = "#1A1A1A"              # Near-black (lowest unemployment)
+  "less_than_hs" = "#E41A1C",    # Bright red
+  "high_school" = "#FF7F00",     # Bright orange
+  "some_college" = "#A65628",    # Brown
+  "bachelors" = "#4DAF4A",       # Green
+  "masters" = "#377EB8",         # Blue
+  "professional" = "#984EA3",    # Purple
+  "phd" = "#000000"              # Black
 )
 
 education_labels <- c(
