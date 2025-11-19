@@ -170,9 +170,12 @@ test_that("plot_education_comparison uses colors keyed to education labels, not 
     if ("education" %in% names(plot_data)) {
       unique_education <- unique(plot_data$education)
 
-      # Should use full labels, not internal names
-      expect_true(all(unique_education %in% c("Doctorate Degree", "Master's Degree", "Bachelor's Degree")),
-                  info = paste(plot_name, "should use education labels like 'Doctorate Degree', not 'phd'"))
+      # Should use full labels from IPUMS codes, not internal names
+      expected_labels <- c("Doctoral degree (PhD, EdD, etc.)",
+                          "Master's degree (MA, MS, MEng, MEd, MSW, MBA, etc.)",
+                          "Bachelor's degree")
+      expect_true(all(unique_education %in% expected_labels),
+                  info = paste(plot_name, "should use education labels from IPUMS codes, not internal names like 'phd'"))
 
       expect_false(any(unique_education %in% c("phd", "masters", "bachelors")),
                    info = paste(plot_name, "should not use internal names like 'phd'"))

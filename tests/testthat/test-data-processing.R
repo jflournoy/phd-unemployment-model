@@ -153,14 +153,16 @@ test_that("process_cps_data runs complete pipeline", {
   expect_true(all(c("YEAR", "MONTH", "unemployment_rate", "n_obs") %in% names(result)))
 
   # January: 2 PhDs, 1 unemployed -> 50%
+  # With WTFINL=1000, n_obs = 2*1000 = 2000
   jan <- result[result$MONTH == 1, ]
   expect_equal(jan$unemployment_rate, 0.5, tolerance = 0.01)
-  expect_equal(jan$n_obs, 2)
+  expect_equal(jan$n_obs, 2000)
 
   # February: 3 PhDs, 1 unemployed -> 33%
+  # With WTFINL=1000, n_obs = 3*1000 = 3000
   feb <- result[result$MONTH == 2, ]
   expect_equal(feb$unemployment_rate, 1/3, tolerance = 0.01)
-  expect_equal(feb$n_obs, 3)
+  expect_equal(feb$n_obs, 3000)
 })
 
 test_that("filter_education_level function exists for generic education filtering", {

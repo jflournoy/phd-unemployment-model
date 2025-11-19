@@ -106,7 +106,7 @@ test_that("create_timeseries_ggplot returns ggplot object", {
   monthly_rates$fitted <- fitted(model)
   monthly_rates$trend <- trend_effects$trend_effect[match(monthly_rates$time_index,
                                                            trend_effects$time_index)]
-  monthly_rates$seasonal <- seasonal_effects$seasonal_effect[match(monthly_rates$MONTH,
+  monthly_rates$seasonal <- seasonal_effects$seasonal_effect[match(monthly_rates$month,
                                                                     seasonal_effects$month)]
 
   # Should not error
