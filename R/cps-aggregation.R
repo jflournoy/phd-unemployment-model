@@ -446,6 +446,10 @@ aggregate_monthly_by_education <- function(data,
   # Remove unmapped education
   dt_lf <- dt_lf[!is.na(education)]
 
+  # Check if we need per-month weight selection
+  use_auto_weights <- weighted && !is.null(weight_var) && weight_var == "auto"
+  has_asecwt <- "ASECWT" %in% names(dt_lf)
+
   # Aggregate by year-month-education
   if (!weighted || is.null(weight_var)) {
     # Unweighted (count persons)
@@ -454,8 +458,33 @@ aggregate_monthly_by_education <- function(data,
       n_unemployed = sum(is_unemployed),
       n_total = .N
     ), by = .(year = YEAR, month = MONTH, education)]
+  } else if (use_auto_weights && has_asecwt) {
+    # Auto weight selection: Use ASECWT for March, WTFINL for other months
+    result_dt <- dt_lf[, {
+      # Select weight based on month
+      if (.BY$month == 3 && any(!is.na(ASECWT) & ASECWT > 0)) {
+        w <- ASECWT
+      } else {
+        w <- WTFINL
+      }
+      list(
+        n_employed = sum(w[is_employed], na.rm = TRUE),
+        n_unemployed = sum(w[is_unemployed], na.rm = TRUE),
+        n_total = sum(w, na.rm = TRUE)
+      )
+    }, by = .(year = YEAR, month = MONTH, education)]
+  } else if (use_auto_weights && !has_asecwt) {
+    # Auto mode but no ASECWT - fall back to WTFINL
+    result_dt <- dt_lf[, {
+      w <- WTFINL
+      list(
+        n_employed = sum(w[is_employed], na.rm = TRUE),
+        n_unemployed = sum(w[is_unemployed], na.rm = TRUE),
+        n_total = sum(w, na.rm = TRUE)
+      )
+    }, by = .(year = YEAR, month = MONTH, education)]
   } else {
-    # Weighted (sum weights)
+    # Weighted (sum weights) - use specified weight variable
     result_dt <- dt_lf[, {
       w <- get(weight_var)
       list(
