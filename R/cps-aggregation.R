@@ -276,6 +276,17 @@ aggregate_monthly_unemployment <- function(data, weight_var = "WTFINL") {
         n_total = sum(w[in_lf], na.rm = TRUE)
       )
     }, by = .(year = YEAR, month = MONTH)]
+  } else if (use_auto_weights && !has_asecwt) {
+    # Auto mode but no ASECWT - fall back to WTFINL
+    result_dt <- dt[, {
+      w <- WTFINL
+      in_lf <- is_employed | is_unemployed
+      list(
+        n_employed = sum(w[is_employed], na.rm = TRUE),
+        n_unemployed = sum(w[is_unemployed], na.rm = TRUE),
+        n_total = sum(w[in_lf], na.rm = TRUE)
+      )
+    }, by = .(year = YEAR, month = MONTH)]
   } else {
     # Use specified weight variable for all months
     result_dt <- dt[, {
