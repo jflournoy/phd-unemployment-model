@@ -102,6 +102,7 @@ filter_education_level <- function(cps_data, educ_code) {
 #' This function is typically the first step in analyzing PhD-specific unemployment.
 #'
 #' This is a convenience wrapper around filter_education_level() for PhD analysis.
+#' Uses get_education_code() from cps-codes.R to ensure correct code.
 #'
 #' @examples
 #' \dontrun{
@@ -111,7 +112,8 @@ filter_education_level <- function(cps_data, educ_code) {
 #'
 #' @export
 filter_phd_holders <- function(cps_data) {
-  filter_education_level(cps_data, educ_code = 125)
+  phd_code <- get_education_code("phd")
+  filter_education_level(cps_data, educ_code = phd_code)
 }
 
 #' Calculate Weighted Unemployment Rate
@@ -167,14 +169,9 @@ calculate_unemployment_rate <- function(data) {
     stop("data must contain either WTFINL or ASECWT weight variable")
   }
 
-  # Define employed and unemployed based on CPS EMPSTAT codes
-  # Employed: 10 (at work) or 12 (has job, not at work)
-  employed <- data$EMPSTAT %in% c(10, 12)
-
-  # Unemployed: 20-22 only (unemployed persons in labor force)
-  # 20: Unemployed, 21: Unemployed experienced worker, 22: Unemployed new worker
-  # NOTE: Codes 30-36 are NOT in labor force (retired, school, housework, etc.)
-  unemployed <- data$EMPSTAT %in% c(20, 21, 22)
+  # Define employed and unemployed based on CPS code constants
+  employed <- data$EMPSTAT %in% get_employed_codes()
+  unemployed <- data$EMPSTAT %in% get_unemployed_codes()
 
   # Labor force = employed + unemployed
   in_labor_force <- employed | unemployed
@@ -188,7 +185,7 @@ calculate_unemployment_rate <- function(data) {
   }
 
   # Calculate weighted unemployment rate using the appropriate weight
-  unemployed_lf <- lf_data$EMPSTAT %in% c(20, 21, 22)
+  unemployed_lf <- lf_data$EMPSTAT %in% get_unemployed_codes()
   weights <- lf_data[[weight_var]]
   total_unemployed_weight <- sum(weights[unemployed_lf], na.rm = TRUE)
   total_lf_weight <- sum(weights, na.rm = TRUE)
@@ -203,104 +200,6 @@ calculate_unemployment_rate <- function(data) {
   return(unemployment_rate)
 }
 
-#' Calculate Monthly Unemployment Rates
-#'
-#' Aggregates CPS data by year-month and computes unemployment rates for each period.
-#'
-#' @param data Data frame with YEAR, MONTH, EMPSTAT, and WTFINL variables
-#'
-#' @return Data frame with columns:
-#'   \item{YEAR}{Year}
-#'   \item{MONTH}{Month (1-12)}
-#'   \item{unemployment_rate}{Weighted unemployment rate (0-1 scale)}
-#'   \item{n_obs}{Number of observations in that month}
-#'
-#' @details
-#' This function:
-#' 1. Groups data by YEAR and MONTH
-#' 2. Calculates weighted unemployment rate for each month
-#' 3. Returns sorted time series of monthly rates
-#'
-#' Result is sorted chronologically for time series analysis.
-#'
-#' @examples
-#' \dontrun{
-#' monthly_rates <- calculate_monthly_unemployment(phd_data)
-#' }
-#'
-#' @export
-calculate_monthly_unemployment <- function(data) {
-  # Validate inputs
-  if (!is.data.frame(data)) {
-    stop("data must be a data frame")
-  }
-
-  required_vars <- c("YEAR", "MONTH", "EMPSTAT", "WTFINL")
-  missing_vars <- setdiff(required_vars, names(data))
-  if (length(missing_vars) > 0) {
-    stop("data missing required variables: ", paste(missing_vars, collapse = ", "))
-  }
-
-  # Use data.table for efficient single-pass aggregation
-  if (!requireNamespace("data.table", quietly = TRUE)) {
-    stop("data.table package required for efficient processing. Install with: install.packages('data.table')")
-  }
-
-  dt <- data.table::as.data.table(data)
-
-  # Single-pass aggregation: calculate unemployment rate for all year-months at once
-  # Define employed and unemployed status
-  dt[, `:=`(
-    is_employed = EMPSTAT %in% c(10, 12),
-    is_unemployed = EMPSTAT %in% c(20, 21, 22)
-  )]
-
-  # Filter to labor force only
-  dt_lf <- dt[is_employed | is_unemployed]
-
-  # Check if ASECWT exists for use in March
-  has_asecwt <- "ASECWT" %in% names(dt_lf)
-
-  # Calculate unemployment rate by year-month
-  # Use ASECWT for March (MONTH == 3) if available, WTFINL for all other months
-  result_dt <- dt_lf[, {
-    # Select appropriate weight variable
-    # Use ASECWT for March (MONTH == 3) if available and has non-zero values
-    # Use WTFINL for all other months
-    if (has_asecwt && .BY$MONTH == 3 && any(!is.na(ASECWT) & ASECWT > 0)) {
-      weight_col <- ASECWT
-    } else {
-      weight_col <- WTFINL
-    }
-
-    total_unemployed_weight <- sum(weight_col[is_unemployed], na.rm = TRUE)
-    total_lf_weight <- sum(weight_col, na.rm = TRUE)
-
-    if (total_lf_weight == 0 || is.na(total_lf_weight)) {
-      list(
-        unemployment_rate = NA_real_,
-        n_obs = .N
-      )
-    } else {
-      list(
-        unemployment_rate = total_unemployed_weight / total_lf_weight,
-        n_obs = .N
-      )
-    }
-  }, by = .(YEAR, MONTH)]
-
-  # Sort chronologically
-  data.table::setorder(result_dt, YEAR, MONTH)
-
-  # Add time_index (sequential: 1, 2, 3, ...)
-  result_dt[, time_index := seq_len(.N)]
-
-  # Add date column (first day of each month)
-  result_dt[, date := as.Date(paste(YEAR, MONTH, "01", sep = "-"))]
-
-  # Convert back to data.frame for compatibility
-  as.data.frame(result_dt)
-}
 
 #' Process CPS Data Pipeline
 #'
@@ -313,7 +212,7 @@ calculate_monthly_unemployment <- function(data) {
 #' @details
 #' This is the main pipeline function that:
 #' 1. Filters to PhD holders only (EDUC == 125)
-#' 2. Calculates monthly unemployment rates
+#' 2. Calculates monthly unemployment rates using new aggregation functions
 #' 3. Returns time series ready for analysis
 #'
 #' @examples
@@ -327,8 +226,107 @@ process_cps_data <- function(cps_data) {
   # Filter to PhDs
   phd_data <- filter_phd_holders(cps_data)
 
-  # Calculate monthly unemployment
-  monthly_rates <- calculate_monthly_unemployment(phd_data)
+  # Calculate monthly unemployment using new aggregation function
+  monthly_rates <- aggregate_monthly_unemployment(phd_data, weight_var = "auto")
+
+  # Add date column for compatibility with existing code
+  monthly_rates$date <- as.Date(paste(monthly_rates$year, monthly_rates$month, "01", sep = "-"))
+
+  # Rename columns for compatibility
+  monthly_rates$YEAR <- monthly_rates$year
+  monthly_rates$MONTH <- monthly_rates$month
+  monthly_rates$n_obs <- monthly_rates$n_total  # Use n_total as proxy for n_obs
 
   return(monthly_rates)
+}
+
+#' Generate Education Spectrum Count Data for Binomial/Quasi-Binomial GAMs
+#'
+#' Loads raw IPUMS CPS microdata and generates monthly unemployment counts by
+#' education level for use with binomial/quasi-binomial factor smooth GAMs.
+#'
+#' @param input_file Character. Path to raw IPUMS CPS data (.rds file)
+#' @param output_file Character. Path where count data should be saved (.rds file)
+#' @param weighted Logical. If TRUE, use weights; if FALSE, count persons (default: FALSE)
+#'
+#' @return Character. Path to output file (invisibly)
+#'
+#' @details
+#' This function:
+#' 1. Loads raw CPS microdata from input_file
+#' 2. Calls aggregate_monthly_by_education() to aggregate to counts
+#' 3. Saves result to output_file
+#' 4. Creates output directory if it doesn't exist
+#'
+#' **Output data structure** suitable for binomial/quasi-binomial GAMs:
+#' - year, month, education (factor)
+#' - n_unemployed (integer): count of unemployed
+#' - n_total (integer): count of labor force participants
+#' - time_index (integer): sequential time index
+#'
+#' **Education levels**: less_than_hs, high_school, some_college, bachelors,
+#' professional, masters, phd
+#'
+#' @examples
+#' \dontrun{
+#' # Generate count data from raw IPUMS data
+#' generate_education_spectrum_counts(
+#'   input_file = "data-raw/ipums_data.rds",
+#'   output_file = "data/education-spectrum-counts.rds"
+#' )
+#' }
+#'
+#' @export
+generate_education_spectrum_counts <- function(input_file, output_file, weighted = FALSE) {
+  # Validate input file exists
+  if (!file.exists(input_file)) {
+    stop(sprintf("Input file does not exist: %s", input_file))
+  }
+
+  # Create output directory if needed
+  output_dir <- dirname(output_file)
+  if (!dir.exists(output_dir)) {
+    dir.create(output_dir, recursive = TRUE)
+    cat("Created output directory:", output_dir, "\n")
+  }
+
+  # Load raw CPS data
+  cat("Loading raw CPS data from:", input_file, "\n")
+  raw_data <- readRDS(input_file)
+
+  # Validate required columns
+  required_vars <- c("YEAR", "MONTH", "EMPSTAT", "EDUC")
+  missing_vars <- setdiff(required_vars, names(raw_data))
+  if (length(missing_vars) > 0) {
+    stop(sprintf("Input data missing required variables: %s",
+                 paste(missing_vars, collapse = ", ")))
+  }
+
+  # Generate count data using new aggregation function
+  cat("Generating monthly unemployment counts by education level...\n")
+  count_data <- aggregate_monthly_by_education(
+    raw_data,
+    weight_var = NULL,  # Use unweighted counts for binomial GAMs
+    weighted = weighted
+  )
+
+  # Print summary
+  cat("\nCount data summary:\n")
+  cat(sprintf("  Rows: %d\n", nrow(count_data)))
+  cat(sprintf("  Years: %d - %d\n",
+              min(count_data$year, na.rm = TRUE),
+              max(count_data$year, na.rm = TRUE)))
+  cat(sprintf("  Education levels (%d): %s\n",
+              length(unique(count_data$education)),
+              paste(sort(unique(count_data$education)), collapse = ", ")))
+  cat(sprintf("  Total unemployed: %d\n", sum(count_data$n_unemployed)))
+  cat(sprintf("  Total labor force: %d\n", sum(count_data$n_total)))
+
+  # Save to output file
+  cat("\nSaving to:", output_file, "\n")
+  saveRDS(count_data, output_file)
+
+  cat("Done!\n")
+
+  invisible(output_file)
 }

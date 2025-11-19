@@ -38,10 +38,9 @@ test_that("plot_seasonal_decomposition_ggplot handles real CPS data", {
   # Load real data
   cps_data <- readRDS(here::here("data-raw", "ipums_data.rds"))
   phd_data <- filter_phd_holders(cps_data)
-  monthly_rates <- calculate_monthly_unemployment(phd_data)
+  monthly_rates <- aggregate_monthly_unemployment(phd_data, weight_var = "auto")
 
-  # Add month column (lowercase for GAM)
-  monthly_rates$month <- monthly_rates$MONTH
+  # month column already exists in new format
 
   # Fit seasonal GAM
   model <- fit_seasonal_gam(monthly_rates, k_month = 10, k_trend = 20)
@@ -94,8 +93,7 @@ test_that("create_timeseries_ggplot returns ggplot object", {
   # Load real data
   cps_data <- readRDS(here::here("data-raw", "ipums_data.rds"))
   phd_data <- filter_phd_holders(cps_data)
-  monthly_rates <- calculate_monthly_unemployment(phd_data)
-  monthly_rates$month <- monthly_rates$MONTH
+  monthly_rates <- aggregate_monthly_unemployment(phd_data, weight_var = "auto")
 
   # Fit model
   model <- fit_seasonal_gam(monthly_rates, k_month = 10, k_trend = 20)
@@ -130,8 +128,7 @@ test_that("ggplot functions use date column for x-axis when available", {
   # Load real data with date column
   cps_data <- readRDS(here::here("data-raw", "ipums_data.rds"))
   phd_data <- filter_phd_holders(cps_data)
-  monthly_rates <- calculate_monthly_unemployment(phd_data)
-  monthly_rates$month <- monthly_rates$MONTH
+  monthly_rates <- aggregate_monthly_unemployment(phd_data, weight_var = "auto")
 
   # Fit model
   model <- fit_seasonal_gam(monthly_rates, k_month = 10, k_trend = 20)
@@ -159,8 +156,7 @@ test_that("plot_seasonal_decomposition_ggplot uses date for x-axis when availabl
   # Load real data
   cps_data <- readRDS(here::here("data-raw", "ipums_data.rds"))
   phd_data <- filter_phd_holders(cps_data)
-  monthly_rates <- calculate_monthly_unemployment(phd_data)
-  monthly_rates$month <- monthly_rates$MONTH
+  monthly_rates <- aggregate_monthly_unemployment(phd_data, weight_var = "auto")
 
   # Fit model
   model <- fit_seasonal_gam(monthly_rates, k_month = 10, k_trend = 20)

@@ -98,7 +98,7 @@ compare_unemployment_by_education <- function(data, education_levels) {
 
     # Process monthly unemployment rates (no longer filters - already filtered)
     monthly_data <- tryCatch({
-      calculate_monthly_unemployment(educ_data)
+      aggregate_monthly_unemployment(educ_data, weight_var = "auto")
     }, error = function(e) {
       warning("Error processing data for ", educ_name, ": ", e$message)
       return(NULL)
@@ -109,8 +109,7 @@ compare_unemployment_by_education <- function(data, education_levels) {
       next
     }
 
-    # Add lowercase month column for GAM
-    monthly_data$month <- monthly_data$MONTH
+    # month column already exists in new format
 
     # Fit GAM model
     model <- tryCatch({
@@ -128,13 +127,11 @@ compare_unemployment_by_education <- function(data, education_levels) {
     seasonal <- extract_seasonal_component(model, monthly_data)
     trend <- extract_trend_component(model, monthly_data)
 
-    # Create readable label
-    educ_label <- switch(as.character(educ_code),
-                        "125" = "Doctorate Degree",
-                        "123" = "Master's Degree",
-                        "111" = "Bachelor's Degree",
-                        "73" = "High School Diploma",
-                        paste("Education Code", educ_code))
+    # Create readable label using constant function
+    educ_label <- get_education_description(educ_code)
+    if (is.na(educ_label)) {
+      educ_label <- paste("Education Code", educ_code)
+    }
 
     # Store results
     results[[educ_name]] <- list(

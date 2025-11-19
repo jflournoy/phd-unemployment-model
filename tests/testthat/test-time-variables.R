@@ -2,11 +2,11 @@ test_that("monthly unemployment data has proper time variables", {
   # Load real CPS data
   cps_data <- readRDS(here::here("data-raw", "ipums_data.rds"))
   phd_data <- filter_phd_holders(cps_data)
-  monthly_rates <- calculate_monthly_unemployment(phd_data)
+  monthly_rates <- aggregate_monthly_unemployment(phd_data, weight_var = "auto")
 
-  # Should have YEAR and MONTH columns
-  expect_true("YEAR" %in% names(monthly_rates))
-  expect_true("MONTH" %in% names(monthly_rates))
+  # Should have year and month columns
+  expect_true("year" %in% names(monthly_rates))
+  expect_true("month" %in% names(monthly_rates))
 
   # Should have date column (Date class)
   expect_true("date" %in% names(monthly_rates))
@@ -25,15 +25,15 @@ test_that("monthly unemployment data has proper time variables", {
   # All dates should be first of month
   expect_true(all(date_days == 1))
 
-  # Dates should match YEAR and MONTH columns
-  expect_equal(date_months, monthly_rates$MONTH)
-  expect_equal(date_years, as.numeric(monthly_rates$YEAR))  # Strip attributes
+  # Dates should match year and month columns
+  expect_equal(date_months, monthly_rates$month)
+  expect_equal(date_years, as.numeric(monthly_rates$year))  # Strip attributes
 })
 
 test_that("time variables are in correct sequence", {
   cps_data <- readRDS(here::here("data-raw", "ipums_data.rds"))
   phd_data <- filter_phd_holders(cps_data)
-  monthly_rates <- calculate_monthly_unemployment(phd_data)
+  monthly_rates <- aggregate_monthly_unemployment(phd_data, weight_var = "auto")
 
   # Dates should be in chronological order
   expect_true(all(diff(monthly_rates$date) > 0))
@@ -42,15 +42,15 @@ test_that("time variables are in correct sequence", {
   expect_equal(monthly_rates$time_index, 1:nrow(monthly_rates))
 
   # First observation should be January 2000
-  expect_equal(monthly_rates$YEAR[1], 2000)
-  expect_equal(monthly_rates$MONTH[1], 1)
+  expect_equal(monthly_rates$year[1], 2000)
+  expect_equal(monthly_rates$month[1], 1)
   expect_equal(monthly_rates$date[1], as.Date("2000-01-01"))
   expect_equal(monthly_rates$time_index[1], 1)
 
   # Last observation should be August 2025
   last_row <- nrow(monthly_rates)
-  expect_equal(monthly_rates$YEAR[last_row], 2025)
-  expect_equal(monthly_rates$MONTH[last_row], 8)
+  expect_equal(monthly_rates$year[last_row], 2025)
+  expect_equal(monthly_rates$month[last_row], 8)
   expect_equal(monthly_rates$date[last_row], as.Date("2025-08-01"))
   expect_equal(monthly_rates$time_index[last_row], 308)
 })
@@ -58,7 +58,7 @@ test_that("time variables are in correct sequence", {
 test_that("date column enables proper time series plotting", {
   cps_data <- readRDS(here::here("data-raw", "ipums_data.rds"))
   phd_data <- filter_phd_holders(cps_data)
-  monthly_rates <- calculate_monthly_unemployment(phd_data)
+  monthly_rates <- aggregate_monthly_unemployment(phd_data, weight_var = "auto")
 
   # Date range should span full dataset
   date_range <- range(monthly_rates$date)
@@ -71,7 +71,7 @@ test_that("date column enables proper time series plotting", {
   expect_lt(months_elapsed, 310)
 
   # Can calculate year fractions for plotting
-  year_fraction <- monthly_rates$YEAR + (monthly_rates$MONTH - 0.5) / 12
+  year_fraction <- monthly_rates$year + (monthly_rates$month - 0.5) / 12
   expect_gte(min(year_fraction), 2000)
   expect_lte(max(year_fraction), 2025.7)
 })
