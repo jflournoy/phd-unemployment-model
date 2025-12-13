@@ -1,0 +1,381 @@
+---
+title: "Binomial vs Quasi-Binomial GAMs on Real CPS Data"
+subtitle: "Practical Model Comparison for PhD Unemployment Analysis"
+author: "PhD Unemployment Modeling Project"
+date: "`r Sys.Date()`"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    code-summary: "Show code"
+    theme: cosmo
+    embed-resources: true
+---
+
+## Executive Summary
+
+This report compares binomial and quasi-binomial GAMs on **real CPS data** to determine which family is more appropriate for modeling PhD unemployment rates across education levels.
+
+**Key Questions**:
+
+1. Is there evidence of overdispersion in CPS unemployment data?
+2. How do binomial vs quasi-binomial model fits differ?
+3. How much do smoothing parameters (λ) differ between families?
+4. How much wider are quasi-binomial prediction intervals?
+5. Which model should we use for PhD unemployment analysis?
+
+## Setup
+
+```{r setup, message=FALSE, warning=FALSE}
+# Load required packages
+# Note: phdunemployment package is already loaded by targets pipeline
+library(targets)
+library(ggplot2)
+
+# Suppress excessive messages
+options(warn = -1)
+```
+
+## Data Preparation
+
+This report uses data and models from the targets pipeline, ensuring reproducibility and efficient caching.
+
+```{r load_data}
+# Load data from targets pipeline
+# This ensures we use the exact same data that was used to fit the models
+education_counts <- targets::tar_read(education_counts)
+
+# Filter to education levels and years of interest
+education_counts_filtered <- education_counts[
+  education_counts$education %in% c("phd", "masters", "bachelors") &
+  education_counts$year >= 2010,
+]
+
+cat("Data dimensions:", nrow(education_counts_filtered), "rows\n")
+cat("Education levels:", unique(education_counts_filtered$education), "\n")
+cat("Year range:", range(education_counts_filtered$year), "\n")
+cat("Total observations per month (mean):",
+    round(mean(education_counts_filtered$n_total)), "\n")
+```
+
+## Model Specification
+
+We fit the same GAM formula with two different families:
+
+**Formula**:
+```
+cbind(n_unemployed, n_employed) ~
+  s(time_index, k = 30) +                      # Long-term trend
+  s(month, bs = "cc", k = 12) +                # Seasonal pattern
+  s(time_index, education, bs = "fs", k = 10)  # Education-specific trends
+```
+
+**Families**:
+
+1. **Binomial**: Assumes variance = n·p·(1-p) (canonical binomial variance)
+2. **Quasi-binomial**: Allows variance = φ·n·p·(1-p) where φ is estimated from data
+
+```{r load_models}
+# Load pre-fitted models from targets pipeline
+# These were fitted using the exact same data specification
+model_binomial <- targets::tar_read(model_binomial)
+model_quasibinomial <- targets::tar_read(model_quasibinomial)
+model_comparison <- targets::tar_read(model_comparison)
+
+# The comparison object contains all comparison metrics
+comparison <- model_comparison
+
+cat("Models loaded from targets pipeline\n")
+cat("Dispersion parameter φ =", comparison$summary$dispersion_parameter, "\n")
+```
+
+## Model Comparison Results
+
+```{r show_comparison}
+# Display comparison summary
+print(comparison$summary)
+```
+
+### Key Findings
+
+Based on the comparison results:
+
+- **Dispersion parameter**: φ = `r sprintf("%.2f", comparison$summary$dispersion_parameter)` (φ > 1 indicates overdispersion)
+- **Smoothing parameter ratio**: Quasi-binomial λ is **`r sprintf("%.0f", comparison$summary$lambda_ratio)`× larger** than binomial λ
+- **Prediction interval inflation**: Quasi-binomial PIs are **`r sprintf("%.1f", sqrt(comparison$summary$dispersion_parameter))`× wider** (√φ factor)
+- **Model smoothness**: Quasi-binomial fits are smoother (less reactive to short-term noise)
+- **Recommendation**: Use quasi-binomial for PhD unemployment modeling given evidence of overdispersion
+
+### Interpretation
+
+**Dispersion Parameter (φ)**:
+
+- φ = `r sprintf("%.3f", comparison$summary$dispersion_parameter)`
+- φ > 1 indicates **overdispersion** (variance exceeds binomial assumption)
+- φ < 1 would indicate underdispersion (rare in count data)
+
+**Deviance**:
+
+- Binomial deviance: `r sprintf("%.1f", comparison$summary$binomial_deviance)`
+- Quasi-binomial deviance: `r sprintf("%.1f", comparison$summary$quasibinomial_deviance)` (same as binomial)
+- Deviance/df: `r sprintf("%.2f", comparison$summary$deviance_per_df)`
+
+**Smoothing Parameters (λ)**:
+
+- Mean binomial λ: `r sprintf("%.1f", comparison$summary$mean_lambda_binomial)`
+- Mean quasi-binomial λ: `r sprintf("%.1f", comparison$summary$mean_lambda_quasibinomial)`
+- Ratio: **`r sprintf("%.0f", comparison$summary$lambda_ratio)`×** (quasi λ is much larger)
+- **Effect**: Quasi-binomial fits are much smoother
+
+**Effective Degrees of Freedom (edf)**:
+
+- Binomial edf: `r sprintf("%.1f", comparison$summary$binomial_edf)`
+- Quasi-binomial edf: `r sprintf("%.1f", comparison$summary$quasibinomial_edf)`
+- Lower edf = smoother fit (less flexible)
+
+**Prediction Interval Width Inflation**:
+
+- Quasi-binomial PIs are **√φ = `r sprintf("%.2f", sqrt(comparison$summary$dispersion_parameter))`× wider**
+- This accounts for extra-binomial variation observed in data
+
+## Visualizations
+
+Generate comprehensive comparison plots using the visualization function.
+
+```{r visualizations, fig.width=12, fig.height=10}
+plots <- plot_binomial_quasibinomial_comparison(
+  binomial_model = model_binomial,
+  quasibinomial_model = model_quasibinomial,
+  data = education_counts_filtered,
+  education_levels = c("phd", "masters", "bachelors")
+)
+
+# Display combined figure
+print(plots$combined)
+```
+
+### Individual Plots
+
+```{r plot_fitted, fig.width=12, fig.height=6}
+print(plots$fitted_comparison)
+```
+
+**Interpretation**: Quasi-binomial fits are noticeably smoother than binomial fits, especially during volatile periods (e.g., 2020 COVID-19 spike). The smoother fit is less reactive to short-term noise.
+
+```{r plot_prediction_intervals, fig.width=12, fig.height=6}
+print(plots$prediction_intervals)
+```
+
+**Interpretation**: Quasi-binomial prediction interval widths are consistently wider by a factor of √φ ≈ `r sprintf("%.2f", sqrt(comparison$summary$dispersion_parameter))`. This reflects the model's acknowledgment of extra-binomial variation.
+
+```{r plot_smoothing_params, fig.width=8, fig.height=5}
+print(plots$smoothing_parameters)
+```
+
+**Interpretation**: Smoothing parameters differ by a factor of ~`r sprintf("%.0f", comparison$summary$lambda_ratio)`. The quasi-binomial model applies much stronger regularization, preventing overfitting to sampling noise.
+
+```{r plot_dispersion, fig.width=8, fig.height=5}
+print(plots$dispersion_diagnostic)
+```
+
+**Interpretation**: Pearson residuals from binomial model show evidence of overdispersion (spread > 1). The LOESS smooth helps visualize systematic patterns. Ideally, residuals should be randomly scattered around zero with no trend.
+
+## Detailed Comparison by Education Level
+
+Examine how the models differ for each education level separately.
+
+```{r comparison_by_education, fig.width=12, fig.height=8}
+# Extract fitted values by education level
+fitted_data <- comparison$fitted_values
+fitted_data$education <- education_counts_filtered$education
+
+# Plot by education level
+ggplot(fitted_data, aes(x = date)) +
+  geom_point(aes(y = observed), alpha = 0.3, size = 0.8, color = "gray40") +
+  geom_line(aes(y = binomial_fit, color = "Binomial"), linewidth = 0.7) +
+  geom_line(aes(y = quasibinomial_fit, color = "Quasi-binomial"),
+            linewidth = 0.7, linetype = "dashed") +
+  facet_wrap(~ education, ncol = 1, scales = "free_y") +
+  scale_color_manual(
+    values = c("Binomial" = "#E63946", "Quasi-binomial" = "#06A77D")
+  ) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.1)) +
+  labs(
+    title = "Binomial vs Quasi-Binomial Fits by Education Level",
+    subtitle = sprintf("φ = %.2f, λ ratio = %.0f×",
+                      comparison$summary$dispersion_parameter,
+                      comparison$summary$lambda_ratio),
+    x = "Date",
+    y = "Unemployment Rate",
+    color = "Model"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    legend.position = "top",
+    strip.text = element_text(face = "bold", size = 12)
+  )
+```
+
+## Residual Diagnostics
+
+Check residuals for both models to assess fit quality.
+
+```{r residual_diagnostics, fig.width=12, fig.height=6}
+# Calculate Pearson residuals
+residuals_binomial <- residuals(model_binomial, type = "pearson")
+residuals_quasibinomial <- residuals(model_quasibinomial, type = "pearson")
+
+residual_data <- data.frame(
+  fitted_binomial = fitted(model_binomial),
+  residual_binomial = residuals_binomial,
+  fitted_quasibinomial = fitted(model_quasibinomial),
+  residual_quasibinomial = residuals_quasibinomial
+)
+
+# Binomial residuals
+p1 <- ggplot(residual_data, aes(x = fitted_binomial, y = residual_binomial)) +
+  geom_point(alpha = 0.4, color = "#E63946") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  geom_hline(yintercept = c(-2, 2), linetype = "dotted", color = "gray50") +
+  geom_smooth(method = "loess", se = TRUE, color = "#2E86AB", linewidth = 1) +
+  labs(
+    title = "Binomial Model: Pearson Residuals",
+    x = "Fitted Values",
+    y = "Pearson Residual"
+  ) +
+  theme_minimal()
+
+# Quasi-binomial residuals
+p2 <- ggplot(residual_data, aes(x = fitted_quasibinomial, y = residual_quasibinomial)) +
+  geom_point(alpha = 0.4, color = "#06A77D") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  geom_hline(yintercept = c(-2, 2), linetype = "dotted", color = "gray50") +
+  geom_smooth(method = "loess", se = TRUE, color = "#2E86AB", linewidth = 1) +
+  labs(
+    title = "Quasi-Binomial Model: Pearson Residuals",
+    x = "Fitted Values",
+    y = "Pearson Residual"
+  ) +
+  theme_minimal()
+
+# Display side by side
+if (requireNamespace("patchwork", quietly = TRUE)) {
+  library(patchwork)
+  print(p1 | p2)
+} else {
+  print(p1)
+  print(p2)
+}
+```
+
+**Interpretation**:
+
+- Binomial residuals may show more spread than expected (SD > 1 indicates overdispersion)
+- Quasi-binomial residuals are scaled by √φ, so they should be closer to unit variance
+- Both should be randomly scattered with no systematic patterns
+
+## Model Summary Statistics
+
+```{r model_summaries}
+cat("=== BINOMIAL MODEL SUMMARY ===\n\n")
+print(summary(model_binomial))
+
+cat("\n\n=== QUASI-BINOMIAL MODEL SUMMARY ===\n\n")
+print(summary(model_quasibinomial))
+```
+
+## Conclusions
+
+### Evidence of Overdispersion
+
+- **Dispersion parameter**: φ = `r sprintf("%.2f", comparison$summary$dispersion_parameter)`
+- φ > 1 indicates clear evidence of **overdispersion** in CPS unemployment data
+- Variance exceeds what binomial family assumes by factor of φ
+
+### Model Fit Differences
+
+1. **Smoothness**: Quasi-binomial fits are much smoother (λ is `r sprintf("%.0f", comparison$summary$lambda_ratio)`× larger)
+2. **Reactivity**: Binomial fits are more reactive to short-term fluctuations
+3. **Uncertainty**: Quasi-binomial prediction intervals are `r sprintf("%.1f", sqrt(comparison$summary$dispersion_parameter))`× wider
+
+### Practical Implications
+
+**When to use binomial**:
+- When you believe sampling variation is purely binomial
+- When φ ≈ 1 (no overdispersion)
+- When you want fits that closely track data fluctuations
+
+**When to use quasi-binomial**:
+- When φ > 1.5 (moderate to strong overdispersion) ✓ **Our case**
+- When you want smoother, more stable long-term trends ✓ **Our goal**
+- When you want prediction intervals that account for extra-binomial variation ✓ **Important**
+- When modeling real-world data with unmodeled heterogeneity ✓ **CPS has demographic variation**
+
+### Recommendation for PhD Unemployment Modeling
+
+**Use quasi-binomial family** for the following reasons:
+
+1. **Clear overdispersion**: φ = `r sprintf("%.2f", comparison$summary$dispersion_parameter)` >> 1
+2. **Smoother trends**: Better for understanding long-term patterns vs noise
+3. **Better-calibrated uncertainty**: Prediction intervals account for extra variation
+4. **Realistic**: CPS unemployment varies by many unmodeled factors (demographics, geography, field of study)
+
+### Next Steps
+
+1. Use quasi-binomial GAMs for all education-level unemployment modeling
+2. Consider whether factor smooth structure captures education differences adequately
+3. Validate predictions on held-out time periods
+4. Consider whether additional covariates reduce overdispersion
+5. Explore random effects models if overdispersion remains very high
+
+## Technical Notes
+
+### Why Do Smoothing Parameters Differ?
+
+REML (Restricted Maximum Likelihood) estimates smoothing parameters λ by maximizing:
+
+```
+-0.5 * [y'(I + λK)^(-1)y / φ + log|I + λK| + (n-p) * log(φ)]
+```
+
+Where:
+- φ = scale parameter (1 for binomial, estimated for quasi-binomial)
+- K = penalty matrix (same for both models)
+- λ = smoothing parameter (what we're solving for)
+
+**Key insight**: When φ increases, λ must increase proportionally to maintain the same balance between fit and smoothness. This is why quasi-binomial λ ≈ φ × binomial λ.
+
+### Why Are Quasi-Binomial Prediction Intervals Wider?
+
+Prediction intervals for proportions have two sources of uncertainty:
+
+1. **Parameter uncertainty**: SE(p̂) from model fit
+2. **Sampling variance**: p(1-p)/n from binomial trials
+
+For quasi-binomial, parameter SE is inflated by √φ:
+
+```
+SE_quasi(p̂) = √φ × SE_binomial(p̂)
+```
+
+Since SE_quasi enters the PI formula, quasi-binomial PIs are wider by √φ.
+
+### Dispersion Parameter Estimation
+
+Quasi-binomial estimates φ using Pearson's chi-square:
+
+```
+φ̂ = X² / df = Σ(residual²) / (n - p)
+```
+
+Where:
+- residual = (y - μ) / √(V(μ)) (Pearson residual)
+- V(μ) = n·p·(1-p) (binomial variance)
+- n = sample size, p = number of parameters
+
+## Session Info
+
+```{r session_info}
+sessionInfo()
+```
