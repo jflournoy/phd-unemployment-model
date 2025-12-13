@@ -1,9 +1,10 @@
 #' Fit Factor Smooth GAM to Real CPS Data
 #'
-#' Loads processed CPS unemployment data and fits a factor smooth GAM model
+#' Fits a factor smooth GAM model to processed CPS unemployment data
 #' with education-specific trends and/or seasonal patterns.
 #'
-#' @param data_file Character. Path to RDS file containing processed CPS data
+#' @param data Data frame. Processed CPS data with unemployment rates by education
+#'   Must contain columns: unemployment_rate, time_index, month, year, education
 #' @param education_levels Character vector. Education levels to include (e.g., c("phd", "masters", "bachelors"))
 #' @param formula_type Character. One of "shared", "seasonal_by_education", "trend_by_education", "full"
 #' @param start_year Integer. Optional. Filter data to years >= start_year
@@ -24,8 +25,10 @@
 #'
 #' @examples
 #' \dontrun{
+#' # From targets pipeline
+#' multi_education <- targets::tar_read(multi_education)
 #' result <- fit_factor_smooth_to_cps_data(
-#'   data_file = here::here("data/phd-monthly-unemployment.rds"),
+#'   data = multi_education,
 #'   education_levels = c("phd", "masters", "bachelors"),
 #'   formula_type = "full",
 #'   start_year = 2010,
@@ -35,7 +38,7 @@
 #' }
 #'
 #' @export
-fit_factor_smooth_to_cps_data <- function(data_file,
+fit_factor_smooth_to_cps_data <- function(data,
                                            education_levels = c("phd", "masters", "bachelors"),
                                            formula_type = "full",
                                            start_year = NULL,
@@ -46,17 +49,15 @@ fit_factor_smooth_to_cps_data <- function(data_file,
                                            k_month = 10,
                                            k_trend = 20) {
 
-  # Load data
-  if (!file.exists(data_file)) {
-    stop("Data file not found: ", data_file)
+  # Validate input
+  if (!is.data.frame(data)) {
+    stop("data must be a data frame")
   }
-
-  raw_data <- readRDS(data_file)
 
   # Filter to requested education levels
   # Assuming data has an 'educ_label' or similar column
   # We'll need to check what the actual column names are
-  if ("educ_label" %in% names(raw_data)) {
+  if ("educ_label" %in% names(data)) {
     # Map education levels to data labels
     educ_mapping <- c(
       "phd" = "PhD",
@@ -65,7 +66,7 @@ fit_factor_smooth_to_cps_data <- function(data_file,
     )
 
     labels_to_keep <- educ_mapping[education_levels]
-    data <- raw_data[raw_data$educ_label %in% labels_to_keep, ]
+    data <- data[data$educ_label %in% labels_to_keep, ]
 
     # Create standardized education variable
     data$education <- factor(
@@ -73,9 +74,9 @@ fit_factor_smooth_to_cps_data <- function(data_file,
       levels = labels_to_keep,
       labels = education_levels
     )
-  } else if ("education" %in% names(raw_data)) {
+  } else if ("education" %in% names(data)) {
     # Data already has education column
-    data <- raw_data[raw_data$education %in% education_levels, ]
+    data <- data[data$education %in% education_levels, ]
     data$education <- factor(data$education, levels = education_levels)
   } else {
     stop("Data must have 'education' or 'educ_label' column")
@@ -258,7 +259,7 @@ compute_real_data_trend_differences <- function(model,
 #' Fits sequence of nested GAM models to real CPS data and compares them
 #' using AIC.
 #'
-#' @param data_file Character. Path to RDS file containing processed CPS data
+#' @param data Data frame. Processed CPS data with unemployment rates by education
 #' @param education_levels Character vector. Education levels to include
 #' @param start_year Integer. Optional. Filter data to years >= start_year
 #' @param end_year Integer. Optional. Filter data to years <= end_year
@@ -270,14 +271,14 @@ compute_real_data_trend_differences <- function(model,
 #'   \item{data}{Processed data frame}
 #'
 #' @export
-fit_nested_models_to_cps_data <- function(data_file,
+fit_nested_models_to_cps_data <- function(data,
                                            education_levels = c("phd", "masters", "bachelors"),
                                            start_year = NULL,
                                            end_year = NULL) {
 
-  # Load and prepare data using the main function
+  # Prepare data using the main function
   data_result <- fit_factor_smooth_to_cps_data(
-    data_file = data_file,
+    data = data,
     education_levels = education_levels,
     formula_type = "full",  # Doesn't matter, we'll fit all models
     start_year = start_year,
@@ -385,7 +386,7 @@ prepare_visualization_data <- function(model, data, education_levels) {
 #' model selection, component extraction, trend comparisons, and
 #' visualization data preparation.
 #'
-#' @param data_file Character. Path to RDS file containing processed CPS data
+#' @param data Data frame. Processed CPS data with unemployment rates by education
 #' @param education_levels Character vector. Education levels to include
 #' @param start_year Integer. Optional. Filter data to years >= start_year
 #' @param end_year Integer. Optional. Filter data to years <= end_year
@@ -403,8 +404,10 @@ prepare_visualization_data <- function(model, data, education_levels) {
 #'
 #' @examples
 #' \dontrun{
+#' # From targets pipeline
+#' multi_education <- targets::tar_read(multi_education)
 #' analysis <- analyze_cps_unemployment_by_education(
-#'   data_file = here::here("data/phd-monthly-unemployment.rds"),
+#'   data = multi_education,
 #'   education_levels = c("phd", "masters", "bachelors"),
 #'   start_year = 2010,
 #'   end_year = 2020
@@ -418,7 +421,7 @@ prepare_visualization_data <- function(model, data, education_levels) {
 #' }
 #'
 #' @export
-analyze_cps_unemployment_by_education <- function(data_file,
+analyze_cps_unemployment_by_education <- function(data,
                                                    education_levels = c("phd", "masters", "bachelors"),
                                                    start_year = NULL,
                                                    end_year = NULL,
@@ -429,7 +432,7 @@ analyze_cps_unemployment_by_education <- function(data_file,
   # 1. Fit nested models and select best
   message("Fitting nested model sequence...")
   nested_results <- fit_nested_models_to_cps_data(
-    data_file = data_file,
+    data = data,
     education_levels = education_levels,
     start_year = start_year,
     end_year = end_year
