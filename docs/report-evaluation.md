@@ -23,21 +23,58 @@ Parameter recovery validation is critical in statistical modeling:
 - Confidence intervals contain true parameter values in ~95% of simulations
 - Tests conducted on NEW datasets, not training data
 - Differences between groups tested, not just individual parameters
+- **Coverage checked at observation-level, not just global mean**
 
 **Why it matters:**
 - Fundamental test of statistical validity
 - Miscalibrated CIs lead to wrong conclusions
 - Testing on training data gives artificially perfect 100% coverage
+- **Global-mean-only coverage is too lenient and hides CI miscalibration**
 
 **Common issues:**
 - ❌ Testing models on their own training data
 - ❌ Only testing individual parameters instead of differences
 - ❌ Coverage rates outside 93-97% range
+- ❌ **Checking if mean prediction is covered, not individual observations**
+- ❌ **Coverage rates suspiciously high (>98%) indicating overly conservative CIs**
 
 **Best practices:**
 - ✅ Fit MANY models on MANY new datasets
 - ✅ Check if each CI contains the true value
 - ✅ Report coverage for all comparisons of interest
+- ✅ **Check coverage for EACH observation/timepoint individually**
+- ✅ **Aggregate observation-level coverage to get empirical coverage rate**
+
+### 1.5. Parameter Recovery Validation (Critical for Dispersion/Variance Parameters)
+
+**What it checks:**
+- "True" parameter values match the data generation process
+- Comparison metrics align with model family
+- Theoretical formulas match empirical estimation methods
+
+**Why it matters:**
+- **Beta-binomial theoretical dispersion ≠ quasi-binomial residual dispersion**
+- Using wrong "true" values invalidates recovery assessment
+- Mixing parameterizations produces misleading bias estimates
+
+**Common issues specific to overdispersion:**
+- ❌ **Using beta-binomial `φ_BB = (φ + n)/(φ + 1)` to validate quasi-binomial `φ_QB`**
+  - These are different dispersion measures!
+  - Beta-binomial: parameter of conjugate distribution
+  - Quasi-binomial: residual variance inflation from Pearson χ²
+- ❌ **Comparing theoretical formulas to empirical estimates without validation**
+- ❌ **Not checking empirical variance against theoretical predictions**
+
+**Best practices for dispersion parameter recovery:**
+- ✅ **Use empirical overdispersion as "true" value:**
+  ```r
+  empirical_var <- var(successes / trials)
+  binomial_var <- p * (1 - p) / n
+  phi_true <- empirical_var / binomial_var
+  ```
+- ✅ **OR use input φ directly if validating concentration parameter**
+- ✅ **Document which dispersion measure you're validating**
+- ✅ **Plot estimated vs true on same scale (not mixing parameterizations)**
 
 ### 2. DGP Consistency (Critical)
 
@@ -245,6 +282,281 @@ se_diff <- sqrt(se[1]^2 + se[2]^2)  # Missing covariance term!
 V <- vcov(model)
 se_diff <- sqrt(V[1,1] + V[2,2] - 2*V[1,2])
 ```
+
+### 5. Dispersion Parameter Mismatch (Quasi-Binomial Specific)
+
+**The mistake:**
+```r
+# WRONG: Mixing beta-binomial and quasi-binomial dispersion measures
+generate_overdispersed_binomial <- function(phi = 20, n_total = 1000, ...) {
+  # ... beta-binomial data generation ...
+
+  # This is beta-binomial theoretical dispersion!
+  theoretical_dispersion <- (phi + n_total) / (phi + 1)  # ≈ 1001/21 = 47.7
+
+  return(list(data = data, phi_true = theoretical_dispersion))
+}
+
+# Later: Compare to quasi-binomial estimate
+model <- gam(cbind(y, n-y) ~ ..., family = quasibinomial())
+phi_est <- summary(model)$dispersion  # Pearson χ² / df ≈ 45
+
+# WRONG comparison: these are different dispersion measures!
+bias <- phi_est - phi_true  # Comparing apples to oranges
+```
+
+**The fix (Option A - Use empirical dispersion):**
+```r
+# CORRECT: Calculate empirical overdispersion from generated data
+generate_overdispersed_binomial <- function(phi = 20, n_total = 1000, true_p = 0.05, ...) {
+  # Generate data
+  alpha <- true_p * phi
+  beta <- (1 - true_p) * phi
+  true_probs <- rbeta(n_obs, alpha, beta)
+  y <- rbinom(n_obs, size = n_total, prob = true_probs)
+
+  # Calculate EMPIRICAL overdispersion (what quasi-binomial will estimate)
+  p_hat <- y / n_total
+  empirical_var <- var(p_hat)
+  binomial_var <- true_p * (1 - true_p) / n_total
+  phi_empirical <- empirical_var / binomial_var
+
+  return(list(data = data, phi_true = phi_empirical))
+}
+```
+
+**The fix (Option B - Use input φ directly):**
+```r
+# CORRECT: Just use the input concentration parameter
+phi_results <- data.frame(
+  phi_true = phi,  # Input concentration parameter
+  phi_est = summary(model)$dispersion  # Quasi-binomial estimate
+)
+```
+
+**Why this matters:**
+- Beta-binomial `(φ + n)/(φ + 1)` inflates with sample size n
+- Quasi-binomial dispersion is **scale-free** (variance inflation factor)
+- Comparing them produces:
+  - Misleading bias estimates
+  - Wrong "true" values on recovery plots
+  - Incorrect slope on identity line comparisons
+
+### 6. Global-Mean Coverage Check (Too Lenient)
+
+**The mistake:**
+```r
+# WRONG: Only checking if overall mean is covered
+for (i in 1:n_sims) {
+  sim_data <- simulate_data()
+  model <- fit_model(sim_data)
+
+  # Average predictions across all observations
+  pred <- predict(model, type = "link", se.fit = TRUE)
+  mean_pred <- mean(pred$fit)
+  mean_se <- mean(pred$se.fit)
+
+  ci_lower <- plogis(mean_pred - 1.96 * mean_se)
+  ci_upper <- plogis(mean_pred + 1.96 * mean_se)
+
+  # Only checks if GLOBAL MEAN is covered!
+  covered[i] <- (ci_lower <= true_p_mean) && (ci_upper >= true_p_mean)
+}
+
+mean(covered)  # Will be ~100%, not ~95%!
+```
+
+**The fix:**
+```r
+# CORRECT: Check coverage for EACH observation
+for (i in 1:n_sims) {
+  sim_data <- simulate_data()
+  model <- fit_model(sim_data)
+
+  # Get predictions for each observation
+  pred <- predict(model, type = "link", se.fit = TRUE)
+
+  # Check coverage for EACH observation individually
+  coverage_vector <- rep(FALSE, n_obs)
+  for (j in 1:n_obs) {
+    ci_lower <- plogis(pred$fit[j] - 1.96 * pred$se.fit[j])
+    ci_upper <- plogis(pred$fit[j] + 1.96 * pred$se.fit[j])
+
+    # Compare to TRUE value for this observation
+    true_prob <- sim_data$true_prob[j]
+    coverage_vector[j] <- (ci_lower <= true_prob) && (ci_upper >= true_prob)
+  }
+
+  # Coverage rate for this simulation
+  coverage_rate[i] <- mean(coverage_vector)
+}
+
+# Should be ~0.95 across simulations
+mean(coverage_rate)
+```
+
+**Why this matters:**
+- Global-mean-only checks are too lenient
+- Gives artificially high coverage (often 100%)
+- Hides CI miscalibration at observation level
+- Temporal variation is ignored (model includes time trends!)
+
+### 7. Confidence Interval vs Prediction Interval Confusion (Critical)
+
+**The mistake:**
+```r
+# WRONG: Using confidence intervals for predictions when testing coverage
+for (i in 1:n_sims) {
+  train_data <- simulate_data()
+  model <- fit_model(train_data)
+
+  # Generate NEW holdout observations
+  holdout_data <- simulate_data(n = 100)
+  pred <- predict(model, newdata = holdout_data, se.fit = TRUE)
+
+  # Confidence interval (for MEAN prediction)
+  ci_lower <- pred$fit - 1.96 * pred$se.fit
+  ci_upper <- pred$fit + 1.96 * pred$se.fit
+
+  # WRONG: Testing if individual observations fall in CI
+  coverage[i] <- mean((ci_lower <= holdout_data$y) & (holdout_data$y <= ci_upper))
+}
+
+# Coverage will be ~30%, not ~95% (too narrow!)
+```
+
+**The fix:**
+```r
+# CORRECT: Use prediction intervals that include residual variance
+for (i in 1:n_sims) {
+  train_data <- simulate_data()
+  model <- fit_model(train_data)
+
+  # Generate NEW holdout observations
+  holdout_data <- simulate_data(n = 100)
+  pred <- predict(model, newdata = holdout_data, se.fit = TRUE)
+
+  # Prediction interval (for NEW observations)
+  # Includes: parameter uncertainty (se.fit) + residual variance (sigma)
+  residual_var <- summary(model)$dispersion  # or sigma(model)^2 for Gaussian
+  pred_se <- sqrt(pred$se.fit^2 + residual_var)
+
+  pi_lower <- pred$fit - 1.96 * pred_se
+  pi_upper <- pred$fit + 1.96 * pred_se
+
+  # CORRECT: Now tests prediction intervals
+  coverage[i] <- mean((pi_lower <= holdout_data$y) & (holdout_data$y <= pi_upper))
+}
+
+# Coverage should be ~95%
+```
+
+**The distinction**:
+
+| Interval Type | Purpose | Formula | Width | Use Case |
+|---------------|---------|---------|-------|----------|
+| **Confidence Interval** | Uncertainty about mean | μ̂ ± t·SE(μ̂) | Narrow | Parameter estimation, mean prediction |
+| **Prediction Interval** | Uncertainty about new observation | ŷ ± t·√(SE(ŷ)² + σ²) | Wide | Forecasting, validation |
+
+**Why this matters**:
+- CIs only capture **parameter uncertainty**
+- PIs capture **parameter uncertainty + residual variance**
+- Testing new observations with CIs gives severe under-coverage
+- This is one of the most common validation errors!
+
+**Special cases**:
+
+**For binomial/quasi-binomial models**:
+```r
+# On link scale (logit)
+pred_link <- predict(model, newdata = holdout, type = "link", se.fit = TRUE)
+
+# Confidence interval (for mean probability)
+ci_link <- pred_link$fit + c(-1.96, 1.96) * pred_link$se.fit
+ci_prob <- plogis(ci_link)
+
+# For prediction interval, need to add residual variance
+# But binomial residual variance is p(1-p), already in the data!
+# So PI construction is more complex - often use simulation instead
+```
+
+**Recommendation for binomial data**:
+1. Use simulation-based prediction intervals
+2. Or test coverage of **smooth/mean function**, not individual observations
+3. Document clearly what you're testing!
+
+### 8. Quasi-Binomial "Parameter Recovery" Mistake (Critical)
+
+**The fundamental mistake:**
+Attempting to do parameter recovery validation for quasi-binomial models.
+
+**Why this is wrong:**
+```r
+# WRONG: Treating quasi-binomial as a generative model
+generate_data <- function() {
+  # Generate from beta-binomial
+  true_probs <- rbeta(n, alpha, beta)
+  y <- rbinom(n, size = N, prob = true_probs)
+
+  return(list(data = y, true_dispersion = ...))  # What is "true"?
+}
+
+model <- gam(y ~ ..., family = quasibinomial())
+phi_est <- summary(model)$dispersion
+
+# WRONG: Compare to what? Quasi-binomial has no generative model!
+bias <- phi_est - true_dispersion
+```
+
+**Why quasi-binomial has no generative model:**
+- Quasi-binomial is a **variance adjustment method**, not a probability distribution
+- It inflates SEs by `√φ` where φ = Pearson χ²/df
+- You cannot sample from a quasi-binomial distribution
+- There is no "true dispersion parameter" to recover
+
+**The correct approach - Robustness testing:**
+```r
+# CORRECT: Test robustness to overdispersion
+# 1. Generate from realistic overdispersed DGP (e.g., beta-binomial)
+generate_betabinomial_data <- function(phi = 20) {
+  true_probs <- rbeta(n, alpha = p*phi, beta = (1-p)*phi)
+  y <- rbinom(n, size = N, prob = true_probs)
+  return(y)
+}
+
+# 2. Fit both binomial and quasi-binomial
+model_binom <- gam(y ~ ..., family = binomial())
+model_quasi <- gam(y ~ ..., family = quasibinomial())
+
+# 3. Test which provides better-calibrated prediction intervals
+# Expected: Quasi-binomial performs better but still under-covers
+# Why: Beta-binomial has extra variance that PIs don't account for
+```
+
+**What to test instead:**
+1. **Model comparison**: Binomial vs Quasi-binomial on overdispersed data
+2. **PI coverage**: Which model has better-calibrated prediction intervals?
+3. **Robustness**: How does quasi-binomial handle different overdispersion levels?
+4. **Trade-offs**: Quasi-binomial = wider PIs + smoother fits (different REML λ)
+
+**Key findings from validation:**
+- Quasi-binomial λ ~64,000× larger than binomial (smoother fits)
+- This is REML behavior (scale = φ), not just SE adjustment
+- Quasi-binomial has better coverage than binomial on overdispersed data
+- But neither achieves 95% coverage (DGP mismatch is expected)
+- **Trade-off**: Wider PIs but smoother (potentially less wiggly) trends
+
+**When to use quasi-binomial:**
+- Real data shows overdispersion (φ > 2)
+- Want more conservative (wider) prediction intervals
+- Prefer smoother trends (less overfitting)
+- Accept trade-off: less wiggly fits, more realistic uncertainty
+
+**Document clearly:**
+- This is NOT parameter recovery
+- This tests robustness to model misspecification
+- Beta-binomial DGP ≠ quasi-binomial model (intentional mismatch)
+- Under-coverage is expected and informative
 
 ## Using the Evaluation Tool
 

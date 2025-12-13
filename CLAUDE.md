@@ -213,6 +213,16 @@ aggregate(EMPSTAT ~ YEAR + MONTH, data = cps_phd, FUN = mean)
 - `DESCRIPTION` - R package metadata
 - `NAMESPACE` - R package namespace (auto-generated)
 
+## Quarto Report Standards
+**CRITICAL: NO caching in Quarto documents**
+
+- **Never use `cache=TRUE`** - Caching is disabled project-wide for reproducibility
+- **Always re-run from scratch** - Every render should execute all code chunks fresh
+- **Reproducibility priority** - Ensures reports always reflect current code state
+- **Session info required** - Include `sessionInfo()` at end of all reports
+- **Seed documentation** - Document random seeds for reproducible simulations
+- **Dependencies explicit** - Load all required packages in setup chunk
+
 ### TDD Examples
 
 - [🔴 test: add failing test for updateCommandCatalog isolation (TDD RED)](../../commit/00e7a22)

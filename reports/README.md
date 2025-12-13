@@ -25,6 +25,12 @@ Factor smooth GAM models allowing education-specific effects (PhD vs other degre
   - Education spectrum analysis: High School, Some College, Bachelor's, Master's, Professional, PhD
   - Seasonal patterns by education level
   - Long-term trends and comparisons
+- **binomial-quasibinomial-comparison** - Compares binomial vs quasi-binomial GAMs on real CPS data
+  - Detects overdispersion in CPS unemployment count data
+  - Compares model families with factor smooths across education levels
+  - Analyzes smoothing parameter differences (quasi-binomial λ ~1000× larger)
+  - Evaluates prediction interval trade-offs (binomial: narrow/wiggly, quasi-binomial: wide/smooth)
+  - Extracts education-specific unemployment patterns from both models
 
 ### `exploratory/`
 
@@ -45,6 +51,20 @@ Data quality assessments and completeness reports.
   - Sample size validation
   - Variable completeness
   - Temporal coverage
+
+### `quasi-binomial-validation/`
+
+**NOT parameter recovery** - Tests model robustness to overdispersion using beta-binomial data.
+
+- **quasi-binomial-validation** - Model comparison under overdispersion
+  - **DGP**: Beta-binomial (realistic for CPS data with unmodeled heterogeneity)
+  - **Test**: Binomial vs Quasi-binomial PI coverage on held-out observations
+  - **Findings**: Quasi-binomial performs better but under-covers (expected)
+  - **Why different fits**: REML smoothing parameters differ by ~64,000× (not just SE adjustment)
+  - **Key insight**: Quasi-binomial is MORE robust to overdispersion, not perfect
+  - Includes investigation scripts showing REML behavior
+
+**Important**: This tests robustness to model misspecification (beta-binomial vs quasi-binomial), NOT parameter recovery (quasi-binomial has no generative model).
 
 ## Modeling Workflow
 
