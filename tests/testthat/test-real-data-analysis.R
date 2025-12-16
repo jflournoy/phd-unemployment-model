@@ -55,10 +55,11 @@ test_that("fit_factor_smooth_to_cps_data loads and fits model to real unemployme
   # Setup test data
   test_file <- setup_test_data()
   on.exit(teardown_test_data(test_file))
+  test_data <- readRDS(test_file)
 
   # Fit model to real data
   result <- fit_factor_smooth_to_cps_data(
-    data_file = test_file,
+    data = test_data,
     education_levels = c("phd", "masters", "bachelors"),
     formula_type = "full",
     save_model = FALSE
@@ -97,10 +98,11 @@ test_that("fit_factor_smooth_to_cps_data loads and fits model to real unemployme
 test_that("fit_factor_smooth_to_cps_data handles date range filtering", {
   test_file <- setup_test_data()
   on.exit(teardown_test_data(test_file))
+  test_data <- readRDS(test_file)
 
   # Should be able to fit model to subset of years
   result <- fit_factor_smooth_to_cps_data(
-    data_file = test_file,
+    data = test_data,
     education_levels = c("phd", "masters"),
     formula_type = "full",
     start_year = 2010,
@@ -121,12 +123,13 @@ test_that("fit_factor_smooth_to_cps_data handles date range filtering", {
 test_that("fit_factor_smooth_to_cps_data saves model with metadata when requested", {
   test_file <- setup_test_data()
   on.exit(teardown_test_data(test_file))
+  test_data <- readRDS(test_file)
 
   # Temporary directory for test
   temp_model_dir <- tempdir()
 
   result <- fit_factor_smooth_to_cps_data(
-    data_file = test_file,
+    data = test_data,
     education_levels = c("phd", "masters", "bachelors"),
     formula_type = "full",
     save_model = TRUE,
@@ -157,10 +160,11 @@ test_that("fit_factor_smooth_to_cps_data saves model with metadata when requeste
 test_that("extract_real_data_components extracts trends and seasonal patterns for all education levels", {
   test_file <- setup_test_data()
   on.exit(teardown_test_data(test_file))
+  test_data <- readRDS(test_file)
 
   # First fit model
   model_result <- fit_factor_smooth_to_cps_data(
-    data_file = test_file,
+    data = test_data,
     education_levels = c("phd", "masters", "bachelors"),
     formula_type = "full",
     save_model = FALSE
@@ -209,10 +213,11 @@ test_that("extract_real_data_components extracts trends and seasonal patterns fo
 test_that("compute_real_data_trend_differences computes pairwise education differences over time", {
   test_file <- setup_test_data()
   on.exit(teardown_test_data(test_file))
+  test_data <- readRDS(test_file)
 
   # Fit model
   model_result <- fit_factor_smooth_to_cps_data(
-    data_file = test_file,
+    data = test_data,
     education_levels = c("phd", "masters", "bachelors"),
     formula_type = "full",
     start_year = 2010,
@@ -268,10 +273,11 @@ test_that("compute_real_data_trend_differences computes pairwise education diffe
 test_that("fit_nested_models_to_cps_data fits and compares nested models on real data", {
   test_file <- setup_test_data()
   on.exit(teardown_test_data(test_file))
+  test_data <- readRDS(test_file)
 
   # Fit nested sequence of models to real data
   models_result <- fit_nested_models_to_cps_data(
-    data_file = test_file,
+    data = test_data,
     education_levels = c("phd", "masters", "bachelors"),
     start_year = 2010,
     end_year = 2020
@@ -313,10 +319,11 @@ test_that("fit_nested_models_to_cps_data fits and compares nested models on real
 test_that("prepare_visualization_data creates plotting-ready data for all education levels", {
   test_file <- setup_test_data()
   on.exit(teardown_test_data(test_file))
+  test_data <- readRDS(test_file)
 
   # Fit model
   model_result <- fit_factor_smooth_to_cps_data(
-    data_file = test_file,
+    data = test_data,
     education_levels = c("phd", "masters", "bachelors"),
     formula_type = "full",
     start_year = 2010,
@@ -368,10 +375,11 @@ test_that("prepare_visualization_data creates plotting-ready data for all educat
 test_that("analyze_cps_unemployment_by_education runs complete analysis pipeline", {
   test_file <- setup_test_data()
   on.exit(teardown_test_data(test_file))
+  test_data <- readRDS(test_file)
 
   # This high-level function should orchestrate the entire analysis
   analysis <- analyze_cps_unemployment_by_education(
-    data_file = test_file,
+    data = test_data,
     education_levels = c("phd", "masters", "bachelors"),
     start_year = 2015,
     end_year = 2020,

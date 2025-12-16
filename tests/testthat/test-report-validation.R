@@ -5,10 +5,11 @@ test_that("predicted unemployment rates are in valid range", {
   # Load real data
   data_file <- here::here("data", "education-spectrum-unemployment.rds")
   skip_if_not(file.exists(data_file), "Data file not found")
+  data <- readRDS(data_file)
 
   # Run analysis
   analysis <- analyze_cps_unemployment_by_education(
-    data_file = data_file,
+    data = data,
     education_levels = c("phd", "masters", "bachelors"),
     start_year = 2020,
     end_year = 2024,
@@ -55,13 +56,14 @@ test_that("PhD unemployment is lower than less educated groups", {
 
   data_file <- here::here("data", "education-spectrum-unemployment.rds")
   skip_if_not(file.exists(data_file), "Data file not found")
+  data <- readRDS(data_file)
 
   # Full education spectrum
   education_levels <- c("less_than_hs", "high_school", "some_college",
                         "bachelors", "masters", "professional", "phd")
 
   analysis <- analyze_cps_unemployment_by_education(
-    data_file = data_file,
+    data = data,
     education_levels = education_levels,
     start_year = 2020,
     end_year = 2024,
@@ -120,9 +122,10 @@ test_that("trend predictions differ from centered smooth effects", {
 
   data_file <- here::here("data", "education-spectrum-unemployment.rds")
   skip_if_not(file.exists(data_file), "Data file not found")
+  data <- readRDS(data_file)
 
   analysis <- analyze_cps_unemployment_by_education(
-    data_file = data_file,
+    data = data,
     education_levels = c("phd", "masters"),
     start_year = 2020,
     end_year = 2024,
@@ -181,9 +184,10 @@ test_that("analysis object has expected structure", {
 
   data_file <- here::here("data", "education-spectrum-unemployment.rds")
   skip_if_not(file.exists(data_file), "Data file not found")
+  data <- readRDS(data_file)
 
   analysis <- analyze_cps_unemployment_by_education(
-    data_file = data_file,
+    data = data,
     education_levels = c("phd", "masters", "bachelors"),
     start_year = 2020,
     end_year = 2024,
@@ -232,9 +236,10 @@ test_that("visualization data trends are centered effects, not predictions", {
 
   data_file <- here::here("data", "education-spectrum-unemployment.rds")
   skip_if_not(file.exists(data_file), "Data file not found")
+  data <- readRDS(data_file)
 
   analysis <- analyze_cps_unemployment_by_education(
-    data_file = data_file,
+    data = data,
     education_levels = c("phd", "masters"),
     start_year = 2020,
     end_year = 2024,
@@ -265,9 +270,10 @@ test_that("fixed month predictions remove seasonality", {
 
   data_file <- here::here("data", "education-spectrum-unemployment.rds")
   skip_if_not(file.exists(data_file), "Data file not found")
+  data <- readRDS(data_file)
 
   analysis <- analyze_cps_unemployment_by_education(
-    data_file = data_file,
+    data = data,
     education_levels = c("phd", "masters"),
     start_year = 2020,
     end_year = 2024,
@@ -322,9 +328,10 @@ test_that("confidence intervals are reasonable width", {
 
   data_file <- here::here("data", "education-spectrum-unemployment.rds")
   skip_if_not(file.exists(data_file), "Data file not found")
+  data <- readRDS(data_file)
 
   analysis <- analyze_cps_unemployment_by_education(
-    data_file = data_file,
+    data = data,
     education_levels = c("phd", "masters", "bachelors"),
     start_year = 2020,
     end_year = 2024,
@@ -369,9 +376,10 @@ test_that("difference calculations use correct formula", {
 
   data_file <- here::here("data", "education-spectrum-unemployment.rds")
   skip_if_not(file.exists(data_file), "Data file not found")
+  data <- readRDS(data_file)
 
   analysis <- analyze_cps_unemployment_by_education(
-    data_file = data_file,
+    data = data,
     education_levels = c("phd", "masters"),
     start_year = 2020,
     end_year = 2024,
