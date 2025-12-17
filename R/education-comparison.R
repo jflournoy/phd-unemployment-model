@@ -212,14 +212,13 @@ plot_education_comparison <- function(comparison_data, palette = NULL) {
   # ===== PLOT 1: Time Series =====
   ts_data_list <- lapply(educ_names, function(name) {
     data <- comparison_data[[name]]$monthly_data
-    data.frame(
+    data.table::data.table(
       date = data$date,
       unemployment_rate = data$unemployment_rate,
-      education = comparison_data[[name]]$education_label,
-      stringsAsFactors = FALSE
+      education = comparison_data[[name]]$education_label
     )
   })
-  ts_data <- do.call(rbind, ts_data_list)
+  ts_data <- rbindlist(ts_data_list)
 
   plot_ts <- ggplot2::ggplot(ts_data, ggplot2::aes(x = date, y = unemployment_rate,
                                                    color = education)) +
@@ -241,16 +240,15 @@ plot_education_comparison <- function(comparison_data, palette = NULL) {
   # ===== PLOT 2: Seasonal Patterns =====
   seasonal_data_list <- lapply(educ_names, function(name) {
     seasonal <- comparison_data[[name]]$seasonal
-    data.frame(
+    data.table::data.table(
       month = seasonal$month,
       month_name = factor(month.abb[seasonal$month], levels = month.abb),
       seasonal_effect = seasonal$seasonal_effect,
       se = seasonal$se,
-      education = comparison_data[[name]]$education_label,
-      stringsAsFactors = FALSE
+      education = comparison_data[[name]]$education_label
     )
   })
-  seasonal_data <- do.call(rbind, seasonal_data_list)
+  seasonal_data <- data.table::rbindlist(seasonal_data_list)
 
   plot_seasonal <- ggplot2::ggplot(seasonal_data,
                                    ggplot2::aes(x = month_name, y = seasonal_effect,
@@ -282,16 +280,15 @@ plot_education_comparison <- function(comparison_data, palette = NULL) {
     monthly <- comparison_data[[name]]$monthly_data
     dates <- monthly$date[match(trend$time_index, monthly$time_index)]
 
-    data.frame(
+    data.table::data.table(
       date = dates,
       time_index = trend$time_index,
       trend_effect = trend$trend_effect,
       se = trend$se,
-      education = comparison_data[[name]]$education_label,
-      stringsAsFactors = FALSE
+      education = comparison_data[[name]]$education_label
     )
   })
-  trend_data <- do.call(rbind, trend_data_list)
+  trend_data <- data.table::rbindlist(trend_data_list)
 
   plot_trend <- ggplot2::ggplot(trend_data,
                                 ggplot2::aes(x = date, y = trend_effect,
