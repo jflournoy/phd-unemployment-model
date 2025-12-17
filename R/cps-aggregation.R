@@ -425,7 +425,24 @@ aggregate_monthly_by_education <- function(data,
     stop("data.table required")
   }
 
-  dt <- data.table::as.data.table(data)
+  # First convert haven_labelled columns to numeric to strip attributes
+  # This is necessary before converting to data.table
+  data_clean <- data
+  if (inherits(data_clean$EDUC, "haven_labelled")) {
+    data_clean$EDUC <- as.numeric(data_clean$EDUC)
+  }
+  if (inherits(data_clean$EMPSTAT, "haven_labelled")) {
+    data_clean$EMPSTAT <- as.numeric(data_clean$EMPSTAT)
+  }
+  if (inherits(data_clean$YEAR, "haven_labelled")) {
+    data_clean$YEAR <- as.numeric(data_clean$YEAR)
+  }
+  if (inherits(data_clean$MONTH, "haven_labelled")) {
+    data_clean$MONTH <- as.numeric(data_clean$MONTH)
+  }
+
+  # Convert to data.table
+  dt <- data.table::as.data.table(data_clean)
 
   # Map education codes using constants
   educ_map <- get_education_code_map()

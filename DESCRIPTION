@@ -25,6 +25,7 @@ Imports:
     lubridate (>= 1.9.0),
     marginaleffects (>= 0.18.0),
     mgcv (>= 1.8.0),
+    quarto (>= 1.2.0),
     readr (>= 2.1.0),
     targets (>= 1.4.0),
     tarchetypes (>= 0.7.0),
@@ -36,7 +37,6 @@ Suggests:
     patchwork,
     reshape2,
     rmarkdown,
-    quarto,
     scales
 Config/testthat/edition: 3
 Date: 2025-10-30
