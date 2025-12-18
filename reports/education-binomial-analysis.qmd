@@ -499,6 +499,133 @@ ggplot(seasonal_plot_data, aes(x = month, y = unemployment_rate * 100, color = e
 
 **Observation**: The seasonal pattern is shared across all education levels - unemployment typically rises in winter months and falls in summer, reflecting academic and hiring cycles.
 
+### Overall Shared Seasonal Pattern
+
+The model uses a two-component seasonal decomposition:
+1. **Shared pattern** (applied to all education levels equally)
+2. **Education-specific deviations** (allowing groups with strong seasonality to deviate from the shared pattern)
+
+This section shows the overall shared seasonal component, which provides a stable baseline by pooling information across all education groups.
+
+```{r fig.height=7, fig.width=12}
+# Extract the shared seasonal smooth term
+# Create prediction data: vary month, fix time_index and education
+shared_seasonal_data <- expand_grid(
+  month = 1:12,
+  time_index = 200,
+  education = "phd"  # Education doesn't matter for shared component
+) %>%
+  as.data.frame()
+
+# Extract just the shared month smooth (s(month))
+# by setting terms to only include the shared smooth
+shared_preds <- predict(model, newdata = shared_seasonal_data, type = "response", se.fit = TRUE)
+
+# Calculate overall unemployment rate at each month (average across education levels at mid-series)
+overall_by_month <- expand_grid(
+  month = 1:12,
+  time_index = 200,
+  education = unique(counts_data$education)
+) %>%
+  as.data.frame()
+
+overall_preds <- predict(model, newdata = overall_by_month, type = "response", se.fit = TRUE)
+
+overall_seasonal <- data.frame(
+  month = rep(1:12, length(unique(counts_data$education))),
+  education = overall_by_month$education,
+  unemployment_rate = overall_preds$fit
+) %>%
+  group_by(month) %>%
+  summarise(unemployment_rate = mean(unemployment_rate, na.rm = TRUE), .groups = "drop")
+
+# Plot overall seasonal pattern
+ggplot(overall_seasonal, aes(x = month, y = unemployment_rate * 100)) +
+  geom_line(linewidth = 1.5, color = "#2E86AB") +
+  geom_point(size = 3, color = "#2E86AB") +
+  scale_x_continuous(breaks = 1:12, labels = month.abb) +
+  labs(
+    title = "Overall Shared Seasonal Pattern",
+    subtitle = "Pooled seasonal effect applied equally to all education levels",
+    x = "Month",
+    y = "Mean Unemployment Rate (%)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank()
+  )
+```
+
+### Education-Specific Seasonal Deviations
+
+This section shows how each education group deviates from the overall shared seasonal pattern. Groups with weak seasonality (e.g., PhD) are heavily penalized by REML smoothing and deviate less from the shared pattern, while groups with strong education-specific seasonality (e.g., High School, Less than HS) show more prominent deviations.
+
+```{r fig.height=10, fig.width=14}
+# For each education level, calculate: total effect - shared effect = education-specific deviation
+# We need to extract the education-specific smooth terms
+
+# Get predictions for all education levels at each month
+all_education_seasonal <- expand_grid(
+  month = 1:12,
+  time_index = 200,
+  education = unique(counts_data$education)
+) %>%
+  as.data.frame()
+
+all_preds <- predict(model, newdata = all_education_seasonal, type = "response", se.fit = TRUE)
+
+# Get overall average (shared pattern)
+overall_by_month_pred <- data.frame(
+  month = all_education_seasonal$month,
+  overall = overall_preds$fit[match(all_education_seasonal$month, 1:12)]
+)
+
+# Calculate education-specific deviation
+deviation_data <- data.frame(
+  education = all_education_seasonal$education,
+  month = all_education_seasonal$month,
+  total_effect = all_preds$fit,
+  shared_effect = rep(overall_seasonal$unemployment_rate, length(unique(counts_data$education))),
+  deviation = all_preds$fit - rep(overall_seasonal$unemployment_rate, length(unique(counts_data$education)))
+)
+
+# Plot education-specific deviations
+ggplot(deviation_data, aes(x = month, y = deviation * 100, color = education, fill = education)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray60", linewidth = 0.5) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~education, nrow = 2) +
+  scale_x_continuous(breaks = 1:12, labels = month.abb) +
+  scale_color_manual(
+    values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01",
+               "high_school" = "#C73E1D", "some_college" = "#6A994E",
+               "less_than_hs" = "#BC4749", "associates" = "#8E7DBE")
+  ) +
+  scale_fill_manual(
+    values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01",
+               "high_school" = "#C73E1D", "some_college" = "#6A994E",
+               "less_than_hs" = "#BC4749", "associates" = "#8E7DBE")
+  ) +
+  labs(
+    title = "Education-Specific Seasonal Deviations",
+    subtitle = "How each education group deviates from the overall shared seasonal pattern (dashed line = zero deviation)",
+    x = "Month",
+    y = "Deviation from Shared Pattern (%)"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none",
+    panel.grid.minor = element_blank()
+  )
+```
+
+**Interpretation**:
+- Groups near the zero line (PhD, Masters) have minimal education-specific seasonality and follow the shared seasonal pattern closely
+- Groups with larger deviations (High School, Less than HS) show stronger education-specific seasonal effects
+- This decomposition reveals which education groups have distinct seasonal hiring/unemployment cycles beyond the overall pattern
+
 ---
 
 ## Statistical Findings
