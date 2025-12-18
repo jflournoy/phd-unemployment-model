@@ -236,7 +236,15 @@ aggregate_monthly_unemployment <- function(data, weight_var = "WTFINL") {
     stop("data.table required. Install with: install.packages('data.table')")
   }
 
-  dt <- data.table::as.data.table(data)
+  # Remove haven_labelled attributes to avoid targets package type checking issues
+  data_clean <- data
+  for (col in c("YEAR", "MONTH", "EMPSTAT")) {
+    if (col %in% names(data_clean) && inherits(data_clean[[col]], "haven_labelled")) {
+      data_clean[[col]] <- as.vector(data_clean[[col]])
+    }
+  }
+
+  dt <- data.table::as.data.table(data_clean)
 
   # Use constants to define employment status
   employed_codes <- get_employed_codes()
@@ -343,7 +351,15 @@ aggregate_by_education <- function(data, weight_var = "WTFINL") {
     stop("data.table required")
   }
 
-  dt <- data.table::as.data.table(data)
+  # Remove haven_labelled attributes to avoid targets package type checking issues
+  data_clean <- data
+  for (col in c("EDUC", "EMPSTAT")) {
+    if (col %in% names(data_clean) && inherits(data_clean[[col]], "haven_labelled")) {
+      data_clean[[col]] <- as.vector(data_clean[[col]])
+    }
+  }
+
+  dt <- data.table::as.data.table(data_clean)
 
   # Map education codes to labels using constants
   educ_map <- get_education_code_map()
@@ -425,20 +441,20 @@ aggregate_monthly_by_education <- function(data,
     stop("data.table required")
   }
 
-  # First convert haven_labelled columns to numeric to strip attributes
-  # This is necessary before converting to data.table
+  # First convert haven_labelled columns to strip attributes
+  # Use as.vector() to work around targets package's strict type checking
   data_clean <- data
   if (inherits(data_clean$EDUC, "haven_labelled")) {
-    data_clean$EDUC <- as.numeric(data_clean$EDUC)
+    data_clean$EDUC <- as.vector(data_clean$EDUC)
   }
   if (inherits(data_clean$EMPSTAT, "haven_labelled")) {
-    data_clean$EMPSTAT <- as.numeric(data_clean$EMPSTAT)
+    data_clean$EMPSTAT <- as.vector(data_clean$EMPSTAT)
   }
   if (inherits(data_clean$YEAR, "haven_labelled")) {
-    data_clean$YEAR <- as.numeric(data_clean$YEAR)
+    data_clean$YEAR <- as.vector(data_clean$YEAR)
   }
   if (inherits(data_clean$MONTH, "haven_labelled")) {
-    data_clean$MONTH <- as.numeric(data_clean$MONTH)
+    data_clean$MONTH <- as.vector(data_clean$MONTH)
   }
 
   # Convert to data.table
