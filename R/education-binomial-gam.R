@@ -21,12 +21,12 @@
 #'
 #' @details
 #' The model structure is:
-#' cbind(n_unemployed, n_employed) ~ education + s(time_index, by=education) + s(month, bs="cc", by=education)
+#' cbind(n_unemployed, n_employed) ~ education + s(time_index, k=time_k, by=education) + s(month, k=12, bs="cc", by=education)
 #'
 #' This allows factor smooth interactions:
 #' - Education main effects (intercept differences)
-#' - Education-specific trends over time (time_index smooth varies by education)
-#' - Education-specific seasonal patterns (month smooth with cyclic cubic spline varies by education)
+#' - Education-specific trends over time (time_index smooth varies by education, flexible basis dimension)
+#' - Education-specific seasonal patterns (month smooth with cyclic cubic spline varies by education, k=12 for 12-month cycle)
 #'
 #' The quasi-binomial family properly accounts for overdispersion common in
 #' unemployment count data. Use dispersion parameter to assess goodness of fit:
@@ -75,11 +75,11 @@ fit_education_binomial_gam <- function(data,
   # Fit quasi-binomial GAM with education-specific trends and seasonal components
   # Factor smooth interactions: both time and seasonal patterns vary by education
   # This allows different education groups to respond differently to both:
-  # - Economic cycles (time_index smooth)
-  # - Seasonal hiring/job search patterns (month smooth)
+  # - Economic cycles (time_index smooth, flexible with k=time_k basis functions)
+  # - Seasonal hiring/job search patterns (month smooth, k=12 for 12-month cycle)
   formula <- cbind(n_unemployed, n_employed) ~ education +
     s(time_index, k = time_k, by = education) +
-    s(month, bs = "cc", by = education)
+    s(month, k = 12, bs = "cc", by = education)
 
   # Fit model with specified family
   family_obj <- if (use_quasi) quasibinomial() else binomial()
