@@ -183,23 +183,32 @@ cat("This matches the dispersion parameter √",
 ### Trend Comparison: Quasi-Binomial vs Binomial Across All Education Levels
 
 ```{r fig.height=10, fig.width=14}
-# Create prediction data for trend comparison (seasonality-free, fixed month = 6)
+# Create prediction data for TRULY seasonality-free trend comparison
+# Exclude seasonal smooth terms to isolate trends from seasonality
 unique_times <- unique(model_result_quasi$data[, c("year", "time_index")])
 unique_times <- unique_times[order(unique_times$time_index), ]
 
 trend_comparison_data <- expand.grid(
   time_index = unique_times$time_index,
-  month = 6,  # Fixed month to remove seasonality
+  month = 6,  # Still required for formula, but will be excluded
   education = unique(model_result_quasi$data$education)
 )
 
-# Get predictions from both models
+# Identify seasonal smooth terms to exclude
+smooth_labels <- sapply(model_result_quasi$model$smooth, function(x) x$label)
+seasonal_smooths <- grep("s\\(month", smooth_labels, value = TRUE)
+
+# Get predictions from both models, excluding seasonal components
 preds_quasi_trend <- predict(model_result_quasi$model,
                              newdata = trend_comparison_data,
-                             type = "response", se.fit = TRUE)
+                             type = "response",
+                             se.fit = TRUE,
+                             exclude = seasonal_smooths)
 preds_binomial_trend <- predict(model_result_binomial$model,
                                newdata = trend_comparison_data,
-                               type = "response", se.fit = TRUE)
+                               type = "response",
+                               se.fit = TRUE,
+                               exclude = seasonal_smooths)
 
 # Create comparison data frame
 trend_comparison_plot <- data.frame(
@@ -295,17 +304,30 @@ knitr::kable(current_est_display, caption = "Current Unemployment Estimates (Dec
 ### Unemployment Trend by Education Level
 
 ```{r fig.height=10, fig.width=14}
-# Create seasonality-free trend predictions (fixed month = 6)
+# Create TRULY seasonality-free trend predictions by excluding seasonal smooth terms
+# The issue: fixing month=6 doesn't remove seasonality, it just evaluates it at a fixed point.
+# With k=150, the time smooth can pick up residual seasonal variation.
+# Solution: completely exclude seasonal smooths from predictions.
+
 unique_times <- unique(model_result_quasi$data[, c("year", "time_index")])
 unique_times <- unique_times[order(unique_times$time_index), ]
 
 trend_pred_data <- expand.grid(
   time_index = unique_times$time_index,
-  month = 6,  # Fixed month to remove seasonality
+  month = 6,  # Still required for formula, but will be excluded
   education = unique(model_result_quasi$data$education)
 )
 
-trend_preds <- predict(model, newdata = trend_pred_data, type = "response", se.fit = TRUE)
+# Identify seasonal smooth terms to exclude
+smooth_labels <- sapply(model$smooth, function(x) x$label)
+seasonal_smooths <- grep("s\\(month", smooth_labels, value = TRUE)
+
+# Predict excluding both seasonal components: shared s(month) and by=education s(month)
+trend_preds <- predict(model,
+                      newdata = trend_pred_data,
+                      type = "response",
+                      se.fit = TRUE,
+                      exclude = seasonal_smooths)
 
 predictions_by_time <- data.frame(
   education = trend_pred_data$education,
@@ -519,25 +541,33 @@ shared_seasonal_data <- expand.grid(
 
 # Extract the contribution of just s(month) smooth (shared component only)
 # by using terms = "s(month)" to isolate this smooth's partial effect
-shared_smooth_effect <- predict(model,
-                                newdata = shared_seasonal_data,
-                                type = "link",  # Get linear predictor contribution
-                                terms = "s(month)",  # Only the shared month smooth
-                                se.fit = FALSE)
+shared_smooth_preds <- predict(model,
+                               newdata = shared_seasonal_data,
+                               type = "link",  # Get linear predictor contribution
+                               terms = "s(month)",  # Only the shared month smooth
+                               se.fit = TRUE)
 
-# Convert from link scale to percentage point changes
-# The shared smooth contributes as additive effect on log-odds
-# We'll show the relative effect pattern
+# Extract point estimates and standard errors
+shared_smooth_effect <- shared_smooth_preds$fit
+shared_smooth_se <- shared_smooth_preds$se.fit
+
+# Create plot data with uncertainty
 shared_seasonal_plot <- data.frame(
   month = 1:12,
-  smooth_effect = shared_smooth_effect
+  smooth_effect = shared_smooth_effect,
+  se = shared_smooth_se
 )
 
 # Center the effect for interpretability
 shared_seasonal_plot$centered_effect <- shared_seasonal_plot$smooth_effect - mean(shared_seasonal_plot$smooth_effect)
+shared_seasonal_plot$se_centered <- shared_seasonal_plot$se  # SE doesn't change with centering
+shared_seasonal_plot$ci_lower <- shared_seasonal_plot$centered_effect - 1.96 * shared_seasonal_plot$se_centered
+shared_seasonal_plot$ci_upper <- shared_seasonal_plot$centered_effect + 1.96 * shared_seasonal_plot$se_centered
 
-# Plot the shared seasonal smooth pattern
+# Plot the shared seasonal smooth pattern with uncertainty
 ggplot(shared_seasonal_plot, aes(x = month, y = centered_effect)) +
+  geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper),
+              alpha = 0.2, fill = "#2E86AB", color = NA) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray60", linewidth = 0.8) +
   geom_line(linewidth = 1.5, color = "#2E86AB") +
   geom_point(size = 3, color = "#2E86AB") +
@@ -570,8 +600,10 @@ all_education_seasonal <- expand_grid(
 ) %>%
   as.data.frame()
 
-# Get total prediction (all terms) for all education levels at each month
-total_pred <- predict(model, newdata = all_education_seasonal, type = "link", se.fit = FALSE)
+# Get total prediction (all terms) for all education levels at each month WITH SEs
+total_preds <- predict(model, newdata = all_education_seasonal, type = "link", se.fit = TRUE)
+total_pred <- total_preds$fit
+total_se <- total_preds$se.fit
 
 # Get prediction with only shared smooth s(month) - same for all education levels
 # Create dummy data just for shared smooth extraction (education doesn't matter)
@@ -581,23 +613,39 @@ shared_data_dummy <- expand_grid(
   education = "phd"
 ) %>% as.data.frame()
 
-shared_pred_dummy <- predict(model, newdata = shared_data_dummy, type = "link",
-                             terms = "s(month)", se.fit = FALSE)
+shared_preds_dummy <- predict(model, newdata = shared_data_dummy, type = "link",
+                              terms = "s(month)", se.fit = TRUE)
 
-# Replicate shared predictions to match all education levels
-shared_pred <- rep(shared_pred_dummy, times = length(unique(counts_data$education)))
+# Extract shared predictions and SEs
+shared_pred_dummy <- shared_preds_dummy$fit
+shared_se_dummy <- shared_preds_dummy$se.fit
+
+# Replicate shared predictions and SEs to match all education levels
+n_ed <- length(unique(counts_data$education))
+shared_pred <- rep(shared_pred_dummy, times = n_ed)
+shared_se <- rep(shared_se_dummy, times = n_ed)
 
 # Calculate education-specific deviation (total - shared)
+# SEs propagate: SE(A-B) = sqrt(SE(A)^2 + SE(B)^2) assuming independence
+education_deviation <- total_pred - shared_pred
+deviation_se <- sqrt(total_se^2 + shared_se^2)
+
+# Build data frame with deviations and uncertainties
 deviation_data <- data.frame(
   education = all_education_seasonal$education,
   month = all_education_seasonal$month,
   shared_effect = shared_pred,
   total_effect = total_pred,
-  education_deviation = total_pred - shared_pred
+  education_deviation = education_deviation,
+  deviation_se = deviation_se,
+  ci_lower = education_deviation - 1.96 * deviation_se,
+  ci_upper = education_deviation + 1.96 * deviation_se
 )
 
-# Plot education-specific deviations
+# Plot education-specific deviations with confidence ribbons
 ggplot(deviation_data, aes(x = month, y = education_deviation, color = education, fill = education)) +
+  geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper),
+              alpha = 0.15, color = NA) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray60", linewidth = 0.5) +
   geom_line(linewidth = 1) +
   geom_point(size = 2) +
