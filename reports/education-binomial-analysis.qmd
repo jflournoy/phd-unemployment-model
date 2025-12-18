@@ -159,28 +159,45 @@ knitr::kable(current_est_display, caption = "Current Unemployment Estimates (Dec
 
 ### Unemployment Trend by Education Level
 
-```{r fig.height=8, fig.width=12}
-# Extract predictions across all time points
+```{r fig.height=10, fig.width=14}
+# Extract predictions with CIs
 predictions_by_time <- model_result$predictions %>%
   mutate(date = as.Date(paste0(year, "-", month, "-01"))) %>%
-  select(education, date, fitted_prob) %>%
+  select(education, date, fitted_prob, ci_lower, ci_upper) %>%
   rename(unemployment_rate = fitted_prob)
 
-# Plot
-ggplot(predictions_by_time, aes(x = date, y = unemployment_rate * 100, color = education)) +
+# Extract raw data for points
+raw_data <- counts_data %>%
+  mutate(date = as.Date(paste0(year, "-", month, "-01"))) %>%
+  select(education, date, unemployment_rate)
+
+# Plot with raw data, fitted line, and CIs
+ggplot(predictions_by_time, aes(x = date, y = unemployment_rate * 100, color = education, fill = education)) +
+  geom_ribbon(aes(ymin = ci_lower * 100, ymax = ci_upper * 100), alpha = 0.2, color = NA) +
+  geom_point(data = raw_data, aes(y = unemployment_rate * 100), alpha = 0.3, size = 1.5) +
   geom_line(linewidth = 1) +
-  facet_wrap(~education, scales = "free_y", ncol = 2) +
+  scale_color_manual(
+    values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01",
+               "high_school" = "#C73E1D", "some_college" = "#6A994E",
+               "less_than_hs" = "#BC4749", "associates" = "#8E7DBE")
+  ) +
+  scale_fill_manual(
+    values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01",
+               "high_school" = "#C73E1D", "some_college" = "#6A994E",
+               "less_than_hs" = "#BC4749", "associates" = "#8E7DBE")
+  ) +
   labs(
     title = "Unemployment Rates by Education Level (2000-2025)",
-    subtitle = "Quasi-binomial GAM fitted trends",
+    subtitle = "Raw data (points), fitted trends (lines), and 95% CIs (shaded regions)",
     x = "Year",
     y = "Unemployment Rate (%)",
-    color = "Education Level"
+    color = "Education Level",
+    fill = "Education Level"
   ) +
-  theme_minimal(base_size = 11) +
+  theme_minimal(base_size = 12) +
   theme(
     legend.position = "bottom",
-    strip.text = element_text(face = "bold")
+    panel.grid.minor = element_blank()
   )
 ```
 
@@ -270,7 +287,7 @@ ggplot(compare_data, aes(x = date, y = unemployment_rate * 100, color = educatio
 
 ### Monthly Seasonal Effects
 
-```{r fig.height=8, fig.width=12}
+```{r fig.height=9, fig.width=14}
 # Extract seasonal component by fitting predictions at varying months
 seasonal_data <- expand_grid(
   education = unique(counts_data$education),
@@ -285,25 +302,44 @@ seasonal_plot_data <- data.frame(
   education = seasonal_data$education,
   month = seasonal_data$month,
   unemployment_rate = seasonal_preds$fit,
-  se = seasonal_preds$se.fit
+  se = seasonal_preds$se.fit,
+  ci_lower = pmax(0, seasonal_preds$fit - 1.96 * seasonal_preds$se.fit),
+  ci_upper = pmin(1, seasonal_preds$fit + 1.96 * seasonal_preds$se.fit)
 )
 
-ggplot(seasonal_plot_data, aes(x = month, y = unemployment_rate * 100, color = education)) +
+# Extract raw seasonal data (average by month across all years)
+raw_seasonal <- counts_data %>%
+  group_by(education, month) %>%
+  summarise(unemployment_rate = mean(unemployment_rate, na.rm = TRUE), .groups = "drop")
+
+ggplot(seasonal_plot_data, aes(x = month, y = unemployment_rate * 100, color = education, fill = education)) +
+  geom_ribbon(aes(ymin = ci_lower * 100, ymax = ci_upper * 100), alpha = 0.2, color = NA) +
+  geom_point(data = raw_seasonal, aes(y = unemployment_rate * 100), alpha = 0.4, size = 2) +
   geom_line(linewidth = 1) +
-  geom_point(size = 2) +
   scale_x_continuous(breaks = 1:12, labels = month.abb) +
-  facet_wrap(~education, ncol = 2) +
+  scale_color_manual(
+    values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01",
+               "high_school" = "#C73E1D", "some_college" = "#6A994E",
+               "less_than_hs" = "#BC4749", "associates" = "#8E7DBE")
+  ) +
+  scale_fill_manual(
+    values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01",
+               "high_school" = "#C73E1D", "some_college" = "#6A994E",
+               "less_than_hs" = "#BC4749", "associates" = "#8E7DBE")
+  ) +
   labs(
     title = "Seasonal Unemployment Patterns by Education Level",
-    subtitle = "Shared seasonal component with education-specific intercepts",
+    subtitle = "Raw monthly averages (points), fitted seasonal component (lines), and 95% CIs (shaded regions)",
     x = "Month",
     y = "Unemployment Rate (%)",
-    color = "Education"
+    color = "Education Level",
+    fill = "Education Level"
   ) +
-  theme_minimal(base_size = 11) +
+  theme_minimal(base_size = 12) +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "bottom"
+    legend.position = "bottom",
+    panel.grid.minor = element_blank()
   )
 ```
 

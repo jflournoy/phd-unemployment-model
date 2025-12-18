@@ -96,7 +96,9 @@ fit_education_binomial_gam <- function(data,
     gcv_score = model$gcv.ubre
   )
 
-  # Generate predictions on original data
+  # Generate predictions on original data with standard errors
+  preds_se <- predict(model, type = "response", se.fit = TRUE)
+
   predictions <- data.frame(
     education = data$education,
     year = data$year,
@@ -104,8 +106,11 @@ fit_education_binomial_gam <- function(data,
     month = data$month,
     n_unemployed = data$n_unemployed,
     n_employed = data$n_employed,
-    fitted_prob = as.numeric(model$fitted.values),
-    fitted_unemployed = as.numeric(model$fitted.values * (data$n_unemployed + data$n_employed)),
+    fitted_prob = as.numeric(preds_se$fit),
+    se = as.numeric(preds_se$se.fit),
+    ci_lower = pmax(0, as.numeric(preds_se$fit - 1.96 * preds_se$se.fit)),
+    ci_upper = pmin(1, as.numeric(preds_se$fit + 1.96 * preds_se$se.fit)),
+    fitted_unemployed = as.numeric(preds_se$fit * (data$n_unemployed + data$n_employed)),
     residuals = residuals(model, type = "deviance")
   )
 
