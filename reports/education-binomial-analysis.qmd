@@ -196,7 +196,8 @@ ggplot(trend_comparison_plot, aes(x = date, y = unemployment_rate * 100,
     name = "Education Level"
   ) +
   scale_linetype_manual(
-    values = c("quasi-binomial" = "solid", "binomial" = "dashed"),
+    values = c("quasi_binomial" = "solid", "binomial" = "dashed"),
+    labels = c("quasi_binomial" = "Quasi-Binomial", "binomial" = "Binomial"),
     name = "Model Type"
   ) +
   labs(
