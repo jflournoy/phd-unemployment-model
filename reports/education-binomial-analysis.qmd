@@ -508,47 +508,45 @@ The model uses a two-component seasonal decomposition:
 This section shows the overall shared seasonal component, which provides a stable baseline by pooling information across all education groups.
 
 ```{r fig.height=7, fig.width=12}
-# Extract the shared seasonal smooth term
-# Create prediction data: vary month, fix time_index and education
-shared_seasonal_data <- expand_grid(
+# Extract just the shared seasonal smooth term s(month)
+# Using terms parameter to isolate only the month smooth contribution
+shared_seasonal_data <- expand.grid(
   month = 1:12,
   time_index = 200,
-  education = "phd"  # Education doesn't matter for shared component
+  education = "phd"  # Education doesn't affect the shared smooth
 ) %>%
   as.data.frame()
 
-# Extract just the shared month smooth (s(month))
-# by setting terms to only include the shared smooth
-shared_preds <- predict(model, newdata = shared_seasonal_data, type = "response", se.fit = TRUE)
+# Extract the contribution of just s(month) smooth (shared component only)
+# by using terms = "s(month)" to isolate this smooth's partial effect
+shared_smooth_effect <- predict(model,
+                                newdata = shared_seasonal_data,
+                                type = "link",  # Get linear predictor contribution
+                                terms = "s(month)",  # Only the shared month smooth
+                                se.fit = FALSE)
 
-# Calculate overall unemployment rate at each month (average across education levels at mid-series)
-overall_by_month <- expand_grid(
+# Convert from link scale to percentage point changes
+# The shared smooth contributes as additive effect on log-odds
+# We'll show the relative effect pattern
+shared_seasonal_plot <- data.frame(
   month = 1:12,
-  time_index = 200,
-  education = unique(counts_data$education)
-) %>%
-  as.data.frame()
+  smooth_effect = shared_smooth_effect
+)
 
-overall_preds <- predict(model, newdata = overall_by_month, type = "response", se.fit = TRUE)
+# Center the effect for interpretability
+shared_seasonal_plot$centered_effect <- shared_seasonal_plot$smooth_effect - mean(shared_seasonal_plot$smooth_effect)
 
-overall_seasonal <- data.frame(
-  month = rep(1:12, length(unique(counts_data$education))),
-  education = overall_by_month$education,
-  unemployment_rate = overall_preds$fit
-) %>%
-  group_by(month) %>%
-  summarise(unemployment_rate = mean(unemployment_rate, na.rm = TRUE), .groups = "drop")
-
-# Plot overall seasonal pattern
-ggplot(overall_seasonal, aes(x = month, y = unemployment_rate * 100)) +
+# Plot the shared seasonal smooth pattern
+ggplot(shared_seasonal_plot, aes(x = month, y = centered_effect)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray60", linewidth = 0.8) +
   geom_line(linewidth = 1.5, color = "#2E86AB") +
   geom_point(size = 3, color = "#2E86AB") +
   scale_x_continuous(breaks = 1:12, labels = month.abb) +
   labs(
     title = "Overall Shared Seasonal Pattern",
-    subtitle = "Pooled seasonal effect applied equally to all education levels",
+    subtitle = "Pure shared smooth s(month) extracted from model - the seasonal effect applied equally to all education levels",
     x = "Month",
-    y = "Mean Unemployment Rate (%)"
+    y = "Seasonal Effect (centered on log-odds scale)"
   ) +
   theme_minimal(base_size = 12) +
   theme(
@@ -562,10 +560,9 @@ ggplot(overall_seasonal, aes(x = month, y = unemployment_rate * 100)) +
 This section shows how each education group deviates from the overall shared seasonal pattern. Groups with weak seasonality (e.g., PhD) are heavily penalized by REML smoothing and deviate less from the shared pattern, while groups with strong education-specific seasonality (e.g., High School, Less than HS) show more prominent deviations.
 
 ```{r fig.height=10, fig.width=14}
-# For each education level, calculate: total effect - shared effect = education-specific deviation
-# We need to extract the education-specific smooth terms
+# Extract education-specific deviations from the shared pattern
+# by comparing total prediction to shared smooth only
 
-# Get predictions for all education levels at each month
 all_education_seasonal <- expand_grid(
   month = 1:12,
   time_index = 200,
@@ -573,25 +570,34 @@ all_education_seasonal <- expand_grid(
 ) %>%
   as.data.frame()
 
-all_preds <- predict(model, newdata = all_education_seasonal, type = "response", se.fit = TRUE)
+# Get total prediction (all terms) for all education levels at each month
+total_pred <- predict(model, newdata = all_education_seasonal, type = "link", se.fit = FALSE)
 
-# Get overall average (shared pattern)
-overall_by_month_pred <- data.frame(
-  month = all_education_seasonal$month,
-  overall = overall_preds$fit[match(all_education_seasonal$month, 1:12)]
-)
+# Get prediction with only shared smooth s(month) - same for all education levels
+# Create dummy data just for shared smooth extraction (education doesn't matter)
+shared_data_dummy <- expand_grid(
+  month = 1:12,
+  time_index = 200,
+  education = "phd"
+) %>% as.data.frame()
 
-# Calculate education-specific deviation
+shared_pred_dummy <- predict(model, newdata = shared_data_dummy, type = "link",
+                             terms = "s(month)", se.fit = FALSE)
+
+# Replicate shared predictions to match all education levels
+shared_pred <- rep(shared_pred_dummy, times = length(unique(counts_data$education)))
+
+# Calculate education-specific deviation (total - shared)
 deviation_data <- data.frame(
   education = all_education_seasonal$education,
   month = all_education_seasonal$month,
-  total_effect = all_preds$fit,
-  shared_effect = rep(overall_seasonal$unemployment_rate, length(unique(counts_data$education))),
-  deviation = all_preds$fit - rep(overall_seasonal$unemployment_rate, length(unique(counts_data$education)))
+  shared_effect = shared_pred,
+  total_effect = total_pred,
+  education_deviation = total_pred - shared_pred
 )
 
 # Plot education-specific deviations
-ggplot(deviation_data, aes(x = month, y = deviation * 100, color = education, fill = education)) +
+ggplot(deviation_data, aes(x = month, y = education_deviation, color = education, fill = education)) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray60", linewidth = 0.5) +
   geom_line(linewidth = 1) +
   geom_point(size = 2) +
@@ -611,7 +617,7 @@ ggplot(deviation_data, aes(x = month, y = deviation * 100, color = education, fi
     title = "Education-Specific Seasonal Deviations",
     subtitle = "How each education group deviates from the overall shared seasonal pattern (dashed line = zero deviation)",
     x = "Month",
-    y = "Deviation from Shared Pattern (%)"
+    y = "Deviation from Shared Pattern (log-odds scale)"
   ) +
   theme_minimal(base_size = 11) +
   theme(
