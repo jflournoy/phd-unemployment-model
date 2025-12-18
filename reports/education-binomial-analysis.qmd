@@ -160,22 +160,41 @@ knitr::kable(current_est_display, caption = "Current Unemployment Estimates (Dec
 ### Unemployment Trend by Education Level
 
 ```{r fig.height=10, fig.width=14}
-# Extract predictions with CIs
-predictions_by_time <- model_result$predictions %>%
-  mutate(date = as.Date(paste0(year, "-", month, "-01"))) %>%
-  select(education, date, fitted_prob, ci_lower, ci_upper) %>%
-  rename(unemployment_rate = fitted_prob)
+# Create seasonality-free trend predictions (fixed month = 6)
+unique_times <- unique(model_result$data[, c("year", "time_index")])
+unique_times <- unique_times[order(unique_times$time_index), ]
 
-# Extract raw data for points
+trend_pred_data <- expand.grid(
+  time_index = unique_times$time_index,
+  month = 6,  # Fixed month to remove seasonality
+  education = unique(model_result$data$education)
+)
+
+trend_preds <- predict(model, newdata = trend_pred_data, type = "response", se.fit = TRUE)
+
+predictions_by_time <- data.frame(
+  education = trend_pred_data$education,
+  time_index = trend_pred_data$time_index,
+  date = as.Date(paste0(
+    2000 + floor((trend_pred_data$time_index - 1) / 12), "-",
+    formatC(((trend_pred_data$time_index - 1) %% 12) + 1, width = 2, flag = "0"), "-01"
+  )),
+  unemployment_rate = trend_preds$fit,
+  se = trend_preds$se.fit,
+  ci_lower = pmax(0, trend_preds$fit - 1.96 * trend_preds$se.fit),
+  ci_upper = pmin(1, trend_preds$fit + 1.96 * trend_preds$se.fit)
+)
+
+# Extract raw data for points (all observations)
 raw_data <- counts_data %>%
   mutate(date = as.Date(paste0(year, "-", month, "-01"))) %>%
   select(education, date, unemployment_rate)
 
-# Plot with raw data, fitted line, and CIs
+# Plot with raw data, seasonality-free trend, and CIs
 ggplot(predictions_by_time, aes(x = date, y = unemployment_rate * 100, color = education, fill = education)) +
   geom_ribbon(aes(ymin = ci_lower * 100, ymax = ci_upper * 100), alpha = 0.2, color = NA) +
-  geom_point(data = raw_data, aes(y = unemployment_rate * 100), alpha = 0.3, size = 1.5) +
-  geom_line(linewidth = 1) +
+  geom_point(data = raw_data, aes(y = unemployment_rate * 100), alpha = 0.2, size = 1) +
+  geom_line(linewidth = 1.2) +
   scale_color_manual(
     values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01",
                "high_school" = "#C73E1D", "some_college" = "#6A994E",
@@ -187,8 +206,8 @@ ggplot(predictions_by_time, aes(x = date, y = unemployment_rate * 100, color = e
                "less_than_hs" = "#BC4749", "associates" = "#8E7DBE")
   ) +
   labs(
-    title = "Unemployment Rates by Education Level (2000-2025)",
-    subtitle = "Raw data (points), fitted trends (lines), and 95% CIs (shaded regions)",
+    title = "Unemployment Trends by Education Level (2000-2025)",
+    subtitle = "Seasonality-free trends (June), raw data (faint points), and 95% CIs (shaded regions)",
     x = "Year",
     y = "Unemployment Rate (%)",
     color = "Education Level",
