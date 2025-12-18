@@ -89,26 +89,64 @@ $$\text{cbind}(n_{unemployed}, n_{employed}) \sim \text{education} + s(\text{tim
 ## Model Fitting & Diagnostics
 
 ```{r}
-# Fit the model using the new function
-model_result <- fit_education_binomial_gam(counts_data)
-model <- model_result$model
+# Fit both quasi-binomial and standard binomial models
+model_result_quasi <- fit_education_binomial_gam(counts_data, use_quasi = TRUE)
+model_result_binomial <- fit_education_binomial_gam(counts_data, use_quasi = FALSE)
+model <- model_result_quasi$model
 
 # Display summary
-cat("=== MODEL SUMMARY ===\n\n")
-cat("Convergence:", model_result$convergence_info$converged, "\n")
-cat("Deviance explained:", round(model_result$summary_stats$deviance_explained * 100, 1), "%\n")
-cat("Dispersion parameter:", round(model_result$summary_stats$dispersion, 2), "\n")
+cat("=== QUASI-BINOMIAL MODEL SUMMARY ===\n\n")
+cat("Convergence:", model_result_quasi$convergence_info$converged, "\n")
+cat("Deviance explained:", round(model_result_quasi$summary_stats$deviance_explained * 100, 1), "%\n")
+cat("Dispersion parameter:", round(model_result_quasi$summary_stats$dispersion, 2), "\n")
 cat("\nDispersion interpretation:\n")
 cat("- Value > 1 indicates OVERDISPERSION (expected for count data)\n")
-cat("- This value (", round(model_result$summary_stats$dispersion, 2),
+cat("- This value (", round(model_result_quasi$summary_stats$dispersion, 2),
     ") means quasi-binomial is\n")
 cat("  critical: binomial SEs would be",
-    round(sqrt(model_result$summary_stats$dispersion), 1),
+    round(sqrt(model_result_quasi$summary_stats$dispersion), 1),
     "× too small!\n")
 
 # Summary statistics
 cat("\n=== SMOOTHING COMPONENTS ===\n")
 summary(model)
+```
+
+### Binomial vs Quasi-Binomial Comparison
+
+```{r}
+# Compare standard errors between binomial and quasi-binomial at a fixed time point
+pred_data_comparison <- data.frame(
+  education = rep(unique(counts_data$education), 2),
+  time_index = 200,
+  month = 6,
+  model_type = rep(c("quasi-binomial", "binomial"), each = length(unique(counts_data$education)))
+)
+
+# Get predictions from both models
+preds_quasi <- predict(model_result_quasi$model,
+                       newdata = pred_data_comparison[pred_data_comparison$model_type == "quasi-binomial", ],
+                       type = "response", se.fit = TRUE)
+preds_binomial <- predict(model_result_binomial$model,
+                          newdata = pred_data_comparison[pred_data_comparison$model_type == "binomial", ],
+                          type = "response", se.fit = TRUE)
+
+comparison_df <- data.frame(
+  education = unique(counts_data$education),
+  quasi_se = preds_quasi$se.fit,
+  binomial_se = preds_binomial$se.fit,
+  ratio = preds_quasi$se.fit / preds_binomial$se.fit
+)
+
+cat("=== STANDARD ERROR COMPARISON (Time Index 200, Month 6) ===\n\n")
+cat("Quasi-Binomial vs Binomial Standard Errors:\n")
+cat("(Ratio shows how much larger quasi-binomial SEs are)\n\n")
+print(comparison_df)
+
+cat("\n\nAverage SE ratio:", round(mean(comparison_df$ratio), 2), "\n")
+cat("This matches the dispersion parameter √",
+    round(model_result_quasi$summary_stats$dispersion, 2), " = ",
+    round(sqrt(model_result_quasi$summary_stats$dispersion), 2), "\n")
 ```
 
 ### Model Diagnostics Plots
@@ -134,7 +172,7 @@ These plots show:
 ```{r}
 # Get latest estimates
 current_estimates <- predict_education_unemployment(
-  model_result,
+  model_result_quasi,
   time_point = 308,  # Dec 2025 (latest)
   month = 12
 )
@@ -161,13 +199,13 @@ knitr::kable(current_est_display, caption = "Current Unemployment Estimates (Dec
 
 ```{r fig.height=10, fig.width=14}
 # Create seasonality-free trend predictions (fixed month = 6)
-unique_times <- unique(model_result$data[, c("year", "time_index")])
+unique_times <- unique(model_result_quasi$data[, c("year", "time_index")])
 unique_times <- unique_times[order(unique_times$time_index), ]
 
 trend_pred_data <- expand.grid(
   time_index = unique_times$time_index,
   month = 6,  # Fixed month to remove seasonality
-  education = unique(model_result$data$education)
+  education = unique(model_result_quasi$data$education)
 )
 
 trend_preds <- predict(model, newdata = trend_pred_data, type = "response", se.fit = TRUE)
@@ -373,7 +411,7 @@ ggplot(seasonal_plot_data, aes(x = month, y = unemployment_rate * 100, color = e
 ```{r}
 # Get point estimates for each education level at a mid-range time point
 mid_point_estimates <- predict_education_unemployment(
-  model_result,
+  model_result_quasi,
   time_point = 150,  # Mid 2012
   month = 6
 ) %>%
@@ -412,14 +450,14 @@ cat(sprintf("PhD vs Less than HS:    %.2f%% lower (%.1f%% relative)\n",
 
 ```{r}
 cat("=== QUASI-BINOMIAL DIAGNOSTICS ===\n\n")
-cat("Dispersion parameter: ", round(model_result$summary_stats$dispersion, 2), "\n")
-cat("Deviance explained:   ", round(model_result$summary_stats$deviance_explained * 100, 1), "%\n\n")
+cat("Dispersion parameter: ", round(model_result_quasi$summary_stats$dispersion, 2), "\n")
+cat("Deviance explained:   ", round(model_result_quasi$summary_stats$deviance_explained * 100, 1), "%\n\n")
 cat("Interpretation:\n")
 cat("- Dispersion >> 1 indicates OVERDISPERSION\n")
-cat("- Our data shows ", round(model_result$summary_stats$dispersion, 2), "× dispersion\n")
+cat("- Our data shows ", round(model_result_quasi$summary_stats$dispersion, 2), "× dispersion\n")
 cat("- Quasi-binomial is ESSENTIAL (binomial SEs would be ",
-    round(sqrt(model_result$summary_stats$dispersion), 1), "× too small)\n")
-cat("- Deviance explained indicates ", round(model_result$summary_stats$deviance_explained * 100, 1),
+    round(sqrt(model_result_quasi$summary_stats$dispersion), 1), "× too small)\n")
+cat("- Deviance explained indicates ", round(model_result_quasi$summary_stats$deviance_explained * 100, 1),
     "% of variation captured\n")
 ```
 

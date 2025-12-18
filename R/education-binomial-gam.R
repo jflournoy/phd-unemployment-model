@@ -6,6 +6,8 @@
 #' @param data Data frame with columns: n_unemployed, n_employed, time_index, month, education
 #' @param education_levels Character vector of education levels to include.
 #'   If NULL (default), uses all levels in data.
+#' @param use_quasi Logical. If TRUE (default), uses quasi-binomial family to account for overdispersion.
+#'   If FALSE, uses standard binomial family.
 #'
 #' @return List containing:
 #'   - model: Fitted GAM object
@@ -37,7 +39,8 @@
 #'
 #' @export
 fit_education_binomial_gam <- function(data,
-                                        education_levels = NULL) {
+                                        education_levels = NULL,
+                                        use_quasi = TRUE) {
   # Validate input
   if (!is.data.frame(data)) {
     stop("data must be a data frame")
@@ -74,11 +77,13 @@ fit_education_binomial_gam <- function(data,
     s(time_index, k = 50, by = education) +
     s(month, bs = "cc", by = education)
 
-  # Fit model
+  # Fit model with specified family
+  family_obj <- if (use_quasi) quasibinomial() else binomial()
+
   model <- mgcv::gam(
     formula,
     data = data,
-    family = quasibinomial(),
+    family = family_obj,
     method = "REML",
     control = list(maxit = 500)
   )
@@ -113,6 +118,7 @@ fit_education_binomial_gam <- function(data,
     model = model,
     formula = formula,
     data = data,
+    family_type = if (use_quasi) "quasi-binomial" else "binomial",
     summary_stats = list(
       n_observations = nrow(data),
       n_education_levels = length(unique(data$education)),
