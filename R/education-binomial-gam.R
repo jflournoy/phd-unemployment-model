@@ -21,12 +21,18 @@
 #'
 #' @details
 #' The model structure is:
-#' cbind(n_unemployed, n_employed) ~ education + s(time_index, k=time_k, by=education) + s(month, k=12, bs="cc", by=education)
+#' cbind(n_unemployed, n_employed) ~ education + s(time_index, k=time_k, by=education) + s(month, k=12, bs="cc") + s(month, k=12, bs="cc", by=education)
 #'
-#' This allows factor smooth interactions:
-#' - Education main effects (intercept differences)
-#' - Education-specific trends over time (time_index smooth varies by education, flexible basis dimension)
-#' - Education-specific seasonal patterns (month smooth with cyclic cubic spline varies by education, k=12 for 12-month cycle)
+#' This structure balances flexibility and stability through a two-component decomposition:
+#' - Education main effects (intercept differences capturing baseline unemployment levels)
+#' - Education-specific economic trends (time_index smooth varies by education, flexible basis dimension)
+#' - Shared seasonal pattern (global month smooth using all data for stable k=12 seasonal curve)
+#' - Education-specific seasonal deviations (by=education month smooth allowing groups to deviate from shared pattern)
+#'
+#' The two-component seasonality structure provides more stable estimation by pooling information across
+#' education groups for the shared seasonal pattern, while still allowing education-specific deviations where
+#' the data strongly supports them. Groups with weak education-specific seasonality (e.g., PhD) will have
+#' their by-education smooth heavily penalized, preserving the shared pattern.
 #'
 #' The quasi-binomial family properly accounts for overdispersion common in
 #' unemployment count data. Use dispersion parameter to assess goodness of fit:
@@ -72,13 +78,15 @@ fit_education_binomial_gam <- function(data,
     data$year <- 2000 + floor((data$time_index - 1) / 12)
   }
 
-  # Fit quasi-binomial GAM with education-specific trends and seasonal components
-  # Factor smooth interactions: both time and seasonal patterns vary by education
-  # This allows different education groups to respond differently to both:
-  # - Economic cycles (time_index smooth, flexible with k=time_k basis functions)
-  # - Seasonal hiring/job search patterns (month smooth, k=12 for 12-month cycle)
+  # Fit quasi-binomial GAM with education-specific trends and flexible seasonality
+  # Education-specific trends via factor smooth on time
+  # Seasonality has two components: shared + education-specific deviations
+  # This allows different education groups to respond differently to:
+  # - Economic cycles (time_index smooth varies by education, flexible with k=time_k basis functions)
+  # - Seasonal deviations from the global pattern (education-specific month smooth on top of shared seasonal component)
   formula <- cbind(n_unemployed, n_employed) ~ education +
     s(time_index, k = time_k, by = education) +
+    s(month, k = 12, bs = "cc") +
     s(month, k = 12, bs = "cc", by = education)
 
   # Fit model with specified family
