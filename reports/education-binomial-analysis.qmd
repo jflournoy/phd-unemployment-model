@@ -90,7 +90,7 @@ $$\text{cbind}(n_{unemployed}, n_{employed}) \sim \text{education} + s(\text{tim
 
 ```{r}
 # Fit the model using the new function
-model_result <- fit_education_binomial_gam(counts_data, shared_seasonal = TRUE)
+model_result <- fit_education_binomial_gam(counts_data)
 model <- model_result$model
 
 # Display summary

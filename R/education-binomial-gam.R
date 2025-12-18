@@ -1,13 +1,11 @@
 #' Fit Quasi-Binomial GAM Model Across Education Levels
 #'
 #' Fits a quasi-binomial GAM to unemployment count data across all education levels,
-#' with shared seasonal component and education-specific main effects.
+#' with education-specific trends and seasonal patterns (factor smooth interactions).
 #'
 #' @param data Data frame with columns: n_unemployed, n_employed, time_index, month, education
 #' @param education_levels Character vector of education levels to include.
 #'   If NULL (default), uses all levels in data.
-#' @param shared_seasonal Logical. If TRUE (default), shares seasonal pattern across
-#'   education levels. If FALSE, allows education-specific seasonal effects.
 #'
 #' @return List containing:
 #'   - model: Fitted GAM object
@@ -18,12 +16,12 @@
 #'
 #' @details
 #' The model structure is:
-#' cbind(n_unemployed, n_employed) ~ education + s(time_index) + s(month, bs="cc")
+#' cbind(n_unemployed, n_employed) ~ education + s(time_index, by=education) + s(month, bs="cc", by=education)
 #'
-#' This allows:
+#' This allows factor smooth interactions:
 #' - Education main effects (intercept differences)
-#' - Shared trend over time (time_index smooth)
-#' - Shared seasonal pattern (month smooth with cyclic cubic spline)
+#' - Education-specific trends over time (time_index smooth varies by education)
+#' - Education-specific seasonal patterns (month smooth with cyclic cubic spline varies by education)
 #'
 #' The quasi-binomial family properly accounts for overdispersion common in
 #' unemployment count data. Use dispersion parameter to assess goodness of fit:
@@ -39,8 +37,7 @@
 #'
 #' @export
 fit_education_binomial_gam <- function(data,
-                                        education_levels = NULL,
-                                        shared_seasonal = TRUE) {
+                                        education_levels = NULL) {
   # Validate input
   if (!is.data.frame(data)) {
     stop("data must be a data frame")
@@ -68,19 +65,14 @@ fit_education_binomial_gam <- function(data,
     data$year <- 2000 + floor((data$time_index - 1) / 12)
   }
 
-  # Fit quasi-binomial GAM with shared seasonal component
-  # Use higher basis dimension (k) for time_index to allow more spiky patterns
-  # This allows the model to capture month-to-month variation beyond just seasonality
-  if (shared_seasonal) {
-    formula <- cbind(n_unemployed, n_employed) ~ education +
-      s(time_index, k = 50) +
-      s(month, bs = "cc")
-  } else {
-    # Alternative: education-specific seasonal components
-    formula <- cbind(n_unemployed, n_employed) ~ education +
-      s(time_index, k = 50) +
-      s(month, bs = "cc", by = education)
-  }
+  # Fit quasi-binomial GAM with education-specific trends and seasonal components
+  # Factor smooth interactions: both time and seasonal patterns vary by education
+  # This allows different education groups to respond differently to both:
+  # - Economic cycles (time_index smooth)
+  # - Seasonal hiring/job search patterns (month smooth)
+  formula <- cbind(n_unemployed, n_employed) ~ education +
+    s(time_index, k = 50, by = education) +
+    s(month, bs = "cc", by = education)
 
   # Fit model
   model <- mgcv::gam(
