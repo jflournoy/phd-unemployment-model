@@ -99,6 +99,7 @@ fit_education_binomial_gam <- function(data,
   # Generate predictions on original data
   predictions <- data.frame(
     education = data$education,
+    year = data$year,
     time_index = data$time_index,
     month = data$month,
     n_unemployed = data$n_unemployed,
