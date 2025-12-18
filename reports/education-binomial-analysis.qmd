@@ -151,6 +151,8 @@ pred_data_comparison <- data.frame(
   education = rep(unique(counts_data$education), 2),
   time_index = 200,
   month = 6,
+  shock_2008_2009 = 0,  # Time index 200 is June 2016, no shock
+  shock_2020 = 0,
   model_type = rep(c("quasi-binomial", "binomial"), each = length(unique(counts_data$education)))
 )
 
@@ -193,6 +195,11 @@ trend_comparison_data <- expand.grid(
   month = 6,  # Still required for formula, but will be excluded
   education = unique(model_result_quasi$data$education)
 )
+
+# Add shock variables based on year
+trend_comparison_data$year <- 2000 + floor((trend_comparison_data$time_index - 1) / 12)
+trend_comparison_data$shock_2008_2009 <- as.integer(trend_comparison_data$year >= 2008 & trend_comparison_data$year <= 2009)
+trend_comparison_data$shock_2020 <- as.integer(trend_comparison_data$year == 2020)
 
 # Identify seasonal smooth terms to exclude
 smooth_labels <- sapply(model_result_quasi$model$smooth, function(x) x$label)
@@ -317,6 +324,11 @@ trend_pred_data <- expand.grid(
   month = 6,  # Still required for formula, but will be excluded
   education = unique(model_result_quasi$data$education)
 )
+
+# Add shock variables based on year
+trend_pred_data$year <- 2000 + floor((trend_pred_data$time_index - 1) / 12)
+trend_pred_data$shock_2008_2009 <- as.integer(trend_pred_data$year >= 2008 & trend_pred_data$year <= 2009)
+trend_pred_data$shock_2020 <- as.integer(trend_pred_data$year == 2020)
 
 # Identify seasonal smooth terms to exclude
 smooth_labels <- sapply(model$smooth, function(x) x$label)
@@ -535,7 +547,9 @@ This section shows the overall shared seasonal component, which provides a stabl
 shared_seasonal_data <- expand.grid(
   month = 1:12,
   time_index = 200,
-  education = "phd"  # Education doesn't affect the shared smooth
+  education = "phd",  # Education doesn't affect the shared smooth
+  shock_2008_2009 = 0,  # Time index 200 is in 2016, no shock
+  shock_2020 = 0
 ) %>%
   as.data.frame()
 
@@ -596,7 +610,9 @@ This section shows how each education group deviates from the overall shared sea
 all_education_seasonal <- expand_grid(
   month = 1:12,
   time_index = 200,
-  education = unique(counts_data$education)
+  education = unique(counts_data$education),
+  shock_2008_2009 = 0,  # Time index 200 is in 2016, no shock
+  shock_2020 = 0
 ) %>%
   as.data.frame()
 
@@ -610,7 +626,9 @@ total_se <- total_preds$se.fit
 shared_data_dummy <- expand_grid(
   month = 1:12,
   time_index = 200,
-  education = "phd"
+  education = "phd",
+  shock_2008_2009 = 0,  # Time index 200 is in 2016, no shock
+  shock_2020 = 0
 ) %>% as.data.frame()
 
 shared_preds_dummy <- predict(model, newdata = shared_data_dummy, type = "link",

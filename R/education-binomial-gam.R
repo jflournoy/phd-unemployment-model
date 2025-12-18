@@ -21,10 +21,11 @@
 #'
 #' @details
 #' The model structure is:
-#' cbind(n_unemployed, n_employed) ~ education + s(time_index, k=time_k, by=education) + s(month, k=12, bs="cc") + s(month, k=12, bs="cc", by=education)
+#' cbind(n_unemployed, n_employed) ~ education + shock_2008_2009 + shock_2020 + s(time_index, k=time_k, by=education) + s(month, k=12, bs="cc") + s(month, k=12, bs="cc", by=education)
 #'
-#' This structure balances flexibility and stability through a two-component decomposition:
+#' This structure balances flexibility and stability through a three-component decomposition:
 #' - Education main effects (intercept differences capturing baseline unemployment levels)
+#' - Economic shocks (binary indicators for 2008-2009 financial crisis and 2020 COVID-19 pandemic)
 #' - Education-specific economic trends (time_index smooth varies by education, flexible basis dimension)
 #' - Shared seasonal pattern (global month smooth using all data for stable k=12 seasonal curve)
 #' - Education-specific seasonal deviations (by=education month smooth allowing groups to deviate from shared pattern)
@@ -78,6 +79,12 @@ fit_education_binomial_gam <- function(data,
     data$year <- 2000 + floor((data$time_index - 1) / 12)
   }
 
+  # Create shock dummy variables for major economic disruptions
+  # 2008-2009 Financial Crisis / Great Recession
+  data$shock_2008_2009 <- as.integer(data$year >= 2008 & data$year <= 2009)
+  # 2020 COVID-19 Pandemic
+  data$shock_2020 <- as.integer(data$year == 2020)
+
   # Fit quasi-binomial GAM with education-specific trends and flexible seasonality
   # Education-specific trends via factor smooth on time
   # Seasonality has two components: shared + education-specific deviations
@@ -85,6 +92,7 @@ fit_education_binomial_gam <- function(data,
   # - Economic cycles (time_index smooth varies by education, flexible with k=time_k basis functions)
   # - Seasonal deviations from the global pattern (education-specific month smooth on top of shared seasonal component)
   formula <- cbind(n_unemployed, n_employed) ~ education +
+    shock_2008_2009 + shock_2020 +
     s(time_index, k = time_k, by = education) +
     s(month, k = 12, bs = "cc") +
     s(month, k = 12, bs = "cc", by = education)
@@ -161,11 +169,16 @@ predict_education_unemployment <- function(model_result, time_point = 308, month
   model <- model_result$model
   education_levels <- levels(model_result$data$education)
 
-  # Create prediction data
+  # Infer year from time_point (assumes monthly data starting 2000)
+  year <- 2000 + floor((time_point - 1) / 12)
+
+  # Create prediction data with shock variables
   pred_data <- data.frame(
     education = factor(education_levels, levels = education_levels),
     time_index = time_point,
-    month = month
+    month = month,
+    shock_2008_2009 = as.integer(year >= 2008 & year <= 2009),
+    shock_2020 = as.integer(year == 2020)
   )
 
   # Generate predictions with standard errors
