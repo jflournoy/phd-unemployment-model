@@ -69,14 +69,16 @@ fit_education_binomial_gam <- function(data,
   }
 
   # Fit quasi-binomial GAM with shared seasonal component
+  # Use higher basis dimension (k) for time_index to allow more spiky patterns
+  # This allows the model to capture month-to-month variation beyond just seasonality
   if (shared_seasonal) {
     formula <- cbind(n_unemployed, n_employed) ~ education +
-      s(time_index) +
+      s(time_index, k = 50) +
       s(month, bs = "cc")
   } else {
     # Alternative: education-specific seasonal components
     formula <- cbind(n_unemployed, n_employed) ~ education +
-      s(time_index) +
+      s(time_index, k = 50) +
       s(month, bs = "cc", by = education)
   }
 
