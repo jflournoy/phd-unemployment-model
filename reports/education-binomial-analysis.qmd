@@ -112,6 +112,37 @@ cat("\n=== SMOOTHING COMPONENTS ===\n")
 summary(model)
 ```
 
+### Sensitivity Analysis: Basis Dimension (k) and Dispersion
+
+The quasi-binomial dispersion parameter is quite high (14.76). Since our data is population-representative (not a sample), we should test whether increasing the basis dimension (k) of the time smooth allows the model to capture more real variation, which would reduce the estimated dispersion.
+
+```{r}
+# Test different k values for time smooth
+k_values <- c(50, 80, 120, 150)
+dispersion_results <- data.frame(
+  k = k_values,
+  dispersion = NA,
+  deviance_explained = NA,
+  converged = NA
+)
+
+for (i in seq_along(k_values)) {
+  result <- fit_education_binomial_gam(counts_data, use_quasi = TRUE, time_k = k_values[i])
+  dispersion_results$dispersion[i] <- result$summary_stats$dispersion
+  dispersion_results$deviance_explained[i] <- result$summary_stats$deviance_explained
+  dispersion_results$converged[i] <- result$convergence_info$converged
+}
+
+cat("=== DISPERSION PARAMETER vs BASIS DIMENSION ===\n\n")
+print(dispersion_results)
+
+cat("\n\nInterpretation:\n")
+cat("- If dispersion decreases as k increases, true variation in the unemployment\n")
+cat("  trajectory was being attributed to noise with lower k\n")
+cat("- Plateau in dispersion suggests adequate basis dimension\n")
+cat("- Higher k with similar deviance explained suggests overfitting\n")
+```
+
 ### Binomial vs Quasi-Binomial Comparison
 
 ```{r}

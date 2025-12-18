@@ -8,6 +8,9 @@
 #'   If NULL (default), uses all levels in data.
 #' @param use_quasi Logical. If TRUE (default), uses quasi-binomial family to account for overdispersion.
 #'   If FALSE, uses standard binomial family.
+#' @param time_k Numeric. Basis dimension for time_index smooth (default 50). Higher values allow more
+#'   flexible temporal patterns. For population-representative data without sampling error, consider
+#'   increasing this to capture true variation not attributable to noise (e.g., 100, 150).
 #'
 #' @return List containing:
 #'   - model: Fitted GAM object
@@ -40,7 +43,8 @@
 #' @export
 fit_education_binomial_gam <- function(data,
                                         education_levels = NULL,
-                                        use_quasi = TRUE) {
+                                        use_quasi = TRUE,
+                                        time_k = 50) {
   # Validate input
   if (!is.data.frame(data)) {
     stop("data must be a data frame")
@@ -74,7 +78,7 @@ fit_education_binomial_gam <- function(data,
   # - Economic cycles (time_index smooth)
   # - Seasonal hiring/job search patterns (month smooth)
   formula <- cbind(n_unemployed, n_employed) ~ education +
-    s(time_index, k = 50, by = education) +
+    s(time_index, k = time_k, by = education) +
     s(month, bs = "cc", by = education)
 
   # Fit model with specified family
