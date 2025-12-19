@@ -76,11 +76,11 @@ extract_shock_effects <- function(model_result, shock_type = "2008_2009") {
     stop("shock_type must be '2008_2009' or '2020'")
   }
 
-  # Create fine prediction grid for smooth shock curves (monthly granularity)
+  # Create fine prediction grid for smooth shock curves (weekly granularity)
   # Use continuous sequence across entire period rather than just observed data
   min_time <- min(data$time_index[data$year == min(period_years)])
   max_time <- max(data$time_index[data$year == max(period_years)])
-  time_indices <- seq(min_time, max_time, by = 0.5)  # Bi-weekly for smooth curves
+  time_indices <- seq(min_time, max_time, by = 0.25)  # Weekly for very smooth curves
 
   shock_effects <- data.frame()
 

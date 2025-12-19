@@ -102,17 +102,17 @@ fit_education_binomial_gam <- function(data,
   # Fit quasi-binomial GAM with education-specific trends and flexible seasonality
   # Using thin plate splines (bs="tp") for maximum flexibility in capturing complex patterns
   # Shock dynamics via shock × time interactions allow different unemployment trajectories during crises
-  # This allows different education groups to respond differently to:
-  # - Economic cycles (time_index smooth varies by education, flexible with k=time_k basis functions, bs="tp")
-  # - Crisis dynamics (shock × time smooths with k=20 for extended 48-month periods, bs="tp")
-  # - Seasonal variation (k=12 shared pattern + k=12 education-specific deviations, bs="cc")
+  # Constrain smoothing parameters across factor levels (id=) for stability and parsimony:
+  # - Economic cycles: shared smoothing across education levels (id=1)
+  # - Crisis dynamics: shared smoothing within each shock period (id=2,3)
+  # - Seasonal variation: shared smoothing across education levels (id=4)
   formula <- cbind(n_unemployed, n_employed) ~ education +
     shock_2008_2009 + shock_2020 +
-    s(time_index, k = time_k, by = education, bs = "tp") +
-    s(time_index, k = 20, by = shock_2008_2009, bs = "tp") +
-    s(time_index, k = 20, by = shock_2020, bs = "tp") +
+    s(time_index, k = time_k, by = education, bs = "tp", id = 1) +
+    s(time_index, k = 20, by = shock_2008_2009, bs = "tp", id = 2) +
+    s(time_index, k = 20, by = shock_2020, bs = "tp", id = 3) +
     s(month, k = 12, bs = "cc") +
-    s(month, k = 12, bs = "cc", by = education)
+    s(month, k = 12, bs = "cc", by = education, id = 4)
 
   # Fit model with specified family
   # Note: Always use quasibinomial for large datasets with overdispersion

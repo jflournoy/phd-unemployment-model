@@ -124,9 +124,10 @@ list(
 
       cat("Model specifications:\n")
       cat("  - Family: Quasi-binomial\n")
-      cat("  - Main time smooth: k=150, bs='tp' (thin plate splines)\n")
-      cat("  - Shock × time smooths: k=20, bs='tp' (2007-2010, 2019-2021 periods)\n")
-      cat("  - Seasonal smooths: k=12 shared + k=12 by-education (cyclic cubic)\n")
+      cat("  - Main time smooth: k=150, bs='tp', id=1 (shared across education)\n")
+      cat("  - Shock 2008-2009 smooth: k=20, bs='tp', id=2 (shared smoothing)\n")
+      cat("  - Shock 2020 smooth: k=20, bs='tp', id=3 (shared smoothing)\n")
+      cat("  - Seasonal smooths: k=12 shared + k=12 by-education (id=4), cyclic cubic\n")
       cat("  - Optimizer: bam() with method='fREML'\n\n")
 
       start_time <- Sys.time()
