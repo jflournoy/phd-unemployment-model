@@ -79,7 +79,7 @@ $$\text{cbind}(n_{unemployed}, n_{employed}) \sim \text{education} + \text{shock
 $$s(\text{time\_index}, k=150, \text{by=education}, \text{bs="tp"}) +$$
 $$s(\text{time\_index}, k=20, \text{by=shock\_2008\_2009}, \text{bs="tp"}) +$$
 $$s(\text{time\_index}, k=20, \text{by=shock\_2020}, \text{bs="tp"}) +$$
-$$s(\text{month}, k=14, \text{bs="cc"}) + s(\text{month}, k=14, \text{bs="cc"}, \text{by=education})$$
+$$s(\text{month}, k=12, \text{bs="cc"}) + s(\text{month}, k=12, \text{bs="cc"}, \text{by=education})$$
 
 **Model components:**
 - **education**: Main effect for each education level (intercept differences)
@@ -88,8 +88,8 @@ $$s(\text{month}, k=14, \text{bs="cc"}) + s(\text{month}, k=14, \text{bs="cc"}, 
   - 2019-2021 (36 months): Pandemic precursor, crisis, and recovery
 - **s(time_index, by=education)**: Education-specific smooth trends (k=150, thin plate splines) capturing long-term unemployment dynamics
 - **s(time_index, by=shock_*)**: Shock-specific time dynamics (k=20, thin plate splines) allowing different unemployment trajectories during extended crisis periods
-- **s(month, bs="cc")**: Shared cyclic cubic spline for seasonal patterns (k=14) applied to all education levels
-- **s(month, bs="cc", by=education)**: Education-specific seasonal deviations (k=14) from the shared seasonal pattern
+- **s(month, bs="cc")**: Shared cyclic cubic spline for seasonal patterns (k=12) applied to all education levels
+- **s(month, bs="cc", by=education)**: Education-specific seasonal deviations (k=12) from the shared seasonal pattern
 - **Family**: Quasi-binomial with automatic dispersion estimation
 - **Method**: fREML with bam() optimization for large datasets
 

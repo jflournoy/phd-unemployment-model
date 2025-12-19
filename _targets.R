@@ -126,8 +126,8 @@ list(
       cat("  - Family: Quasi-binomial\n")
       cat("  - Main time smooth: k=150, bs='tp' (thin plate splines)\n")
       cat("  - Shock × time smooths: k=20, bs='tp' (2007-2010, 2019-2021 periods)\n")
-      cat("  - Seasonal smooths: k=14 shared + k=14 by-education\n")
-      cat("  - Optimizer: bam() with discrete=TRUE, nthreads=4, method='fREML'\n\n")
+      cat("  - Seasonal smooths: k=12 shared + k=12 by-education (cyclic cubic)\n")
+      cat("  - Optimizer: bam() with method='fREML'\n\n")
 
       start_time <- Sys.time()
 
