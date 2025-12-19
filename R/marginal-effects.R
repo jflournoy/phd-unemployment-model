@@ -76,9 +76,11 @@ extract_shock_effects <- function(model_result, shock_type = "2008_2009") {
     stop("shock_type must be '2008_2009' or '2020'")
   }
 
-  # Create prediction grid for the shock period
-  time_indices <- unique(data$time_index[data$year %in% period_years])
-  time_indices <- sort(time_indices)
+  # Create fine prediction grid for smooth shock curves (monthly granularity)
+  # Use continuous sequence across entire period rather than just observed data
+  min_time <- min(data$time_index[data$year == min(period_years)])
+  max_time <- max(data$time_index[data$year == max(period_years)])
+  time_indices <- seq(min_time, max_time, by = 0.5)  # Bi-weekly for smooth curves
 
   shock_effects <- data.frame()
 
@@ -144,20 +146,28 @@ extract_seasonal_effects <- function(model_result, time_point = 200, education_l
 
   seasonal_effects <- data.frame()
 
-  for (month in 1:12) {
+  # Create fine monthly grid for smooth seasonal curves (weekly interpolation within months)
+  month_seq <- seq(1, 12, by = 1/4.29)  # ~4 weeks per month for smooth appearance
+
+  for (month_val in month_seq) {
     pred_data <- data.frame(
       education = factor(education_level, levels = levels(data$education)),
       time_index = time_point,
-      month = month,
+      month = month_val,
       shock_2008_2009 = 0,
       shock_2020 = 0
     )
 
     preds <- predict(model, newdata = pred_data, type = "response", se.fit = TRUE)
 
+    # Round month to nearest integer for display (1-12)
+    month_int <- round(month_val)
+    if (month_int < 1) month_int <- 1
+    if (month_int > 12) month_int <- 12
+
     seasonal_effects <- rbind(seasonal_effects, data.frame(
-      month = month,
-      month_name = month.abb[month],
+      month = month_val,
+      month_name = month.abb[month_int],
       unemployment_rate = preds$fit,
       se = preds$se.fit,
       ci_lower = preds$fit - 1.96 * preds$se.fit,
