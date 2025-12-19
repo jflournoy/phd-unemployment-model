@@ -96,9 +96,8 @@ $$s(\text{month}, k=12, \text{bs="cc"}) + s(\text{month}, k=12, \text{bs="cc"}, 
 ## Model Fitting & Diagnostics
 
 ```{r}
-# Fit both quasi-binomial and standard binomial models
+# Fit quasi-binomial GAM (optimized with bam() for performance)
 model_result_quasi <- fit_education_binomial_gam(counts_data, use_quasi = TRUE)
-model_result_binomial <- fit_education_binomial_gam(counts_data, use_quasi = FALSE)
 model <- model_result_quasi$model
 
 # Display summary
@@ -121,7 +120,7 @@ summary(model)
 
 ### Sensitivity Analysis: Basis Dimension (k) and Dispersion
 
-The quasi-binomial dispersion parameter is quite high (14.76). Since our data is population-representative (not a sample), we should test whether increasing the basis dimension (k) of the time smooth allows the model to capture more real variation, which would reduce the estimated dispersion.
+The quasi-binomial dispersion parameter indicates overdispersion in the data. Since our data is population-representative (not a sample), we test whether increasing the basis dimension (k) of the time smooth allows the model to capture more real variation, which would reduce the estimated dispersion.
 
 ```{r}
 # Test different k values for time smooth
@@ -149,125 +148,6 @@ cat("  trajectory was being attributed to noise with lower k\n")
 cat("- Plateau in dispersion suggests adequate basis dimension\n")
 cat("- Higher k with similar deviance explained suggests overfitting\n")
 ```
-
-### Binomial vs Quasi-Binomial Comparison
-
-```{r}
-# Compare standard errors between binomial and quasi-binomial at a fixed time point
-pred_data_comparison <- data.frame(
-  education = rep(unique(counts_data$education), 2),
-  time_index = 200,
-  month = 6,
-  shock_2008_2009 = 0,  # Time index 200 is June 2016, no shock
-  shock_2020 = 0,
-  model_type = rep(c("quasi-binomial", "binomial"), each = length(unique(counts_data$education)))
-)
-
-# Get predictions from both models
-preds_quasi <- predict(model_result_quasi$model,
-                       newdata = pred_data_comparison[pred_data_comparison$model_type == "quasi-binomial", ],
-                       type = "response", se.fit = TRUE)
-preds_binomial <- predict(model_result_binomial$model,
-                          newdata = pred_data_comparison[pred_data_comparison$model_type == "binomial", ],
-                          type = "response", se.fit = TRUE)
-
-comparison_df <- data.frame(
-  education = unique(counts_data$education),
-  quasi_se = preds_quasi$se.fit,
-  binomial_se = preds_binomial$se.fit,
-  ratio = preds_quasi$se.fit / preds_binomial$se.fit
-)
-
-cat("=== STANDARD ERROR COMPARISON (Time Index 200, Month 6) ===\n\n")
-cat("Quasi-Binomial vs Binomial Standard Errors:\n")
-cat("(Ratio shows how much larger quasi-binomial SEs are)\n\n")
-print(comparison_df)
-
-cat("\n\nAverage SE ratio:", round(mean(comparison_df$ratio), 2), "\n")
-cat("This matches the dispersion parameter √",
-    round(model_result_quasi$summary_stats$dispersion, 2), " = ",
-    round(sqrt(model_result_quasi$summary_stats$dispersion), 2), "\n")
-```
-
-### Trend Comparison: Quasi-Binomial vs Binomial Across All Education Levels
-
-```{r fig.height=10, fig.width=14}
-# Create prediction data for TRULY seasonality-free trend comparison
-# Exclude seasonal smooth terms to isolate trends from seasonality
-unique_times <- unique(model_result_quasi$data[, c("year", "time_index")])
-unique_times <- unique_times[order(unique_times$time_index), ]
-
-trend_comparison_data <- expand.grid(
-  time_index = unique_times$time_index,
-  month = 6,  # Still required for formula, but will be excluded
-  education = unique(model_result_quasi$data$education)
-)
-
-# Add shock variables based on year
-trend_comparison_data$year <- 2000 + floor((trend_comparison_data$time_index - 1) / 12)
-trend_comparison_data$shock_2008_2009 <- as.integer(trend_comparison_data$year >= 2008 & trend_comparison_data$year <= 2009)
-trend_comparison_data$shock_2020 <- as.integer(trend_comparison_data$year == 2020)
-
-# Identify seasonal smooth terms to exclude
-smooth_labels <- sapply(model_result_quasi$model$smooth, function(x) x$label)
-seasonal_smooths <- grep("s\\(month", smooth_labels, value = TRUE)
-
-# Get predictions from both models, excluding seasonal components
-preds_quasi_trend <- predict(model_result_quasi$model,
-                             newdata = trend_comparison_data,
-                             type = "response",
-                             se.fit = TRUE,
-                             exclude = seasonal_smooths)
-preds_binomial_trend <- predict(model_result_binomial$model,
-                               newdata = trend_comparison_data,
-                               type = "response",
-                               se.fit = TRUE,
-                               exclude = seasonal_smooths)
-
-# Create comparison data frame
-trend_comparison_plot <- data.frame(
-  education = trend_comparison_data$education,
-  time_index = trend_comparison_data$time_index,
-  date = as.Date(paste0(
-    2000 + floor((trend_comparison_data$time_index - 1) / 12), "-",
-    formatC(((trend_comparison_data$time_index - 1) %% 12) + 1, width = 2, flag = "0"), "-01"
-  )),
-  quasi_binomial = preds_quasi_trend$fit,
-  binomial = preds_binomial_trend$fit
-) %>%
-  pivot_longer(cols = c(quasi_binomial, binomial),
-               names_to = "model_type",
-               values_to = "unemployment_rate")
-
-# Plot trends comparing both models
-ggplot(trend_comparison_plot, aes(x = date, y = unemployment_rate * 100,
-                                   color = education, linetype = model_type)) +
-  geom_line(linewidth = 1) +
-  scale_color_manual(
-    values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01",
-               "high_school" = "#C73E1D", "some_college" = "#6A994E",
-               "less_than_hs" = "#BC4749", "associates" = "#8E7DBE"),
-    name = "Education Level"
-  ) +
-  scale_linetype_manual(
-    values = c("quasi_binomial" = "solid", "binomial" = "dashed"),
-    labels = c("quasi_binomial" = "Quasi-Binomial", "binomial" = "Binomial"),
-    name = "Model Type"
-  ) +
-  labs(
-    title = "Trend Comparison: Quasi-Binomial vs Binomial Models",
-    subtitle = "Fitted trends (seasonality-free) for all education levels\nQuasi-binomial (solid) captures overdispersion; binomial (dashed) underestimates uncertainty",
-    x = "Year",
-    y = "Unemployment Rate (%)"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    legend.position = "bottom",
-    panel.grid.minor = element_blank()
-  )
-```
-
-**Key Observation**: The fitted trends (point estimates) are nearly identical between the two models. The critical difference is in the uncertainty quantification (standard errors), which is ~3.8× larger for quasi-binomial. This demonstrates that the model's *structural assumptions* determine uncertainty, not just the mean predictions.
 
 ### Model Diagnostics Plots
 

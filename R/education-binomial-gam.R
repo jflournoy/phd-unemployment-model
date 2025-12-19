@@ -111,13 +111,20 @@ fit_education_binomial_gam <- function(data,
     s(month, k = 12, bs = "cc", by = education)
 
   # Fit model with specified family
+  # Note: Always use quasibinomial for large datasets with overdispersion
   family_obj <- if (use_quasi) quasibinomial() else binomial()
 
-  model <- mgcv::gam(
+  # Use bam() for large dataset performance with optimizations:
+  # - discrete=TRUE: Fast discrete approximation for factor smooths
+  # - nthreads=4: Parallel computation (adjust based on available cores)
+  # - method="fREML": Fast REML for speed (20-30% faster than REML)
+  model <- mgcv::bam(
     formula,
     data = data,
     family = family_obj,
-    method = "REML",
+    method = "fREML",
+    discrete = TRUE,
+    nthreads = 4,
     control = list(maxit = 500)
   )
 
