@@ -21,14 +21,23 @@
 #'
 #' @details
 #' The model structure is:
-#' cbind(n_unemployed, n_employed) ~ education + shock_2008_2009 + shock_2020 + s(time_index, k=time_k, by=education) + s(month, k=12, bs="cc") + s(month, k=12, bs="cc", by=education)
+#' cbind(n_unemployed, n_employed) ~ education + shock_2008_2009 + shock_2020 +
+#'   s(time_index, k=time_k, by=education, bs="cr") +
+#'   s(time_index, k=10, by=shock_2008_2009, bs="cr") +
+#'   s(time_index, k=10, by=shock_2020, bs="cr") +
+#'   s(month, k=12, bs="cc") + s(month, k=12, bs="cc", by=education)
 #'
-#' This structure balances flexibility and stability through a three-component decomposition:
+#' This structure balances flexibility and stability through a four-component decomposition:
 #' - Education main effects (intercept differences capturing baseline unemployment levels)
 #' - Economic shocks (binary indicators for 2008-2009 financial crisis and 2020 COVID-19 pandemic)
+#' - Shock dynamics (time-varying effects during crisis periods allowing different unemployment trajectories)
 #' - Education-specific economic trends (time_index smooth varies by education, flexible basis dimension)
 #' - Shared seasonal pattern (global month smooth using all data for stable k=12 seasonal curve)
 #' - Education-specific seasonal deviations (by=education month smooth allowing groups to deviate from shared pattern)
+#'
+#' The shock × time interactions capture nonlinear crisis dynamics - unemployment doesn't just
+#' shift up during crises, it can rise/fall at different rates. Using k=10 for shock smooths
+#' is appropriate given limited data (24 months for 2008-2009, 12 months for 2020).
 #'
 #' The two-component seasonality structure provides more stable estimation by pooling information across
 #' education groups for the shared seasonal pattern, while still allowing education-specific deviations where
@@ -88,12 +97,16 @@ fit_education_binomial_gam <- function(data,
   # Fit quasi-binomial GAM with education-specific trends and flexible seasonality
   # Education-specific trends via factor smooth on time
   # Seasonality has two components: shared + education-specific deviations
+  # Shock dynamics via shock × time interactions allow different unemployment trajectories during crises
   # This allows different education groups to respond differently to:
   # - Economic cycles (time_index smooth varies by education, flexible with k=time_k basis functions)
+  # - Crisis dynamics (shock × time smooths with k=10 for 2008-2009 and 2020)
   # - Seasonal deviations from the global pattern (education-specific month smooth on top of shared seasonal component)
   formula <- cbind(n_unemployed, n_employed) ~ education +
     shock_2008_2009 + shock_2020 +
-    s(time_index, k = time_k, by = education) +
+    s(time_index, k = time_k, by = education, bs = "cr") +
+    s(time_index, k = 10, by = shock_2008_2009, bs = "cr") +
+    s(time_index, k = 10, by = shock_2020, bs = "cr") +
     s(month, k = 12, bs = "cc") +
     s(month, k = 12, bs = "cc", by = education)
 
