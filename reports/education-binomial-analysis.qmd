@@ -76,20 +76,22 @@ print(summary_by_ed)
 We fit a quasi-binomial GAM with the formula:
 
 $$\text{cbind}(n_{unemployed}, n_{employed}) \sim \text{education} + \text{shock\_2008\_2009} + \text{shock\_2020} +$$
-$$s(\text{time\_index}, k=150, \text{by=education}, \text{bs="cr"}) +$$
-$$s(\text{time\_index}, k=10, \text{by=shock\_2008\_2009}, \text{bs="cr"}) +$$
-$$s(\text{time\_index}, k=10, \text{by=shock\_2020}, \text{bs="cr"}) +$$
-$$s(\text{month}, k=12, \text{bs="cc"}) + s(\text{month}, k=12, \text{bs="cc"}, \text{by=education})$$
+$$s(\text{time\_index}, k=150, \text{by=education}, \text{bs="tp"}) +$$
+$$s(\text{time\_index}, k=20, \text{by=shock\_2008\_2009}, \text{bs="tp"}) +$$
+$$s(\text{time\_index}, k=20, \text{by=shock\_2020}, \text{bs="tp"}) +$$
+$$s(\text{month}, k=14, \text{bs="cc"}) + s(\text{month}, k=14, \text{bs="cc"}, \text{by=education})$$
 
 **Model components:**
 - **education**: Main effect for each education level (intercept differences)
-- **shock_2008_2009, shock_2020**: Binary indicators for major economic disruptions including recovery periods (2008-2010 financial crisis, 2020-2021 COVID-19)
-- **s(time_index, by=education)**: Education-specific smooth trends (k=150) capturing long-term unemployment dynamics
-- **s(time_index, by=shock_*)**: Shock-specific time dynamics (k=15, thin plate splines) allowing different crisis trajectories during extended disruption/recovery periods
-- **s(month, bs="cc")**: Shared cyclic cubic spline for seasonal patterns applied to all education levels
-- **s(month, bs="cc", by=education)**: Education-specific seasonal deviations from the shared seasonal pattern
+- **shock_2008_2009, shock_2020**: Binary indicators for major economic disruptions including precursor + crisis + recovery:
+  - 2007-2010 (48 months): Financial crisis precursor, crisis, and recovery
+  - 2019-2021 (36 months): Pandemic precursor, crisis, and recovery
+- **s(time_index, by=education)**: Education-specific smooth trends (k=150, thin plate splines) capturing long-term unemployment dynamics
+- **s(time_index, by=shock_*)**: Shock-specific time dynamics (k=20, thin plate splines) allowing different unemployment trajectories during extended crisis periods
+- **s(month, bs="cc")**: Shared cyclic cubic spline for seasonal patterns (k=14) applied to all education levels
+- **s(month, bs="cc", by=education)**: Education-specific seasonal deviations (k=14) from the shared seasonal pattern
 - **Family**: Quasi-binomial with automatic dispersion estimation
-- **Method**: REML (marginal likelihood maximization)
+- **Method**: fREML with bam() optimization for large datasets
 
 ---
 
@@ -212,10 +214,10 @@ trend_pred_data <- expand.grid(
   education = unique(model_result_quasi$data$education)
 )
 
-# Add shock variables based on year (extended through recovery periods)
+# Add shock variables based on year (extended to include precursor + crisis + recovery)
 trend_pred_data$year <- 2000 + floor((trend_pred_data$time_index - 1) / 12)
-trend_pred_data$shock_2008_2009 <- as.integer(trend_pred_data$year >= 2008 & trend_pred_data$year <= 2010)
-trend_pred_data$shock_2020 <- as.integer(trend_pred_data$year >= 2020 & trend_pred_data$year <= 2021)
+trend_pred_data$shock_2008_2009 <- as.integer(trend_pred_data$year >= 2007 & trend_pred_data$year <= 2010)
+trend_pred_data$shock_2020 <- as.integer(trend_pred_data$year >= 2019 & trend_pred_data$year <= 2021)
 
 # Identify seasonal smooth terms to exclude
 smooth_labels <- sapply(model$smooth, function(x) x$label)

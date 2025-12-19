@@ -22,26 +22,30 @@
 #' @details
 #' The model structure is:
 #' cbind(n_unemployed, n_employed) ~ education + shock_2008_2009 + shock_2020 +
-#'   s(time_index, k=time_k, by=education, bs="cr") +
-#'   s(time_index, k=10, by=shock_2008_2009, bs="cr") +
-#'   s(time_index, k=10, by=shock_2020, bs="cr") +
-#'   s(month, k=12, bs="cc") + s(month, k=12, bs="cc", by=education)
+#'   s(time_index, k=time_k, by=education, bs="tp") +
+#'   s(time_index, k=20, by=shock_2008_2009, bs="tp") +
+#'   s(time_index, k=20, by=shock_2020, bs="tp") +
+#'   s(month, k=14, bs="cc") + s(month, k=14, bs="cc", by=education)
 #'
-#' This structure balances flexibility and stability through a four-component decomposition:
+#' This structure balances flexibility and stability through a six-component decomposition:
 #' - Education main effects (intercept differences capturing baseline unemployment levels)
-#' - Economic shocks (binary indicators for 2008-2009 financial crisis and 2020 COVID-19 pandemic)
-#' - Shock dynamics (time-varying effects during crisis periods allowing different unemployment trajectories)
+#' - Economic shocks (binary indicators for 2007-2010 financial crisis and 2019-2021 pandemic)
+#'   Extended to include precursor years before official crisis start
+#' - Shock dynamics (time-varying effects allowing different unemployment trajectories during crises)
 #' - Education-specific economic trends (time_index smooth varies by education, flexible basis dimension)
-#' - Shared seasonal pattern (global month smooth using all data for stable k=12 seasonal curve)
-#' - Education-specific seasonal deviations (by=education month smooth allowing groups to deviate from shared pattern)
+#' - Shared seasonal pattern (global month smooth using all data for stable seasonal curve, k=14)
+#' - Education-specific seasonal deviations (by=education month smooth allowing groups to deviate, k=14)
+#'
+#' Thin plate splines (bs="tp") provide maximum flexibility for capturing complex unemployment patterns
+#' across the full 25-year time span while maintaining numerical stability through bam() optimization.
 #'
 #' The shock × time interactions capture nonlinear crisis dynamics - unemployment doesn't just
-#' shift up during crises, it can rise/fall at different rates. Using k=10 for shock smooths
-#' is appropriate given limited data (24 months for 2008-2009, 12 months for 2020).
+#' shift up during crises, it can rise/fall at different rates. Using k=20 for 48-month shock periods
+#' (2007-2010: 48 months, 2019-2021: 36 months) provides adequate flexibility.
 #'
-#' The two-component seasonality structure provides more stable estimation by pooling information across
-#' education groups for the shared seasonal pattern, while still allowing education-specific deviations where
-#' the data strongly supports them. Groups with weak education-specific seasonality (e.g., PhD) will have
+#' The two-component seasonality structure (k=14 shared + k=14 by-education) provides more stable
+#' estimation by pooling information while allowing education-specific deviations where the data
+#' strongly supports them. Groups with weak education-specific seasonality (e.g., PhD) will have
 #' their by-education smooth heavily penalized, preserving the shared pattern.
 #'
 #' The quasi-binomial family properly accounts for overdispersion common in
@@ -89,27 +93,26 @@ fit_education_binomial_gam <- function(data,
   }
 
   # Create shock dummy variables for major economic disruptions
-  # Extend beyond crisis years to capture recovery dynamics
-  # 2008-2010 Financial Crisis / Great Recession (includes recovery)
-  data$shock_2008_2009 <- as.integer(data$year >= 2008 & data$year <= 2010)
-  # 2020-2021 COVID-19 Pandemic (includes recovery)
-  data$shock_2020 <- as.integer(data$year >= 2020 & data$year <= 2021)
+  # Extend before, during, and after crisis periods to capture full dynamics
+  # 2007-2010 Financial Crisis / Great Recession (includes precursor, crisis, recovery)
+  data$shock_2008_2009 <- as.integer(data$year >= 2007 & data$year <= 2010)
+  # 2019-2021 COVID-19 Pandemic (includes precursor, crisis, recovery)
+  data$shock_2020 <- as.integer(data$year >= 2019 & data$year <= 2021)
 
   # Fit quasi-binomial GAM with education-specific trends and flexible seasonality
-  # Education-specific trends via factor smooth on time
-  # Seasonality has two components: shared + education-specific deviations
+  # Using thin plate splines (bs="tp") for maximum flexibility in capturing complex patterns
   # Shock dynamics via shock × time interactions allow different unemployment trajectories during crises
   # This allows different education groups to respond differently to:
   # - Economic cycles (time_index smooth varies by education, flexible with k=time_k basis functions, bs="tp")
-  # - Crisis dynamics (shock × time smooths with k=15 for extended crisis+recovery periods, bs="tp")
-  # - Seasonal deviations from the global pattern (education-specific month smooth on top of shared seasonal component)
+  # - Crisis dynamics (shock × time smooths with k=20 for extended 48-month periods, bs="tp")
+  # - Seasonal variation (k=14 shared pattern + k=14 education-specific deviations, bs="cc")
   formula <- cbind(n_unemployed, n_employed) ~ education +
     shock_2008_2009 + shock_2020 +
     s(time_index, k = time_k, by = education, bs = "tp") +
-    s(time_index, k = 15, by = shock_2008_2009, bs = "tp") +
-    s(time_index, k = 15, by = shock_2020, bs = "tp") +
-    s(month, k = 12, bs = "cc") +
-    s(month, k = 12, bs = "cc", by = education)
+    s(time_index, k = 20, by = shock_2008_2009, bs = "tp") +
+    s(time_index, k = 20, by = shock_2020, bs = "tp") +
+    s(month, k = 14, bs = "cc") +
+    s(month, k = 14, bs = "cc", by = education)
 
   # Fit model with specified family
   # Note: Always use quasibinomial for large datasets with overdispersion
@@ -193,13 +196,13 @@ predict_education_unemployment <- function(model_result, time_point = 308, month
   # Infer year from time_point (assumes monthly data starting 2000)
   year <- 2000 + floor((time_point - 1) / 12)
 
-  # Create prediction data with shock variables (extended through recovery periods)
+  # Create prediction data with shock variables (extended to include precursor + crisis + recovery)
   pred_data <- data.frame(
     education = factor(education_levels, levels = education_levels),
     time_index = time_point,
     month = month,
-    shock_2008_2009 = as.integer(year >= 2008 & year <= 2010),
-    shock_2020 = as.integer(year >= 2020 & year <= 2021)
+    shock_2008_2009 = as.integer(year >= 2007 & year <= 2010),
+    shock_2020 = as.integer(year >= 2019 & year <= 2021)
   )
 
   # Generate predictions with standard errors
