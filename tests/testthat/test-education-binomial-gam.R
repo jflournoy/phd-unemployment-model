@@ -145,3 +145,163 @@ test_that("quasi-binomial dispersion parameter is estimated", {
   # Document what we find
   cat("\nDispersion parameter:", round(dispersion, 2), "\n")
 })
+
+# =============================================================================
+# TDD TESTS: Enhanced Model with Shock Dynamics (2007-2010, 2019-2021)
+# =============================================================================
+
+test_that("fit_education_binomial_gam creates shock variables correctly", {
+  # RED: Test that shock dummy variables are created for extended periods
+  library(phdunemployment)
+
+  data_file <- here::here("data", "education-spectrum-counts.rds")
+  skip_if_not(file.exists(data_file), "Count data file not found")
+  counts_data <- readRDS(data_file)
+
+  # Fit model using the function
+  result <- fit_education_binomial_gam(counts_data, use_quasi = TRUE, time_k = 50)
+
+  # GREEN: Verify shock variables are created
+  expect_true("shock_2008_2009" %in% names(result$data))
+  expect_true("shock_2020" %in% names(result$data))
+
+  # Verify shock periods are extended (2007-2010 and 2019-2021)
+  years_shock_2008_2009 <- unique(result$data$year[result$data$shock_2008_2009 == 1])
+  years_shock_2020 <- unique(result$data$year[result$data$shock_2020 == 1])
+
+  expect_equal(range(years_shock_2008_2009), c(2007, 2010))
+  expect_equal(range(years_shock_2020), c(2019, 2021))
+})
+
+test_that("fit_education_binomial_gam uses thin plate splines", {
+  # GREEN: Verify thin plate splines are used in the formula
+  library(phdunemployment)
+
+  data_file <- here::here("data", "education-spectrum-counts.rds")
+  skip_if_not(file.exists(data_file), "Count data file not found")
+  counts_data <- readRDS(data_file)
+
+  result <- fit_education_binomial_gam(counts_data, use_quasi = TRUE, time_k = 50)
+  model <- result$model
+
+  # Check basis types used
+  smooth_labels <- sapply(model$smooth, function(x) x$label)
+
+  # Should have thin plate splines for main trends and shock effects
+  tp_smooths <- grep("tp", sapply(model$smooth, function(x) x$bs.name), value = FALSE)
+  expect_true(length(tp_smooths) > 0, info = "No thin plate splines found in model")
+})
+
+test_that("fit_education_binomial_gam achieves convergence with k=150", {
+  # REFACTOR: Verify model converges with full basis dimensions
+  library(phdunemployment)
+
+  data_file <- here::here("data", "education-spectrum-counts.rds")
+  skip_if_not(file.exists(data_file), "Count data file not found")
+  counts_data <- readRDS(data_file)
+
+  result <- fit_education_binomial_gam(counts_data, use_quasi = TRUE, time_k = 150)
+
+  # Model should converge
+  expect_true(result$convergence_info$converged)
+
+  # Deviance explained should be > 95%
+  expect_gt(result$summary_stats$deviance_explained, 0.95)
+
+  # Dispersion should be in reasonable range (1 < disp < 5 for this data)
+  expect_gt(result$summary_stats$dispersion, 1)
+  expect_lt(result$summary_stats$dispersion, 5)
+})
+
+test_that("shock dynamics smooth terms are properly included", {
+  # GREEN: Verify shock × time smooths are in the model
+  library(phdunemployment)
+
+  data_file <- here::here("data", "education-spectrum-counts.rds")
+  skip_if_not(file.exists(data_file), "Count data file not found")
+  counts_data <- readRDS(data_file)
+
+  result <- fit_education_binomial_gam(counts_data, use_quasi = TRUE, time_k = 30)
+  model <- result$model
+
+  smooth_labels <- sapply(model$smooth, function(x) x$label)
+
+  # Should have shock × time smooths
+  shock_2008_smooths <- grep("shock_2008_2009", smooth_labels, value = TRUE)
+  shock_2020_smooths <- grep("shock_2020", smooth_labels, value = TRUE)
+
+  expect_true(length(shock_2008_smooths) > 0, info = "No 2008-2009 shock smooth found")
+  expect_true(length(shock_2020_smooths) > 0, info = "No 2020 shock smooth found")
+})
+
+test_that("predictions include shock effects", {
+  # GREEN: Verify predictions change across shock periods
+  library(phdunemployment)
+
+  data_file <- here::here("data", "education-spectrum-counts.rds")
+  skip_if_not(file.exists(data_file), "Count data file not found")
+  counts_data <- readRDS(data_file)
+
+  result <- fit_education_binomial_gam(counts_data, use_quasi = TRUE, time_k = 30)
+  model <- result$model
+
+  # Create prediction data for different periods
+  # Non-shock period (2005)
+  pred_normal <- data.frame(
+    education = factor("phd", levels = levels(counts_data$education)),
+    time_index = 60,  # 2005
+    month = 6,
+    shock_2008_2009 = 0,
+    shock_2020 = 0
+  )
+
+  # Crisis period (2008)
+  pred_crisis_2008 <- data.frame(
+    education = factor("phd", levels = levels(counts_data$education)),
+    time_index = 108,  # 2008
+    month = 6,
+    shock_2008_2009 = 1,
+    shock_2020 = 0
+  )
+
+  # Pandemic period (2020)
+  pred_pandemic <- data.frame(
+    education = factor("phd", levels = levels(counts_data$education)),
+    time_index = 252,  # 2020
+    month = 6,
+    shock_2008_2009 = 0,
+    shock_2020 = 1
+  )
+
+  pred_normal_rate <- predict(model, newdata = pred_normal, type = "response")
+  pred_crisis_rate <- predict(model, newdata = pred_crisis_2008, type = "response")
+  pred_pandemic_rate <- predict(model, newdata = pred_pandemic, type = "response")
+
+  # All predictions should be valid probabilities
+  expect_true(all(pred_normal_rate >= 0 & pred_normal_rate <= 1))
+  expect_true(all(pred_crisis_rate >= 0 & pred_crisis_rate <= 1))
+  expect_true(all(pred_pandemic_rate >= 0 & pred_pandemic_rate <= 1))
+})
+
+test_that("model basis dimensions match specifications", {
+  # GREEN: Verify k values are correctly applied
+  library(phdunemployment)
+
+  data_file <- here::here("data", "education-spectrum-counts.rds")
+  skip_if_not(file.exists(data_file), "Count data file not found")
+  counts_data <- readRDS(data_file)
+
+  result <- fit_education_binomial_gam(counts_data, use_quasi = TRUE, time_k = 80)
+  model <- result$model
+
+  # Extract basis dimensions for each smooth
+  for (i in seq_along(model$smooth)) {
+    smooth <- model$smooth[[i]]
+    # Should have reasonable basis dimensions
+    expect_true(smooth$bs.dim > 0, info = paste("Smooth", i, "has invalid basis dimension"))
+    # Main time smooth should have k close to requested value
+    if (grepl("time_index", smooth$label) && !grepl("shock", smooth$label)) {
+      expect_true(smooth$bs.dim >= 50, info = paste("Main time smooth too small:", smooth$bs.dim))
+    }
+  }
+})

@@ -108,31 +108,49 @@ list(
   # Model Fitting Targets (Frequentist GAMs for now, Bayesian later)
   # ==========================================================================
 
-  ## Binomial and Quasi-binomial model comparison
-  ## This single target fits both models and compares them
+  ## Primary Education-Binomial GAM Model with Shock Dynamics
+  ## Uses thin plate splines (bs="tp") for maximum flexibility
+  ## Extended shock periods (2007-2010 financial crisis, 2019-2021 pandemic)
+  ## Verbose logging for model diagnostics and convergence checking
   tar_target(
-    model_comparison,
+    model_education_binomial,
     {
-      compare_binomial_quasibinomial(
-        data = education_counts,
-        formula_type = "full",  # Full factor smooth model
-        education_var = "education",
-        success_col = "n_unemployed",
-        total_col = "n_total"
+      cat("\n", strrep("=", 80), "\n")
+      cat("STARTING MODEL FITTING: Education-Binomial GAM with Shock Dynamics\n")
+      cat("Timestamp:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
+      cat("Data rows:", nrow(education_counts), "\n")
+      cat("Education levels:", paste(unique(education_counts$education), collapse = ", "), "\n")
+      cat(strrep("=", 80), "\n\n")
+
+      cat("Model specifications:\n")
+      cat("  - Family: Quasi-binomial\n")
+      cat("  - Main time smooth: k=150, bs='tp' (thin plate splines)\n")
+      cat("  - Shock × time smooths: k=20, bs='tp' (2007-2010, 2019-2021 periods)\n")
+      cat("  - Seasonal smooths: k=14 shared + k=14 by-education\n")
+      cat("  - Optimizer: bam() with discrete=TRUE, nthreads=4, method='fREML'\n\n")
+
+      start_time <- Sys.time()
+
+      result <- fit_education_binomial_gam(
+        education_counts,
+        use_quasi = TRUE,
+        time_k = 150
       )
+
+      end_time <- Sys.time()
+      elapsed <- as.numeric(difftime(end_time, start_time, units = "secs"))
+
+      cat("\n", strrep("=", 80), "\n")
+      cat("MODEL FITTING COMPLETED\n")
+      cat("Total runtime:", round(elapsed, 1), "seconds (", round(elapsed/60, 1), "minutes)\n")
+      cat("Convergence:", result$convergence_info$converged, "\n")
+      cat("Deviance explained:", round(result$summary_stats$deviance_explained * 100, 1), "%\n")
+      cat("Dispersion parameter:", round(result$summary_stats$dispersion, 2), "\n")
+      cat("Number of smooth terms:", length(result$model$smooth), "\n")
+      cat(strrep("=", 80), "\n\n")
+
+      result
     }
-  ),
-
-  ## Extract binomial model from comparison
-  tar_target(
-    model_binomial,
-    model_comparison$binomial_model
-  ),
-
-  ## Extract quasi-binomial model from comparison
-  tar_target(
-    model_quasibinomial,
-    model_comparison$quasibinomial_model
   ),
 
   # ==========================================================================

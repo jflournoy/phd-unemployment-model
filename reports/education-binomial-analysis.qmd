@@ -650,6 +650,42 @@ cat("- Deviance explained indicates ", round(model_result_quasi$summary_stats$de
 
 ---
 
+## Model Component Decomposition: Marginal Effects
+
+This section visualizes each component of the GAM separately using marginal effects plots.
+These plots isolate the contribution of each factor (education, shocks, seasonality) while
+holding others at reference levels.
+
+### Marginal Effects Panel
+
+```{r fig.height=12, fig.width=14}
+# Create comprehensive marginal effects panel
+marginal_effects_plot <- plot_marginal_effects(model_result_quasi)
+print(marginal_effects_plot)
+```
+
+**Interpretation:**
+
+- **Education Main Effects (top left)**: Shows how each education level shifts unemployment risk relative to the reference level. PhDs have large negative effects (lower unemployment), while those with less than HS education have positive effects (higher unemployment).
+
+- **2008-2009 Financial Crisis (top right)**: Captures the time-varying unemployment surge during the crisis. The shock smooth shows when the crisis hit hardest and how long the effects persisted. The wide confidence bands reflect uncertainty during turbulent labor markets.
+
+- **2020 COVID-19 Pandemic (bottom left)**: Shows the sharp and rapid unemployment spike in early 2020 (the most dramatic period), followed by recovery through 2021. The pandemic's shock was much faster than the gradual 2008 crisis.
+
+- **Seasonal Effects (bottom right)**: Displays the typical annual pattern (peaking in winter months, declining through spring/summer). This pattern is consistent year-to-year across education levels.
+
+### Education Effect Estimates
+
+```{r}
+edu_effects <- extract_education_effects(model_result_quasi)
+cat("\n=== EDUCATION MAIN EFFECTS (Log-odds Scale) ===\n\n")
+print(edu_effects)
+cat("\nNote: Positive effects = higher unemployment risk\n")
+cat("      Negative effects = lower unemployment risk\n")
+```
+
+---
+
 ## Conclusions
 
 1. **PhD unemployment is genuinely lower** than other education levels across the full 2000-2025 period, with a **1.7% average** versus 3-5% for less educated groups.
