@@ -83,9 +83,9 @@ $$s(\text{month}, k=12, \text{bs="cc"}) + s(\text{month}, k=12, \text{bs="cc"}, 
 
 **Model components:**
 - **education**: Main effect for each education level (intercept differences)
-- **shock_2008_2009, shock_2020**: Binary indicators for major economic disruptions (2008-2009 financial crisis, 2020 COVID-19)
+- **shock_2008_2009, shock_2020**: Binary indicators for major economic disruptions including recovery periods (2008-2010 financial crisis, 2020-2021 COVID-19)
 - **s(time_index, by=education)**: Education-specific smooth trends (k=150) capturing long-term unemployment dynamics
-- **s(time_index, by=shock_*)**: Shock-specific time dynamics (k=10) allowing different crisis trajectories during disruptions
+- **s(time_index, by=shock_*)**: Shock-specific time dynamics (k=15, thin plate splines) allowing different crisis trajectories during extended disruption/recovery periods
 - **s(month, bs="cc")**: Shared cyclic cubic spline for seasonal patterns applied to all education levels
 - **s(month, bs="cc", by=education)**: Education-specific seasonal deviations from the shared seasonal pattern
 - **Family**: Quasi-binomial with automatic dispersion estimation
@@ -212,10 +212,10 @@ trend_pred_data <- expand.grid(
   education = unique(model_result_quasi$data$education)
 )
 
-# Add shock variables based on year
+# Add shock variables based on year (extended through recovery periods)
 trend_pred_data$year <- 2000 + floor((trend_pred_data$time_index - 1) / 12)
-trend_pred_data$shock_2008_2009 <- as.integer(trend_pred_data$year >= 2008 & trend_pred_data$year <= 2009)
-trend_pred_data$shock_2020 <- as.integer(trend_pred_data$year == 2020)
+trend_pred_data$shock_2008_2009 <- as.integer(trend_pred_data$year >= 2008 & trend_pred_data$year <= 2010)
+trend_pred_data$shock_2020 <- as.integer(trend_pred_data$year >= 2020 & trend_pred_data$year <= 2021)
 
 # Identify seasonal smooth terms to exclude
 smooth_labels <- sapply(model$smooth, function(x) x$label)
