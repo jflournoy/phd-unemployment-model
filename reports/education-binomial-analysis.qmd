@@ -75,12 +75,19 @@ print(summary_by_ed)
 
 We fit a quasi-binomial GAM with the formula:
 
-$$\text{cbind}(n_{unemployed}, n_{employed}) \sim \text{education} + s(\text{time\_index}) + s(\text{month}, \text{bs}=\text{"cc"})$$
+$$\text{cbind}(n_{unemployed}, n_{employed}) \sim \text{education} + \text{shock\_2008\_2009} + \text{shock\_2020} +$$
+$$s(\text{time\_index}, k=150, \text{by=education}, \text{bs="cr"}) +$$
+$$s(\text{time\_index}, k=10, \text{by=shock\_2008\_2009}, \text{bs="cr"}) +$$
+$$s(\text{time\_index}, k=10, \text{by=shock\_2020}, \text{bs="cr"}) +$$
+$$s(\text{month}, k=12, \text{bs="cc"}) + s(\text{month}, k=12, \text{bs="cc"}, \text{by=education})$$
 
 **Model components:**
 - **education**: Main effect for each education level (intercept differences)
-- **s(time_index)**: Smooth trend over 25 years captures long-term unemployment dynamics
-- **s(month, bs="cc")**: Cyclic cubic spline for seasonal patterns shared across education levels
+- **shock_2008_2009, shock_2020**: Binary indicators for major economic disruptions (2008-2009 financial crisis, 2020 COVID-19)
+- **s(time_index, by=education)**: Education-specific smooth trends (k=150) capturing long-term unemployment dynamics
+- **s(time_index, by=shock_*)**: Shock-specific time dynamics (k=10) allowing different crisis trajectories during disruptions
+- **s(month, bs="cc")**: Shared cyclic cubic spline for seasonal patterns applied to all education levels
+- **s(month, bs="cc", by=education)**: Education-specific seasonal deviations from the shared seasonal pattern
 - **Family**: Quasi-binomial with automatic dispersion estimation
 - **Method**: REML (marginal likelihood maximization)
 
@@ -479,8 +486,10 @@ ggplot(compare_data, aes(x = date, y = unemployment_rate * 100, color = educatio
 # Extract seasonal component by fitting predictions at varying months
 seasonal_data <- expand_grid(
   education = unique(counts_data$education),
-  time_index = 200,  # Mid-series
-  month = 1:12
+  time_index = 200,  # Mid-series (2016, no shock)
+  month = 1:12,
+  shock_2008_2009 = 0,
+  shock_2020 = 0
 ) %>%
   as.data.frame()
 
