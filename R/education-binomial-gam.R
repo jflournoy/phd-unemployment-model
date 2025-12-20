@@ -23,8 +23,8 @@
 #' The model structure is:
 #' cbind(n_unemployed, n_employed) ~ education + shock_2008_2009 + shock_2020 +
 #'   s(time_index, k=time_k, by=education, bs="tp") +
-#'   s(time_index, k=20, by=interaction(education, shock_2008_2009), bs="tp") +
-#'   s(time_index, k=20, by=interaction(education, shock_2020), bs="tp") +
+#'   s(time_index, k=40, by=interaction(education, shock_2008_2009), bs="tp") +
+#'   s(time_index, k=40, by=interaction(education, shock_2020), bs="tp") +
 #'   s(month, k=12, bs="cc") + s(month, k=12, bs="cc", by=education)
 #'
 #' This structure balances flexibility and stability through a seven-component decomposition:
@@ -42,10 +42,10 @@
 #'
 #' The education-specific shock × time interactions capture nonlinear crisis dynamics - unemployment
 #' doesn't just shift up during crises, and crisis responses vary by education level. PhD holders may have
-#' different crisis trajectories than high school graduates. Using k=20 for 48-month shock periods
-#' (2007-2010: 48 months, 2019-2021: 36 months) provides adequate flexibility per education group.
+#' different crisis trajectories than high school graduates. Using k=40 for 48-month shock periods
+#' (2007-2010: 48 months, 2019-2021: 36 months) provides ~1 knot per month for detailed crisis dynamics per education group.
 #' The interaction() specification creates separate smooths for each education × shock combination,
-#' with shared smoothing parameters (id=2,3) across education levels for stability.
+#' with shared smoothing parameters (id=2,3) across education levels for stability while allowing education-specific magnitudes.
 #'
 #' The two-component seasonality structure (k=12 shared + k=12 by-education) provides more stable
 #' estimation by pooling information while allowing education-specific deviations where the data
@@ -114,8 +114,8 @@ fit_education_binomial_gam <- function(data,
   formula <- cbind(n_unemployed, n_employed) ~ education +
     shock_2008_2009 + shock_2020 +
     s(time_index, k = time_k, by = education, bs = "tp", id = 1) +
-    s(time_index, k = 20, by = interaction(education, shock_2008_2009), bs = "tp", id = 2) +
-    s(time_index, k = 20, by = interaction(education, shock_2020), bs = "tp", id = 3) +
+    s(time_index, k = 40, by = interaction(education, shock_2008_2009), bs = "tp", id = 2) +
+    s(time_index, k = 40, by = interaction(education, shock_2020), bs = "tp", id = 3) +
     s(month, k = 12, bs = "cc") +
     s(month, k = 12, bs = "cc", by = education, id = 4)
 
