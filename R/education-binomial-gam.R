@@ -23,27 +23,31 @@
 #' The model structure is:
 #' cbind(n_unemployed, n_employed) ~ education + shock_2008_2009 + shock_2020 +
 #'   s(time_index, k=time_k, by=education, bs="tp") +
-#'   s(time_index, k=20, by=shock_2008_2009, bs="tp") +
-#'   s(time_index, k=20, by=shock_2020, bs="tp") +
-#'   s(month, k=14, bs="cc") + s(month, k=14, bs="cc", by=education)
+#'   s(time_index, k=20, by=interaction(education, shock_2008_2009), bs="tp") +
+#'   s(time_index, k=20, by=interaction(education, shock_2020), bs="tp") +
+#'   s(month, k=12, bs="cc") + s(month, k=12, bs="cc", by=education)
 #'
-#' This structure balances flexibility and stability through a six-component decomposition:
+#' This structure balances flexibility and stability through a seven-component decomposition:
 #' - Education main effects (intercept differences capturing baseline unemployment levels)
 #' - Economic shocks (binary indicators for 2007-2010 financial crisis and 2019-2021 pandemic)
 #'   Extended to include precursor years before official crisis start
-#' - Shock dynamics (time-varying effects allowing different unemployment trajectories during crises)
+#' - Education-specific shock dynamics (shock × time × education interaction allowing different
+#'   unemployment responses across education levels during crises)
 #' - Education-specific economic trends (time_index smooth varies by education, flexible basis dimension)
-#' - Shared seasonal pattern (global month smooth using all data for stable seasonal curve, k=14)
-#' - Education-specific seasonal deviations (by=education month smooth allowing groups to deviate, k=14)
+#' - Shared seasonal pattern (global month smooth using all data for stable seasonal curve, k=12)
+#' - Education-specific seasonal deviations (by=education month smooth allowing groups to deviate, k=12)
 #'
 #' Thin plate splines (bs="tp") provide maximum flexibility for capturing complex unemployment patterns
 #' across the full 25-year time span while maintaining numerical stability through bam() optimization.
 #'
-#' The shock × time interactions capture nonlinear crisis dynamics - unemployment doesn't just
-#' shift up during crises, it can rise/fall at different rates. Using k=20 for 48-month shock periods
-#' (2007-2010: 48 months, 2019-2021: 36 months) provides adequate flexibility.
+#' The education-specific shock × time interactions capture nonlinear crisis dynamics - unemployment
+#' doesn't just shift up during crises, and crisis responses vary by education level. PhD holders may have
+#' different crisis trajectories than high school graduates. Using k=20 for 48-month shock periods
+#' (2007-2010: 48 months, 2019-2021: 36 months) provides adequate flexibility per education group.
+#' The interaction() specification creates separate smooths for each education × shock combination,
+#' with shared smoothing parameters (id=2,3) across education levels for stability.
 #'
-#' The two-component seasonality structure (k=14 shared + k=14 by-education) provides more stable
+#' The two-component seasonality structure (k=12 shared + k=12 by-education) provides more stable
 #' estimation by pooling information while allowing education-specific deviations where the data
 #' strongly supports them. Groups with weak education-specific seasonality (e.g., PhD) will have
 #' their by-education smooth heavily penalized, preserving the shared pattern.
@@ -101,16 +105,17 @@ fit_education_binomial_gam <- function(data,
 
   # Fit quasi-binomial GAM with education-specific trends and flexible seasonality
   # Using thin plate splines (bs="tp") for maximum flexibility in capturing complex patterns
-  # Shock dynamics via shock × time interactions allow different unemployment trajectories during crises
+  # Shock dynamics via education-specific shock × time interactions allow different unemployment trajectories
+  # during crises for each education level (PhD crisis response ≠ HS crisis response)
   # Constrain smoothing parameters across factor levels (id=) for stability and parsimony:
   # - Economic cycles: shared smoothing across education levels (id=1)
-  # - Crisis dynamics: shared smoothing within each shock period (id=2,3)
+  # - Crisis dynamics: shared smoothing within education groups, but education-specific magnitudes (id=2,3)
   # - Seasonal variation: shared smoothing across education levels (id=4)
   formula <- cbind(n_unemployed, n_employed) ~ education +
     shock_2008_2009 + shock_2020 +
     s(time_index, k = time_k, by = education, bs = "tp", id = 1) +
-    s(time_index, k = 20, by = shock_2008_2009, bs = "tp", id = 2) +
-    s(time_index, k = 20, by = shock_2020, bs = "tp", id = 3) +
+    s(time_index, k = 20, by = interaction(education, shock_2008_2009), bs = "tp", id = 2) +
+    s(time_index, k = 20, by = interaction(education, shock_2020), bs = "tp", id = 3) +
     s(month, k = 12, bs = "cc") +
     s(month, k = 12, bs = "cc", by = education, id = 4)
 
