@@ -85,7 +85,8 @@ extract_shock_effects <- function(model_result, shock_type = "2008_2009") {
   shock_effects <- data.frame()
 
   for (time_idx in time_indices) {
-    year <- 2000 + floor((time_idx - 1) / 12)
+    # Use fractional year for smooth x-axis spacing (not integer grouping)
+    year_frac <- 2000 + (time_idx - 1) / 12
 
     # Prediction with shock
     pred_shock <- data.frame(
@@ -111,7 +112,7 @@ extract_shock_effects <- function(model_result, shock_type = "2008_2009") {
     shock_effect <- fit_shock$fit - fit_no_shock$fit
 
     shock_effects <- rbind(shock_effects, data.frame(
-      year = year,
+      year = year_frac,
       time_index = time_idx,
       shock_period = shock_type,
       unemployment_rate_with_shock = fit_shock$fit,
