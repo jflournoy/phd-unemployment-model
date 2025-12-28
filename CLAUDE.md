@@ -216,6 +216,7 @@ aggregate(EMPSTAT ~ YEAR + MONTH, data = cps_phd, FUN = mean)
 ## Quarto Report Standards
 **CRITICAL: NO caching in Quarto documents**
 
+- **Keep model code in reports** - Always include the model fitting code directly in Quarto reports, not just loading from external functions. This makes the model specification visible and auditable.
 - **Never use `cache=TRUE`** - Caching is disabled project-wide for reproducibility
 - **Always re-run from scratch** - Every render should execute all code chunks fresh
 - **Reproducibility priority** - Ensures reports always reflect current code state

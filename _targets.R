@@ -108,15 +108,16 @@ list(
   # Model Fitting Targets (Frequentist GAMs for now, Bayesian later)
   # ==========================================================================
 
-  ## Primary Education-Binomial GAM Model with Shock Dynamics
-  ## Uses thin plate splines (bs="tp") for maximum flexibility
-  ## Extended shock periods (2007-2010 financial crisis, 2019-2021 pandemic)
+  ## Primary Education-Binomial GAM Model with Fuzzy Impulse Shock Dynamics
+  ## Uses continuous shock intensity variables with exponential decay
+  ## Shock effects persist naturally as intensity decays over time
+  ## Unpenalized education-specific seasonal effects (fx=TRUE)
   ## Verbose logging for model diagnostics and convergence checking
   tar_target(
     model_education_binomial,
     {
       cat("\n", strrep("=", 80), "\n")
-      cat("STARTING MODEL FITTING: Education-Binomial GAM with Shock Dynamics\n")
+      cat("STARTING MODEL FITTING: Adaptive Education-Binomial GAM\n")
       cat("Timestamp:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
       cat("Data rows:", nrow(education_counts), "\n")
       cat("Education levels:", paste(unique(education_counts$education), collapse = ", "), "\n")
@@ -124,18 +125,17 @@ list(
 
       cat("Model specifications:\n")
       cat("  - Family: Quasi-binomial\n")
-      cat("  - Main time smooth: k=150, bs='tp', id=1 (shared across education)\n")
-      cat("  - Shock 2008-2009 smooth: k=20, bs='tp', id=2 (shared smoothing)\n")
-      cat("  - Shock 2020 smooth: k=20, bs='tp', id=3 (shared smoothing)\n")
-      cat("  - Seasonal smooths: k=12 shared + k=12 by-education (id=4), cyclic cubic\n")
+      cat("  - Year-based adaptive smooth: s(year_frac, bs='ad', k=30) - no season leakage\n")
+      cat("  - Education deviations: s(year_frac, education, bs='fs', k=20) - partial pooling\n")
+      cat("  - Global seasonality: s(month, bs='cc', k=12)\n")
+      cat("  - Education seasonality: s(month, education, bs='fs', k=12) cyclic\n")
       cat("  - Optimizer: bam() with method='fREML'\n\n")
 
       start_time <- Sys.time()
 
       result <- fit_education_binomial_gam(
         education_counts,
-        use_quasi = TRUE,
-        time_k = 150
+        use_quasi = TRUE
       )
 
       end_time <- Sys.time()
@@ -148,6 +148,8 @@ list(
       cat("Deviance explained:", round(result$summary_stats$deviance_explained * 100, 1), "%\n")
       cat("Dispersion parameter:", round(result$summary_stats$dispersion, 2), "\n")
       cat("Number of smooth terms:", length(result$model$smooth), "\n")
+      cat("Time span:", result$summary_stats$time_span, "\n")
+      cat("Education levels:", result$summary_stats$n_education_levels, "\n")
       cat(strrep("=", 80), "\n\n")
 
       result

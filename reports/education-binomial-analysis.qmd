@@ -13,7 +13,7 @@ format:
     embed-resources: true
     self-contained: true
 execute:
-  echo: false
+  echo: true
   warning: false
   message: false
   cache: false
@@ -21,694 +21,553 @@ execute:
 
 ## Executive Summary
 
-This analysis models unemployment rates across seven education levels using a quasi-binomial generalized additive model (GAM) fit to 25 years (2000-2025) of monthly Current Population Survey data. By analyzing all education levels in a single model, we can:
-
-1. **Quantify PhD unemployment premium** relative to other degrees
-2. **Measure how economic cycles affect different education groups** differently
-3. **Identify seasonal patterns** in labor market dynamics
-4. **Account for overdispersion** in unemployment count data (dispersion = 14.76)
-
-### Key Finding
-
-PhD unemployment averages **1.7%** over 25 years but has risen to **2.6%** recently. Using quasi-binomial models reveals substantial overdispersion (14.76×), demonstrating that standard binomial assumptions severely underestimate uncertainty.
+This analysis models unemployment rates across seven education levels using a quasi-binomial GAM with education-specific adaptive time trends and seasonal patterns.
 
 ---
 
 ## Data & Methods
 
 ```{r}
-library(phdunemployment)
-library(here)
+#| label: setup
 library(mgcv)
 library(data.table)
 library(ggplot2)
-library(tidyr)
-library(dplyr)
+library(here)
 
 # Load count data
 counts_data <- readRDS(here("data", "education-spectrum-counts.rds"))
+data <- as.data.table(counts_data)
 
-# Display data summary
+# Prepare data
+data$education <- factor(data$education)
+data$month <- as.integer(data$month)
+
+# Add year variables
+if (!"year" %in% names(data)) {
+  data$year <- 2000 + floor((data$time_index - 1) / 12)
+}
+data$year_cont <- data$year + (data$month - 0.5) / 12
+
+# Common plot settings
+edu_labels <- c(
+  "bachelors" = "Bachelor's Degree",
+  "high_school" = "High School",
+  "less_than_hs" = "Less than High School",
+  "masters" = "Master's Degree",
+  "phd" = "PhD",
+  "professional" = "Professional Degree",
+  "some_college" = "Some College"
+)
+
+edu_colors <- c(
+  "phd" = "#1f77b4",
+  "professional" = "#ff7f0e",
+  "masters" = "#2ca02c",
+  "bachelors" = "#d62728",
+  "some_college" = "#9467bd",
+  "high_school" = "#8c564b",
+  "less_than_hs" = "#e377c2"
+)
+
 cat("Data Summary:\n")
-cat("- Time period:", min(counts_data$year), "to", max(counts_data$year), "\n")
-cat("- Total months:", nrow(counts_data) / length(unique(counts_data$education)), "\n")
-cat("- Education levels:", length(unique(counts_data$education)), "\n")
-cat("- Total observations:", nrow(counts_data), "\n\n")
-
-# Education level summary
-summary_by_ed <- counts_data %>%
-  group_by(education) %>%
-  summarise(
-    n_months = n(),
-    mean_unemp_rate = mean(unemployment_rate, na.rm = TRUE),
-    max_unemp_rate = max(unemployment_rate, na.rm = TRUE),
-    min_unemp_rate = min(unemployment_rate, na.rm = TRUE),
-    sd_unemp_rate = sd(unemployment_rate, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(mean_unemp_rate))
-
-print(summary_by_ed)
+cat("- Time period:", min(data$year), "to", max(data$year), "\n")
+cat("- Total months:", nrow(data) / length(unique(data$education)), "\n")
+cat("- Education levels:", length(unique(data$education)), "\n")
+cat("- Total observations:", nrow(data), "\n")
 ```
 
 ### Model Specification
 
-We fit a quasi-binomial GAM with the formula:
+The model decomposes unemployment into global effects and education-specific deviations:
 
-$$\text{cbind}(n_{unemployed}, n_{employed}) \sim \text{education} + \text{shock\_2008\_2009} + \text{shock\_2020} +$$
-$$s(\text{time\_index}, k=150, \text{by=education}, \text{bs="tp"}) +$$
-$$s(\text{time\_index}, k=20, \text{by=shock\_2008\_2009}, \text{bs="tp"}) +$$
-$$s(\text{time\_index}, k=20, \text{by=shock\_2020}, \text{bs="tp"}) +$$
-$$s(\text{month}, k=12, \text{bs="cc"}) + s(\text{month}, k=12, \text{bs="cc"}, \text{by=education})$$
+$$\text{cbind}(n_{unemployed}, n_{employed}) \sim \text{education} + s(\text{year\_cont}) + s(\text{year\_cont}, \text{by=education}) + s(\text{month}, \text{bs="cc"}) + s(\text{month}, \text{by=education}, \text{bs="cc"})$$
 
-**Model components:**
-- **education**: Main effect for each education level (intercept differences)
-- **shock_2008_2009, shock_2020**: Binary indicators for major economic disruptions including precursor + crisis + recovery:
-  - 2007-2010 (48 months): Financial crisis precursor, crisis, and recovery
-  - 2019-2021 (36 months): Pandemic precursor, crisis, and recovery
-- **s(time_index, by=education)**: Education-specific smooth trends (k=150, thin plate splines) capturing long-term unemployment dynamics
-- **s(time_index, by=shock_*)**: Shock-specific time dynamics (k=20, thin plate splines) allowing different unemployment trajectories during extended crisis periods
-- **s(month, bs="cc")**: Shared cyclic cubic spline for seasonal patterns (k=12) applied to all education levels
-- **s(month, bs="cc", by=education)**: Education-specific seasonal deviations (k=12) from the shared seasonal pattern
-- **Family**: Quasi-binomial with automatic dispersion estimation
-- **Method**: fREML with bam() optimization for large datasets
+**Key design choices:**
 
----
-
-## Model Fitting & Diagnostics
+- **Global time trend**: `s(year_cont, bs="ad")` captures the overall unemployment trajectory
+- **Education time deviations**: `s(year_cont, by=education, bs="ad")` captures how each education level deviates from global
+- **Global seasonality**: `s(month, bs="cc")` captures the common seasonal pattern
+- **Education seasonal deviations**: `s(month, by=education, bs="cc")` captures education-specific seasonal differences
+- **Shared smoothing**: `id=` constraints ensure consistent wiggliness within each effect type
 
 ```{r}
-# Load pre-built model from targets pipeline (ensure we're in project root for targets cache)
-library(targets)
-library(here)
+#| label: fit-model
+#| code-fold: false
+# Fit the quasi-binomial GAM with education-specific smooths
+cat("\n=== Fitting Model ===\n")
+start_time <- Sys.time()
 
-# Temporarily change to project root to access targets data store
-old_wd <- getwd()
-setwd(here())
-model_result_quasi <- tar_read(model_education_binomial)
-setwd(old_wd)
+model <- bam(
+  cbind(n_unemployed, n_employed) ~
+    education +
+    # Time trends (education-specific)
+    s(year_cont, by = education, bs = "ad", k = 100, id = 1) +
+    # Seasonality
+    s(month, bs = "cc", k = 12, id = 2) +
+    ti(year_cont, month, bs = c("tp", "cc"), k = c(20, 12)) +
+    s(month, by = education, bs = "cc", k = 12, id = 2),
+  data = data,
+  family = quasibinomial(),
+  method = "fREML",
+  discrete = TRUE,
+  nthreads = 4
+)
 
-model <- model_result_quasi$model
+end_time <- Sys.time()
+elapsed <- as.numeric(difftime(end_time, start_time, units = "secs"))
 
-# Display summary
-cat("=== QUASI-BINOMIAL MODEL SUMMARY ===\n\n")
-cat("Convergence:", model_result_quasi$convergence_info$converged, "\n")
-cat("Deviance explained:", round(model_result_quasi$summary_stats$deviance_explained * 100, 1), "%\n")
-cat("Dispersion parameter:", round(model_result_quasi$summary_stats$dispersion, 2), "\n")
-cat("\nDispersion interpretation:\n")
-cat("- Value > 1 indicates OVERDISPERSION (expected for count data)\n")
-cat("- This value (", round(model_result_quasi$summary_stats$dispersion, 2),
-    ") means quasi-binomial is\n")
-cat("  critical: binomial SEs would be",
-    round(sqrt(model_result_quasi$summary_stats$dispersion), 1),
-    "× too small!\n")
-
-# Summary statistics
-cat("\n=== SMOOTHING COMPONENTS ===\n")
-summary(model)
+cat("Runtime:", round(elapsed, 1), "seconds\n")
+cat("Converged:", model$converged, "\n")
 ```
 
-### Model Quality & Basis Dimension
-
-The quasi-binomial GAM uses thin plate splines with k=150 basis functions for the main time trend to capture complex unemployment dynamics across the full 25-year period. This flexible basis was chosen to:
-
-- Capture long-term labor market structural changes
-- Allow education-specific trajectories (via `by=education`)
-- Model shock × time dynamics during economic crises (k=20)
-- Maintain parsimonious seasonal effects (k=12)
+### Model Performance
 
 ```{r}
-cat("=== MODEL QUALITY ASSESSMENT (k=150 thin plate splines) ===\n\n")
-cat("Deviance explained:", round(model_result_quasi$summary_stats$deviance_explained * 100, 1), "%\n")
-cat("Dispersion parameter:", round(model_result_quasi$summary_stats$dispersion, 2), "\n")
-cat("Convergence achieved: ", model_result_quasi$convergence_info$converged, "\n\n")
-cat("Model Performance Interpretation:\n")
-cat("- Deviance explained > 98% indicates excellent model fit\n")
-cat("- Dispersion = 1.86 shows appropriate handling of overdispersion\n")
-cat("- Convergence confirms optimal parameter estimates\n")
+#| label: model-performance
+cat("Model Performance:\n")
+cat("- Deviance explained:", round(summary(model)$dev.expl * 100, 1), "%\n")
+cat("- Dispersion:", round(summary(model)$dispersion, 2), "\n\n")
+
+cat("Smooth term EDFs:\n")
+st <- summary(model)$s.table
+print(round(st[, c("edf", "Ref.df", "F")], 1))
 ```
-
-### Model Diagnostics Plots
-
-```{r fig.height=10, fig.width=12}
-# Standard GAM diagnostics
-par(mfrow = c(2, 2))
-plot(model, pages = 1, shade = TRUE)
-par(mfrow = c(1, 1))
-```
-
-These plots show:
-- **Top-left**: Trend smooth over time (education adjusted)
-- **Top-right**: Seasonal pattern (education adjusted)
-- **Bottom**: Residual diagnostics
 
 ---
 
-## Education-Specific Unemployment Estimates
+## 1. Full Model Predictions with Data
 
-### Current Unemployment Rates (December 2025)
+These plots show the complete model predictions (including both time trend and seasonal effects) overlaid on the observed data.
 
 ```{r}
-# Get latest estimates
-current_estimates <- predict_education_unemployment(
-  model_result_quasi,
-  time_point = 308,  # Dec 2025 (latest)
-  month = 12
-)
+#| label: full-predictions-setup
+# Get predictions for observed data
+data[, observed_rate := n_unemployed / (n_unemployed + n_employed)]
 
-# Format for display
-current_est_display <- current_estimates %>%
-  mutate(
-    unemployment_rate = paste0(round(unemployment_rate * 100, 2), "%"),
-    ci_lower = paste0(round(ci_lower * 100, 2), "%"),
-    ci_upper = paste0(round(ci_upper * 100, 2), "%")
-  ) %>%
-  rename(
-    Education = education,
-    `Unemployment Rate` = unemployment_rate,
-    `95% CI Lower` = ci_lower,
-    `95% CI Upper` = ci_upper
-  ) %>%
-  arrange(desc(`Unemployment Rate`))
-
-knitr::kable(current_est_display, caption = "Current Unemployment Estimates (Dec 2025)")
+preds <- predict(model, type = "response", se.fit = TRUE)
+data[, fitted := preds$fit]
+data[, se := preds$se.fit]
+data[, ci_lower := pmax(0, fitted - 1.96 * se)]
+data[, ci_upper := pmin(1, fitted + 1.96 * se)]
 ```
 
-### Unemployment Trend by Education Level
+### By Education Level (Faceted)
 
-```{r fig.height=10, fig.width=14}
-# Create TRULY seasonality-free trend predictions by excluding seasonal smooth terms
-# The issue: fixing month=6 doesn't remove seasonality, it just evaluates it at a fixed point.
-# With k=150, the time smooth can pick up residual seasonal variation.
-# Solution: completely exclude seasonal smooths from predictions.
+```{r}
+#| label: full-predictions-faceted
+#| fig-height: 14
+#| fig-width: 12
 
-unique_times <- unique(model_result_quasi$data[, c("year", "time_index")])
-unique_times <- unique_times[order(unique_times$time_index), ]
-
-trend_pred_data <- expand.grid(
-  time_index = unique_times$time_index,
-  month = 6,  # Still required for formula, but will be excluded
-  education = unique(model_result_quasi$data$education)
-)
-
-# Add shock variables based on year (extended to include precursor + crisis + recovery)
-trend_pred_data$year <- 2000 + floor((trend_pred_data$time_index - 1) / 12)
-trend_pred_data$shock_2008_2009 <- as.integer(trend_pred_data$year >= 2007 & trend_pred_data$year <= 2010)
-trend_pred_data$shock_2020 <- as.integer(trend_pred_data$year >= 2019 & trend_pred_data$year <= 2021)
-
-# Identify seasonal smooth terms to exclude
-smooth_labels <- sapply(model$smooth, function(x) x$label)
-seasonal_smooths <- grep("s\\(month", smooth_labels, value = TRUE)
-
-# Predict excluding both seasonal components: shared s(month) and by=education s(month)
-trend_preds <- predict(model,
-                      newdata = trend_pred_data,
-                      type = "response",
-                      se.fit = TRUE,
-                      exclude = seasonal_smooths)
-
-predictions_by_time <- data.frame(
-  education = trend_pred_data$education,
-  time_index = trend_pred_data$time_index,
-  date = as.Date(paste0(
-    2000 + floor((trend_pred_data$time_index - 1) / 12), "-",
-    formatC(((trend_pred_data$time_index - 1) %% 12) + 1, width = 2, flag = "0"), "-01"
-  )),
-  unemployment_rate = trend_preds$fit,
-  se = trend_preds$se.fit,
-  ci_lower = pmax(0, trend_preds$fit - 1.96 * trend_preds$se.fit),
-  ci_upper = pmin(1, trend_preds$fit + 1.96 * trend_preds$se.fit)
-)
-
-# Extract raw data for points (all observations)
-raw_data <- counts_data %>%
-  mutate(date = as.Date(paste0(year, "-", month, "-01"))) %>%
-  select(education, date, unemployment_rate)
-
-# Plot with raw data, seasonality-free trend, and CIs
-ggplot(predictions_by_time, aes(x = date, y = unemployment_rate * 100, color = education, fill = education)) +
-  geom_ribbon(aes(ymin = ci_lower * 100, ymax = ci_upper * 100), alpha = 0.2, color = NA) +
-  geom_point(data = raw_data, aes(y = unemployment_rate * 100), alpha = 0.2, size = 1) +
-  geom_line(linewidth = 1.2) +
-  scale_color_manual(
-    values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01",
-               "high_school" = "#C73E1D", "some_college" = "#6A994E",
-               "less_than_hs" = "#BC4749", "associates" = "#8E7DBE")
-  ) +
-  scale_fill_manual(
-    values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01",
-               "high_school" = "#C73E1D", "some_college" = "#6A994E",
-               "less_than_hs" = "#BC4749", "associates" = "#8E7DBE")
-  ) +
+ggplot(data, aes(x = year_cont)) +
+  geom_point(aes(y = observed_rate * 100), alpha = 0.3, size = 0.5, color = "gray40") +
+  geom_ribbon(aes(ymin = ci_lower * 100, ymax = ci_upper * 100), alpha = 0.3, fill = "steelblue") +
+  geom_line(aes(y = fitted * 100), color = "steelblue", linewidth = 0.8) +
+  facet_wrap(~education, scales = "free_y", ncol = 2, labeller = labeller(education = edu_labels)) +
   labs(
-    title = "Unemployment Trends by Education Level (2000-2025)",
-    subtitle = "Seasonality-free trends (June), raw data (faint points), and 95% CIs (shaded regions)",
+    title = "Full Model Predictions by Education Level",
+    subtitle = "Model fit with 95% CI overlaid on observed unemployment rates",
     x = "Year",
-    y = "Unemployment Rate (%)",
-    color = "Education Level",
-    fill = "Education Level"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    legend.position = "bottom",
-    panel.grid.minor = element_blank()
-  )
-```
-
----
-
-## Comparative Analysis: PhD vs Other Degrees
-
-### PhD vs All Other Education Levels
-
-```{r fig.height=10, fig.width=12}
-# Compare PhD to others
-comparison_data <- predictions_by_time %>%
-  mutate(
-    group = if_else(education == "phd", "PhD", "Other Education Levels")
-  ) %>%
-  group_by(date, group) %>%
-  summarise(unemployment_rate = mean(unemployment_rate, na.rm = TRUE), .groups = "drop")
-
-ggplot(comparison_data, aes(x = date, y = unemployment_rate * 100, color = group, linewidth = group)) +
-  geom_line() +
-  scale_linewidth_manual(values = c("PhD" = 1.5, "Other Education Levels" = 0.7)) +
-  scale_color_manual(values = c("PhD" = "#2E86AB", "Other Education Levels" = "#A23B72")) +
-  labs(
-    title = "PhD vs Average Unemployment Rate",
-    subtitle = "PhD consistently lower than other education levels",
-    x = "Year",
-    y = "Unemployment Rate (%)",
-    color = NULL,
-    linewidth = NULL
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    legend.position = "bottom",
-    panel.grid.minor = element_blank()
-  )
-```
-
-### Economic Downturn Response
-
-```{r fig.height=8, fig.width=12}
-# Highlight recessions
-recession_periods <- data.frame(
-  start = as.Date(c("2007-12-01", "2020-03-01")),
-  end = as.Date(c("2009-06-01", "2020-05-01")),
-  recession = c("2008 Financial Crisis", "COVID-19 Pandemic")
-)
-
-# Create comparison of PhD vs selected education levels
-compare_levels <- c("phd", "masters", "bachelors", "high_school")
-compare_data <- predictions_by_time %>%
-  filter(education %in% compare_levels) %>%
-  mutate(education = factor(education, levels = compare_levels))
-
-ggplot(compare_data, aes(x = date, y = unemployment_rate * 100, color = education, linewidth = education)) +
-  geom_rect(
-    data = recession_periods,
-    aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf, fill = recession),
-    alpha = 0.15,
-    color = NA,
-    inherit.aes = FALSE
-  ) +
-  geom_line() +
-  scale_linewidth_manual(values = c("phd" = 1.5, "masters" = 1.2, "bachelors" = 1, "high_school" = 0.8)) +
-  scale_color_manual(
-    values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01", "high_school" = "#C73E1D")
-  ) +
-  scale_fill_manual(values = c("2008 Financial Crisis" = "#FF6B6B", "COVID-19 Pandemic" = "#4ECDC4")) +
-  labs(
-    title = "Unemployment by Education Level: Economic Downturn Sensitivity",
-    subtitle = "Gray regions mark recessions. PhD unemployment is less cyclical.",
-    x = "Year",
-    y = "Unemployment Rate (%)",
-    color = "Education Level",
-    linewidth = "Education Level",
-    fill = NULL
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    legend.position = "bottom",
-    panel.grid.minor = element_blank()
-  )
-```
-
----
-
-## Seasonal Patterns
-
-### Monthly Seasonal Effects
-
-```{r fig.height=9, fig.width=14}
-# Extract seasonal component by fitting predictions at varying months
-seasonal_data <- expand_grid(
-  education = unique(counts_data$education),
-  time_index = 200,  # Mid-series (2016, no shock)
-  month = 1:12,
-  shock_2008_2009 = 0,
-  shock_2020 = 0
-) %>%
-  as.data.frame()
-
-seasonal_preds <- predict(model, newdata = seasonal_data, type = "response", se.fit = TRUE)
-
-seasonal_plot_data <- data.frame(
-  education = seasonal_data$education,
-  month = seasonal_data$month,
-  unemployment_rate = seasonal_preds$fit,
-  se = seasonal_preds$se.fit,
-  ci_lower = pmax(0, seasonal_preds$fit - 1.96 * seasonal_preds$se.fit),
-  ci_upper = pmin(1, seasonal_preds$fit + 1.96 * seasonal_preds$se.fit)
-)
-
-# Extract raw seasonal data (average by month across all years)
-raw_seasonal <- counts_data %>%
-  group_by(education, month) %>%
-  summarise(unemployment_rate = mean(unemployment_rate, na.rm = TRUE), .groups = "drop")
-
-ggplot(seasonal_plot_data, aes(x = month, y = unemployment_rate * 100, color = education, fill = education)) +
-  geom_ribbon(aes(ymin = ci_lower * 100, ymax = ci_upper * 100), alpha = 0.2, color = NA) +
-  geom_point(data = raw_seasonal, aes(y = unemployment_rate * 100), alpha = 0.4, size = 2) +
-  geom_line(linewidth = 1) +
-  scale_x_continuous(breaks = 1:12, labels = month.abb) +
-  scale_color_manual(
-    values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01",
-               "high_school" = "#C73E1D", "some_college" = "#6A994E",
-               "less_than_hs" = "#BC4749", "associates" = "#8E7DBE")
-  ) +
-  scale_fill_manual(
-    values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01",
-               "high_school" = "#C73E1D", "some_college" = "#6A994E",
-               "less_than_hs" = "#BC4749", "associates" = "#8E7DBE")
-  ) +
-  labs(
-    title = "Seasonal Unemployment Patterns by Education Level",
-    subtitle = "Raw monthly averages (points), fitted seasonal component (lines), and 95% CIs (shaded regions)",
-    x = "Month",
-    y = "Unemployment Rate (%)",
-    color = "Education Level",
-    fill = "Education Level"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "bottom",
-    panel.grid.minor = element_blank()
-  )
-```
-
-**Observation**: The seasonal pattern is shared across all education levels - unemployment typically rises in winter months and falls in summer, reflecting academic and hiring cycles.
-
-### Overall Shared Seasonal Pattern
-
-The model uses a two-component seasonal decomposition:
-1. **Shared pattern** (applied to all education levels equally)
-2. **Education-specific deviations** (allowing groups with strong seasonality to deviate from the shared pattern)
-
-This section shows the overall shared seasonal component, which provides a stable baseline by pooling information across all education groups.
-
-```{r fig.height=7, fig.width=12}
-# Extract just the shared seasonal smooth term s(month)
-# Using terms parameter to isolate only the month smooth contribution
-shared_seasonal_data <- expand.grid(
-  month = 1:12,
-  time_index = 200,
-  education = "phd",  # Education doesn't affect the shared smooth
-  shock_2008_2009 = 0,  # Time index 200 is in 2016, no shock
-  shock_2020 = 0
-) %>%
-  as.data.frame()
-
-# Extract the contribution of just s(month) smooth (shared component only)
-# by using terms = "s(month)" to isolate this smooth's partial effect
-shared_smooth_preds <- predict(model,
-                               newdata = shared_seasonal_data,
-                               type = "link",  # Get linear predictor contribution
-                               terms = "s(month)",  # Only the shared month smooth
-                               se.fit = TRUE)
-
-# Extract point estimates and standard errors
-shared_smooth_effect <- shared_smooth_preds$fit
-shared_smooth_se <- shared_smooth_preds$se.fit
-
-# Create plot data with uncertainty
-shared_seasonal_plot <- data.frame(
-  month = 1:12,
-  smooth_effect = shared_smooth_effect,
-  se = shared_smooth_se
-)
-
-# Center the effect for interpretability
-shared_seasonal_plot$centered_effect <- shared_seasonal_plot$smooth_effect - mean(shared_seasonal_plot$smooth_effect)
-shared_seasonal_plot$se_centered <- shared_seasonal_plot$se  # SE doesn't change with centering
-shared_seasonal_plot$ci_lower <- shared_seasonal_plot$centered_effect - 1.96 * shared_seasonal_plot$se_centered
-shared_seasonal_plot$ci_upper <- shared_seasonal_plot$centered_effect + 1.96 * shared_seasonal_plot$se_centered
-
-# Plot the shared seasonal smooth pattern with uncertainty
-ggplot(shared_seasonal_plot, aes(x = month, y = centered_effect)) +
-  geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper),
-              alpha = 0.2, fill = "#2E86AB", color = NA) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray60", linewidth = 0.8) +
-  geom_line(linewidth = 1.5, color = "#2E86AB") +
-  geom_point(size = 3, color = "#2E86AB") +
-  scale_x_continuous(breaks = 1:12, labels = month.abb) +
-  labs(
-    title = "Overall Shared Seasonal Pattern",
-    subtitle = "Pure shared smooth s(month) extracted from model - the seasonal effect applied equally to all education levels",
-    x = "Month",
-    y = "Seasonal Effect (centered on log-odds scale)"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    panel.grid.minor = element_blank()
-  )
-```
-
-### Education-Specific Seasonal Deviations
-
-This section shows how each education group deviates from the overall shared seasonal pattern. Groups with weak seasonality (e.g., PhD) are heavily penalized by REML smoothing and deviate less from the shared pattern, while groups with strong education-specific seasonality (e.g., High School, Less than HS) show more prominent deviations.
-
-```{r fig.height=10, fig.width=14}
-# Extract education-specific deviations from the shared pattern
-# by comparing total prediction to shared smooth only
-
-all_education_seasonal <- expand_grid(
-  month = 1:12,
-  time_index = 200,
-  education = unique(counts_data$education),
-  shock_2008_2009 = 0,  # Time index 200 is in 2016, no shock
-  shock_2020 = 0
-) %>%
-  as.data.frame()
-
-# Get total prediction (all terms) for all education levels at each month WITH SEs
-total_preds <- predict(model, newdata = all_education_seasonal, type = "link", se.fit = TRUE)
-total_pred <- total_preds$fit
-total_se <- total_preds$se.fit
-
-# Get prediction with only shared smooth s(month) - same for all education levels
-# Create dummy data just for shared smooth extraction (education doesn't matter)
-shared_data_dummy <- expand_grid(
-  month = 1:12,
-  time_index = 200,
-  education = "phd",
-  shock_2008_2009 = 0,  # Time index 200 is in 2016, no shock
-  shock_2020 = 0
-) %>% as.data.frame()
-
-shared_preds_dummy <- predict(model, newdata = shared_data_dummy, type = "link",
-                              terms = "s(month)", se.fit = TRUE)
-
-# Extract shared predictions and SEs
-shared_pred_dummy <- shared_preds_dummy$fit
-shared_se_dummy <- shared_preds_dummy$se.fit
-
-# Replicate shared predictions and SEs to match all education levels
-n_ed <- length(unique(counts_data$education))
-shared_pred <- rep(shared_pred_dummy, times = n_ed)
-shared_se <- rep(shared_se_dummy, times = n_ed)
-
-# Calculate education-specific deviation (total - shared)
-# SEs propagate: SE(A-B) = sqrt(SE(A)^2 + SE(B)^2) assuming independence
-education_deviation <- total_pred - shared_pred
-deviation_se <- sqrt(total_se^2 + shared_se^2)
-
-# Build data frame with deviations and uncertainties
-deviation_data <- data.frame(
-  education = all_education_seasonal$education,
-  month = all_education_seasonal$month,
-  shared_effect = shared_pred,
-  total_effect = total_pred,
-  education_deviation = education_deviation,
-  deviation_se = deviation_se,
-  ci_lower = education_deviation - 1.96 * deviation_se,
-  ci_upper = education_deviation + 1.96 * deviation_se
-)
-
-# Plot education-specific deviations with confidence ribbons
-ggplot(deviation_data, aes(x = month, y = education_deviation, color = education, fill = education)) +
-  geom_ribbon(aes(ymin = ci_lower, ymax = ci_upper),
-              alpha = 0.15, color = NA) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray60", linewidth = 0.5) +
-  geom_line(linewidth = 1) +
-  geom_point(size = 2) +
-  facet_wrap(~education, nrow = 2) +
-  scale_x_continuous(breaks = 1:12, labels = month.abb) +
-  scale_color_manual(
-    values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01",
-               "high_school" = "#C73E1D", "some_college" = "#6A994E",
-               "less_than_hs" = "#BC4749", "associates" = "#8E7DBE")
-  ) +
-  scale_fill_manual(
-    values = c("phd" = "#2E86AB", "masters" = "#A23B72", "bachelors" = "#F18F01",
-               "high_school" = "#C73E1D", "some_college" = "#6A994E",
-               "less_than_hs" = "#BC4749", "associates" = "#8E7DBE")
-  ) +
-  labs(
-    title = "Education-Specific Seasonal Deviations",
-    subtitle = "How each education group deviates from the overall shared seasonal pattern (dashed line = zero deviation)",
-    x = "Month",
-    y = "Deviation from Shared Pattern (log-odds scale)"
+    y = "Unemployment Rate (%)"
   ) +
   theme_minimal(base_size = 11) +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "none",
+    strip.text = element_text(face = "bold"),
     panel.grid.minor = element_blank()
   )
 ```
 
-**Interpretation**:
-- Groups near the zero line (PhD, Masters) have minimal education-specific seasonality and follow the shared seasonal pattern closely
-- Groups with larger deviations (High School, Less than HS) show stronger education-specific seasonal effects
-- This decomposition reveals which education groups have distinct seasonal hiring/unemployment cycles beyond the overall pattern
+### All Education Levels Combined
+
+```{r}
+#| label: full-predictions-combined
+#| fig-height: 7
+#| fig-width: 12
+
+ggplot(data, aes(x = year_cont, color = education, fill = education)) +
+  geom_point(aes(y = observed_rate * 100), alpha = 0.15, size = 0.3) +
+  geom_ribbon(aes(ymin = ci_lower * 100, ymax = ci_upper * 100), alpha = 0.1, color = NA) +
+  geom_line(aes(y = fitted * 100), linewidth = 0.8) +
+  scale_color_manual(values = edu_colors, labels = edu_labels) +
+  scale_fill_manual(values = edu_colors, labels = edu_labels) +
+  labs(
+    title = "Full Model Predictions Across All Education Levels",
+    subtitle = "Higher education consistently associated with lower unemployment",
+    x = "Year",
+    y = "Unemployment Rate (%)",
+    color = "Education",
+    fill = "Education"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "right")
+```
 
 ---
 
-## Statistical Findings
+## 2. Time Trend Marginal Effects (Averaged Over Seasonality)
 
-### Education Level Differences
+These plots show model predictions **averaged across all 12 months**, giving true marginal effects that integrate out seasonal variation.
 
 ```{r}
-# Get point estimates for each education level at a mid-range time point
-mid_point_estimates <- predict_education_unemployment(
-  model_result_quasi,
-  time_point = 150,  # Mid 2012
-  month = 6
-) %>%
-  arrange(unemployment_rate)
+#| label: time-marginal-setup
+# Create prediction grid: vary year_cont, average over all months
+edu_levels <- levels(data$education)
+year_seq <- seq(min(data$year_cont), max(data$year_cont), length.out = 200)
 
-cat("=== UNEMPLOYMENT RATE HIERARCHY (June 2012) ===\n\n")
-for (i in seq_len(nrow(mid_point_estimates))) {
-  row <- mid_point_estimates[i, ]
-  cat(sprintf(
-    "%2d. %15s: %5.2f%% (95%% CI: %5.2f%% - %5.2f%%)\n",
-    i,
-    row$education,
-    row$unemployment_rate * 100,
-    row$ci_lower * 100,
-    row$ci_upper * 100
+time_marginal <- data.table()
+
+for (edu in edu_levels) {
+  # Predict at each year for all 12 months, then average
+  year_preds <- sapply(year_seq, function(yr) {
+    pred_grid <- data.frame(
+      education = factor(edu, levels = edu_levels),
+      year_cont = yr,
+      month = 1:12
+    )
+    preds <- predict(model, newdata = pred_grid, type = "response", se.fit = TRUE)
+    c(mean(preds$fit), mean(preds$se.fit))  # Average across months
+  })
+
+  time_marginal <- rbind(time_marginal, data.table(
+    education = edu,
+    year_cont = year_seq,
+    fitted = year_preds[1, ],
+    se = year_preds[2, ],
+    ci_lower = pmax(0, year_preds[1, ] - 1.96 * year_preds[2, ]),
+    ci_upper = pmin(1, year_preds[1, ] + 1.96 * year_preds[2, ])
+  ))
+}
+```
+
+### By Education Level (Faceted)
+
+```{r}
+#| label: time-marginal-faceted
+#| fig-height: 14
+#| fig-width: 12
+
+ggplot(time_marginal, aes(x = year_cont)) +
+  geom_ribbon(aes(ymin = ci_lower * 100, ymax = ci_upper * 100), alpha = 0.3, fill = "steelblue") +
+  geom_line(aes(y = fitted * 100), color = "steelblue", linewidth = 1) +
+  geom_vline(xintercept = c(2008, 2020), linetype = "dotted", alpha = 0.5, color = "red") +
+  facet_wrap(~education, scales = "free_y", ncol = 2, labeller = labeller(education = edu_labels)) +
+  labs(
+    title = "Time Trend Marginal Effects by Education Level",
+    subtitle = "Averaged across all 12 months; red lines mark 2008 and 2020",
+    x = "Year",
+    y = "Predicted Unemployment Rate (%)"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    strip.text = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+```
+
+### All Education Levels Combined
+
+```{r}
+#| label: time-marginal-combined
+#| fig-height: 7
+#| fig-width: 12
+
+ggplot(time_marginal, aes(x = year_cont, color = education, fill = education)) +
+  geom_ribbon(aes(ymin = ci_lower * 100, ymax = ci_upper * 100), alpha = 0.1, color = NA) +
+  geom_line(aes(y = fitted * 100), linewidth = 0.8) +
+  geom_vline(xintercept = c(2008, 2020), linetype = "dotted", alpha = 0.5, color = "red") +
+  scale_color_manual(values = edu_colors, labels = edu_labels) +
+  scale_fill_manual(values = edu_colors, labels = edu_labels) +
+  labs(
+    title = "Time Trend Marginal Effects Across Education Levels",
+    subtitle = "Averaged across all 12 months; red lines mark 2008 and 2020",
+    x = "Year",
+    y = "Predicted Unemployment Rate (%)",
+    color = "Education",
+    fill = "Education"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "right")
+```
+
+---
+
+## 3. Seasonal Marginal Effects (Year = 2025)
+
+These plots show model predictions with **year held constant at 2025**, varying month to isolate the seasonal pattern.
+
+```{r}
+#| label: seasonal-marginal-setup
+# Create prediction grid: hold year at 2025, vary month
+month_seq <- seq(1, 12, length.out = 100)  # Smooth over months
+
+seasonal_marginal <- data.table()
+
+for (edu in edu_levels) {
+  pred_grid <- data.frame(
+    education = factor(edu, levels = edu_levels),
+    year_cont = 2025,  # Hold year constant
+    month = month_seq
+  )
+
+  preds <- predict(model, newdata = pred_grid, type = "response", se.fit = TRUE)
+
+  seasonal_marginal <- rbind(seasonal_marginal, data.table(
+    education = edu,
+    month = month_seq,
+    fitted = as.numeric(preds$fit),
+    se = as.numeric(preds$se.fit),
+    ci_lower = pmax(0, as.numeric(preds$fit) - 1.96 * as.numeric(preds$se.fit)),
+    ci_upper = pmin(1, as.numeric(preds$fit) + 1.96 * as.numeric(preds$se.fit))
+  ))
+}
+```
+
+### By Education Level (Faceted)
+
+```{r}
+#| label: seasonal-marginal-faceted
+#| fig-height: 14
+#| fig-width: 12
+
+ggplot(seasonal_marginal, aes(x = month)) +
+  geom_ribbon(aes(ymin = ci_lower * 100, ymax = ci_upper * 100), alpha = 0.3, fill = "steelblue") +
+  geom_line(aes(y = fitted * 100), color = "steelblue", linewidth = 1) +
+  scale_x_continuous(breaks = 1:12, labels = month.abb) +
+  facet_wrap(~education, scales = "free_y", ncol = 2, labeller = labeller(education = edu_labels)) +
+  labs(
+    title = "Seasonal Marginal Effects by Education Level (Year = 2025)",
+    subtitle = "Year held constant at 2025 to isolate seasonal pattern",
+    x = "Month",
+    y = "Predicted Unemployment Rate (%)"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    strip.text = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+```
+
+### All Education Levels Combined (Mean-Centered)
+
+```{r}
+#| label: seasonal-marginal-combined
+#| fig-height: 7
+#| fig-width: 12
+
+# Center each education level by subtracting its mean for comparability
+seasonal_marginal_centered <- copy(seasonal_marginal)
+seasonal_marginal_centered[, fitted_pct := fitted * 100]
+seasonal_marginal_centered[, mean_pct := mean(fitted_pct), by = education]
+seasonal_marginal_centered[, centered := fitted_pct - mean_pct]
+seasonal_marginal_centered[, ci_lower_c := (ci_lower * 100) - mean_pct]
+seasonal_marginal_centered[, ci_upper_c := (ci_upper * 100) - mean_pct]
+
+ggplot(seasonal_marginal_centered, aes(x = month, color = education, fill = education)) +
+  geom_ribbon(aes(ymin = ci_lower_c, ymax = ci_upper_c), alpha = 0.1, color = NA) +
+  geom_line(aes(y = centered), linewidth = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5) +
+  scale_x_continuous(breaks = 1:12, labels = month.abb) +
+  scale_color_manual(values = edu_colors, labels = edu_labels) +
+  scale_fill_manual(values = edu_colors, labels = edu_labels) +
+  labs(
+    title = "Seasonal Marginal Effects Across Education Levels (Mean-Centered)",
+    subtitle = "Each level centered at its own mean; year held at 2025",
+    x = "Month",
+    y = "Deviation from Mean Unemployment Rate (pp)",
+    color = "Education",
+    fill = "Education"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "right")
+```
+
+---
+
+## 4. Time-Varying Seasonality
+
+This plot shows how the seasonal pattern has changed over time, visualizing the `ti(year_cont, month)` tensor product interaction.
+
+```{r}
+#| label: time-varying-seasonality
+#| fig-height: 8
+#| fig-width: 12
+
+# Create grid for all years
+years_to_plot <- min(data$year):max(data$year)
+month_seq <- 1:12
+
+tv_seasonal <- data.table()
+
+for (yr in years_to_plot) {
+  pred_grid <- data.frame(
+    education = factor("bachelors", levels = edu_levels),  # Use one level as reference
+    year_cont = yr,
+    month = month_seq
+  )
+
+  preds <- predict(model, newdata = pred_grid, type = "link", se.fit = TRUE)
+
+  # Get baseline (annual mean) for this year
+  baseline_grid <- pred_grid
+  baseline_grid$month <- 6  # June as reference
+
+  baseline <- predict(model, newdata = baseline_grid, type = "link")
+
+  tv_seasonal <- rbind(tv_seasonal, data.table(
+    year = factor(yr),
+    month = month_seq,
+    effect = as.numeric(preds$fit) - as.numeric(baseline),
+    se = as.numeric(preds$se.fit)
   ))
 }
 
-# Calculate PhD premium/discount
-phd_rate <- mid_point_estimates$unemployment_rate[mid_point_estimates$education == "phd"]
-high_school_rate <- mid_point_estimates$unemployment_rate[mid_point_estimates$education == "high_school"]
-less_than_hs_rate <- mid_point_estimates$unemployment_rate[mid_point_estimates$education == "less_than_hs"]
-
-cat("\n=== PhD ADVANTAGE ===\n\n")
-cat(sprintf("PhD vs High School:     %.2f%% lower (%.1f%% relative)\n",
-  (high_school_rate - phd_rate) * 100,
-  (high_school_rate - phd_rate) / phd_rate * 100
-))
-cat(sprintf("PhD vs Less than HS:    %.2f%% lower (%.1f%% relative)\n",
-  (less_than_hs_rate - phd_rate) * 100,
-  (less_than_hs_rate - phd_rate) / phd_rate * 100
-))
-```
-
-### Dispersion and Model Fit
-
-```{r}
-cat("=== QUASI-BINOMIAL DIAGNOSTICS ===\n\n")
-cat("Dispersion parameter: ", round(model_result_quasi$summary_stats$dispersion, 2), "\n")
-cat("Deviance explained:   ", round(model_result_quasi$summary_stats$deviance_explained * 100, 1), "%\n\n")
-cat("Interpretation:\n")
-cat("- Dispersion >> 1 indicates OVERDISPERSION\n")
-cat("- Our data shows ", round(model_result_quasi$summary_stats$dispersion, 2), "× dispersion\n")
-cat("- Quasi-binomial is ESSENTIAL (binomial SEs would be ",
-    round(sqrt(model_result_quasi$summary_stats$dispersion), 1), "× too small)\n")
-cat("- Deviance explained indicates ", round(model_result_quasi$summary_stats$deviance_explained * 100, 1),
-    "% of variation captured\n")
+ggplot(tv_seasonal, aes(x = month, y = effect, color = year)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5) +
+  scale_x_continuous(breaks = 1:12, labels = month.abb) +
+  scale_color_viridis_d(option = "plasma") +
+  labs(
+    title = "Time-Varying Seasonality: How Seasonal Patterns Changed Over Time",
+    subtitle = "Deviation from June baseline (log-odds scale) - captures ti(year, month) interaction",
+    x = "Month",
+    y = "Seasonal Effect (log-odds deviation from June)",
+    color = "Year"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "right")
 ```
 
 ---
 
-## Model Component Decomposition: Marginal Effects
+## 5. Recent Trends (2020-2025 Zoom)
 
-This section visualizes each component of the GAM separately using marginal effects plots.
-These plots isolate the contribution of each factor (education, shocks, seasonality) while
-holding others at reference levels.
-
-### Marginal Effects Panel
-
-```{r fig.height=12, fig.width=14}
-# Create comprehensive marginal effects panel
-marginal_effects_plot <- plot_marginal_effects(model_result_quasi)
-print(marginal_effects_plot)
-```
-
-**Interpretation:**
-
-- **Education Main Effects (top left)**: Shows how each education level shifts unemployment risk relative to the reference level. PhDs have large negative effects (lower unemployment), while those with less than HS education have positive effects (higher unemployment).
-
-- **2008-2009 Financial Crisis (top right)**: Captures the time-varying unemployment surge during the crisis. The shock smooth shows when the crisis hit hardest and how long the effects persisted. The wide confidence bands reflect uncertainty during turbulent labor markets.
-
-- **2020 COVID-19 Pandemic (bottom left)**: Shows the sharp and rapid unemployment spike in early 2020 (the most dramatic period), followed by recovery through 2021. The pandemic's shock was much faster than the gradual 2008 crisis.
-
-- **Seasonal Effects (bottom right)**: Displays the typical annual pattern (peaking in winter months, declining through spring/summer). This pattern is consistent year-to-year across education levels.
-
-### Education Effect Estimates
+Zoomed view of unemployment trends since the pandemic across all education levels.
 
 ```{r}
-edu_effects <- extract_education_effects(model_result_quasi)
-cat("\n=== EDUCATION MAIN EFFECTS (Log-odds Scale) ===\n\n")
-print(edu_effects)
-cat("\nNote: Positive effects = higher unemployment risk\n")
-cat("      Negative effects = lower unemployment risk\n")
+#| label: recent-trends-zoom
+#| fig-height: 8
+#| fig-width: 8
+
+# Create prediction grid for 2020-2025, marginalized over months
+recent_years <- seq(2020, 2025.9, length.out = 100)
+
+recent_trends <- data.table()
+
+for (edu in edu_levels) {
+  # Predict at each year for all 12 months, then average
+  year_preds <- sapply(recent_years, function(yr) {
+    pred_grid <- data.frame(
+      education = factor(edu, levels = edu_levels),
+      year_cont = yr,
+      month = 1:12
+    )
+    preds <- predict(model, newdata = pred_grid, type = "response", se.fit = TRUE)
+    c(mean(preds$fit), mean(preds$se.fit))
+  })
+
+  recent_trends <- rbind(recent_trends, data.table(
+    education = edu,
+    year_cont = recent_years,
+    fitted = year_preds[1, ],
+    se = year_preds[2, ],
+    ci_lower = pmax(0, year_preds[1, ] - 1.96 * year_preds[2, ]),
+    ci_upper = pmin(1, year_preds[1, ] + 1.96 * year_preds[2, ])
+  ))
+}
+
+ggplot(recent_trends, aes(x = year_cont, color = education, fill = education)) +
+  geom_ribbon(aes(ymin = ci_lower * 100, ymax = ci_upper * 100), alpha = 0.15, color = NA) +
+  geom_line(aes(y = fitted * 100), linewidth = 1) +
+  scale_color_manual(values = edu_colors, labels = edu_labels) +
+  scale_fill_manual(values = edu_colors, labels = edu_labels) +
+  scale_x_continuous(breaks = 2020:2026) +
+  labs(
+    title = "Recent Unemployment Trends (2020-2025)",
+    subtitle = "Marginal effects averaged across all 12 months; shaded areas show 95% CI",
+    x = "Year",
+    y = "Predicted Unemployment Rate (%)",
+    color = "Education",
+    fill = "Education"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 ---
 
-## Conclusions
+## 6. Model Diagnostics
 
-1. **PhD unemployment is genuinely lower** than other education levels across the full 2000-2025 period, with a **1.7% average** versus 3-5% for less educated groups.
+```{r}
+#| label: diagnostics
+#| fig-height: 8
+#| fig-width: 12
 
-2. **Quasi-binomial models are critical**: Standard binomial models would suggest 3-4× higher confidence than warranted. The large dispersion parameter (14.76) reflects natural variation in unemployment counts.
+par(mfrow = c(2, 2))
 
-3. **Education premiums are stable**: The unemployment advantage of higher education persists through economic cycles, though all groups experience elevated unemployment during recessions.
+# 1. Residuals vs fitted
+plot(fitted(model), residuals(model, type = "deviance"),
+     xlab = "Fitted values", ylab = "Deviance residuals",
+     main = "Residuals vs Fitted", pch = 20, col = rgb(0, 0, 0, 0.2))
+abline(h = 0, lty = 2, col = "red")
 
-4. **Seasonal patterns are shared**: All education levels show similar seasonal variation (peaking in winter, dipping in summer), reflecting common labor market dynamics.
+# 2. Q-Q plot
+qqnorm(residuals(model, type = "deviance"), main = "Q-Q Plot of Residuals", pch = 20)
+qqline(residuals(model, type = "deviance"), col = "red")
 
-5. **Recent concerning trend**: PhD unemployment has risen from 1.7% average to 2.6% in 2025, potentially reflecting:
-   - Tighter academic job markets
-   - Post-PhD visa/immigration changes
-   - Field-specific labor market shifts
-   - Post-pandemic labor market restructuring
+# 3. Histogram
+hist(residuals(model, type = "deviance"), breaks = 50,
+     main = "Histogram of Deviance Residuals", xlab = "Deviance residuals", col = "lightblue")
+
+# 4. Residuals over time
+plot(data$year_cont, residuals(model, type = "deviance"),
+     xlab = "Year", ylab = "Deviance residuals",
+     main = "Residuals over Time", pch = 20, col = rgb(0, 0, 0, 0.2))
+abline(h = 0, lty = 2, col = "red")
+```
+
+### Seasonal Residual Check
+
+```{r}
+#| label: seasonal-residuals
+#| fig-height: 5
+#| fig-width: 10
+
+data[, resid := observed_rate - fitted]
+seasonal_resid <- data[, .(mean_resid = mean(resid)), by = .(education, month)]
+
+ggplot(seasonal_resid, aes(x = month, y = mean_resid * 100, color = education)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_x_continuous(breaks = 1:12, labels = month.abb) +
+  scale_color_manual(values = edu_colors, labels = edu_labels) +
+  labs(
+    title = "Seasonal Residuals by Education",
+    subtitle = "Should be near zero if seasonality is well-captured",
+    x = "Month",
+    y = "Mean Residual (percentage points)",
+    color = "Education"
+  ) +
+  theme_minimal(base_size = 12)
+```
 
 ---
 
-## Technical Notes
-
-**Model Estimation**: REML with 500 max iterations
-**Smoothing basis**: Thin-plate regression splines for trends, cyclic cubic spline for seasonality
-**Family**: Quasi-binomial with automatic dispersion estimation
-**Data**: Current Population Survey monthly aggregates, 2000-2025
-**Statistical software**: R 4.x with mgcv package
+## 7. Summary
 
 ```{r}
-sessionInfo()
+#| label: summary
+cat("=== Model Summary ===\n\n")
+cat("Model: cbind(n_unemployed, n_employed) ~\n")
+cat("         education +\n")
+cat("         s(year_cont, by = education, bs = 'ad', k = 100, id = 1) + # Education time trends\n")
+cat("         s(month, bs = 'cc', k = 12, id = 2) +                # Global seasonality\n")
+cat("         ti(year_cont, month, bs = c('tp', 'cc'), k = c(20, 12)) + # Time-varying seasonality\n")
+cat("         s(month, by = education, bs = 'cc', k = 12, id = 2)      # Education seasonal deviations\n\n")
+cat("Family: Quasi-binomial\n")
+cat("Deviance explained:", round(summary(model)$dev.expl * 100, 1), "%\n")
+cat("Dispersion:", round(summary(model)$dispersion, 2), "\n")
+cat("Observations:", nrow(data), "\n")
+cat("Education levels:", length(edu_levels), "\n")
 ```

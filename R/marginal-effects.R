@@ -51,74 +51,125 @@ extract_education_effects <- function(model_result, reference_level = "bachelors
 
 #' Extract Shock Dynamics Marginal Effects
 #'
-#' Extracts shock-specific time dynamics by comparing predictions
-#' during shock and non-shock periods.
+#' Extracts shock-specific time dynamics using the fuzzy impulse model approach.
+#' The model learns how unemployment responds to continuous shock intensity.
+#' Shock effects are computed as fitted(actual intensity) - fitted(intensity=0).
 #'
 #' @param model_result Result from fit_education_binomial_gam()
 #' @param shock_type Character. Either "2008_2009" or "2020"
+#' @param education_level Character. Education level to extract (default: "phd")
+#' @param extend_years How many years past the acute phase to show decay (default: 5)
 #'
-#' @return Data frame with time indices, shock status, and fitted values
+#' @return Data frame with time indices, observed and counterfactual rates,
+#'   shock intensities, and shock effects with confidence intervals
 #'
 #' @export
-extract_shock_effects <- function(model_result, shock_type = "2008_2009") {
+extract_shock_effects <- function(model_result, shock_type = "2008_2009",
+                                   education_level = "phd",
+                                   extend_years = 5) {
   model <- model_result$model
   data <- model_result$data
+  preds <- model_result$predictions
 
+  # Define time range based on shock type
+  # Include extended range to show persistence/decay
   if (shock_type == "2008_2009") {
-    shock_col <- "shock_2008_2009"
-    period_years <- 2007:2010
-    shock_indicator <- 1
+    start_year <- 2007
+    end_year <- 2010 + extend_years  # Show decay through 2015
+    onset <- 2007.5
+    peak <- 2009.75
+    halflife <- 2.5
   } else if (shock_type == "2020") {
-    shock_col <- "shock_2020"
-    period_years <- 2019:2021
-    shock_indicator <- 1
+    start_year <- 2020
+    end_year <- 2021 + extend_years  # Show decay through 2026
+    onset <- 2020.17
+    peak <- 2020.33
+    halflife <- 1.5
   } else {
     stop("shock_type must be '2008_2009' or '2020'")
   }
 
-  # Create fine prediction grid for smooth shock curves (weekly granularity)
-  # Use continuous sequence across entire period rather than just observed data
-  min_time <- min(data$time_index[data$year == min(period_years)])
-  max_time <- max(data$time_index[data$year == max(period_years)])
-  time_indices <- seq(min_time, max_time, by = 0.25)  # Weekly for very smooth curves
+  # Create fine prediction grid (monthly) for the extended range
+  year_seq <- seq(start_year, min(end_year, max(data$year)), by = 1/12)
 
   shock_effects <- data.frame()
 
-  for (time_idx in time_indices) {
-    # Use fractional year for smooth x-axis spacing (not integer grouping)
-    year_frac <- 2000 + (time_idx - 1) / 12
+  for (year_frac in year_seq) {
+    # Convert year to time_index
+    time_idx <- (year_frac - 2000) * 12 + 1
 
-    # Prediction with shock
-    pred_shock <- data.frame(
-      education = "phd",
+    # Calculate shock intensities for this time point
+    if (shock_type == "2008_2009") {
+      shock_2008_intensity <- create_shock_impulse(year_frac, onset, peak, halflife)
+      shock_2020_intensity <- 0
+    } else {
+      shock_2008_intensity <- 0
+      shock_2020_intensity <- create_shock_impulse(year_frac, onset, peak, halflife)
+    }
+
+    # Create prediction data for ACTUAL scenario (with shock)
+    actual_data <- data.frame(
+      education = factor(education_level, levels = levels(data$education)),
       time_index = time_idx,
-      month = 6,
-      shock_2008_2009 = if (shock_type == "2008_2009") 1 else 0,
-      shock_2020 = if (shock_type == "2020") 1 else 0
+      month = 6,  # Mid-year for seasonal average
+      shock_2008_intensity = shock_2008_intensity,
+      shock_2020_intensity = shock_2020_intensity
     )
 
-    # Prediction without shock (counterfactual)
-    pred_no_shock <- data.frame(
-      education = "phd",
+    # Create prediction data for COUNTERFACTUAL (no shock)
+    counterfactual_data <- data.frame(
+      education = factor(education_level, levels = levels(data$education)),
       time_index = time_idx,
       month = 6,
-      shock_2008_2009 = 0,
-      shock_2020 = 0
+      shock_2008_intensity = 0,
+      shock_2020_intensity = 0
     )
 
-    fit_shock <- predict(model, newdata = pred_shock, type = "response", se.fit = TRUE)
-    fit_no_shock <- predict(model, newdata = pred_no_shock, type = "response", se.fit = TRUE)
+    # Get predictions from model
+    actual_pred <- mgcv::predict.bam(model, newdata = actual_data,
+                                      type = "response", se.fit = TRUE)
+    counterfactual_pred <- mgcv::predict.bam(model, newdata = counterfactual_data,
+                                              type = "response", se.fit = TRUE)
 
-    shock_effect <- fit_shock$fit - fit_no_shock$fit
+    # Find nearest observed data point for this time index (if available)
+    nearest_idx <- which.min(abs(preds$time_index - time_idx) +
+                              ifelse(preds$education == education_level, 0, 1000))
+    observed_rate <- if (length(nearest_idx) > 0 &&
+                         abs(preds$time_index[nearest_idx] - time_idx) < 1) {
+      preds$observed_rate[nearest_idx]
+    } else {
+      NA
+    }
+
+    # Shock effect is actual - counterfactual
+    fitted_rate <- as.numeric(actual_pred$fit)
+    counterfactual_rate <- as.numeric(counterfactual_pred$fit)
+    shock_effect <- fitted_rate - counterfactual_rate
+
+    # Standard error approximation
+    se_effect <- sqrt(as.numeric(actual_pred$se.fit)^2 +
+                       as.numeric(counterfactual_pred$se.fit)^2)
+
+    # Current shock intensity for this time point
+    current_intensity <- if (shock_type == "2008_2009") {
+      shock_2008_intensity
+    } else {
+      shock_2020_intensity
+    }
 
     shock_effects <- rbind(shock_effects, data.frame(
       year = year_frac,
       time_index = time_idx,
-      shock_period = shock_type,
-      unemployment_rate_with_shock = fit_shock$fit,
-      unemployment_rate_no_shock = fit_no_shock$fit,
+      education = education_level,
+      shock_type = shock_type,
+      shock_intensity = current_intensity,
+      observed_rate = observed_rate,
+      fitted_rate = fitted_rate,
+      counterfactual_rate = counterfactual_rate,
       shock_effect = shock_effect,
-      se = sqrt(fit_shock$se.fit^2 + fit_no_shock$se.fit^2)
+      se = se_effect,
+      ci_lower = shock_effect - 1.96 * se_effect,
+      ci_upper = shock_effect + 1.96 * se_effect
     ))
   }
 
@@ -129,7 +180,8 @@ extract_shock_effects <- function(model_result, shock_type = "2008_2009") {
 #' Extract Seasonal Marginal Effects
 #'
 #' Extracts seasonal patterns by examining unemployment across months
-#' at a fixed time point (excluding time trends).
+#' at a fixed time point (excluding time trends). Uses zero shock intensities
+#' for clean seasonal estimation.
 #'
 #' @param model_result Result from fit_education_binomial_gam()
 #' @param time_point Time index for extraction (default: 200 = mid-series)
@@ -155,11 +207,14 @@ extract_seasonal_effects <- function(model_result, time_point = 200, education_l
       education = factor(education_level, levels = levels(data$education)),
       time_index = time_point,
       month = month_val,
-      shock_2008_2009 = 0,
-      shock_2020 = 0
+      # Use zero shock intensity for clean seasonal estimation
+      shock_2008_intensity = 0,
+      shock_2020_intensity = 0
     )
 
-    preds <- predict(model, newdata = pred_data, type = "response", se.fit = TRUE)
+    # Handle bam() models - use mgcv::predict.bam explicitly
+    preds <- mgcv::predict.bam(model, newdata = pred_data,
+                                type = "response", se.fit = TRUE)
 
     # Round month to nearest integer for display (1-12)
     month_int <- round(month_val)
@@ -169,10 +224,10 @@ extract_seasonal_effects <- function(model_result, time_point = 200, education_l
     seasonal_effects <- rbind(seasonal_effects, data.frame(
       month = month_val,
       month_name = month.abb[month_int],
-      unemployment_rate = preds$fit,
-      se = preds$se.fit,
-      ci_lower = preds$fit - 1.96 * preds$se.fit,
-      ci_upper = preds$fit + 1.96 * preds$se.fit
+      unemployment_rate = as.numeric(preds$fit),
+      se = as.numeric(preds$se.fit),
+      ci_lower = as.numeric(preds$fit) - 1.96 * as.numeric(preds$se.fit),
+      ci_upper = as.numeric(preds$fit) + 1.96 * as.numeric(preds$se.fit)
     ))
   }
 
@@ -218,35 +273,36 @@ plot_marginal_effects <- function(model_result) {
     theme(plot.title = element_text(face = "bold"))
 
   # Plot 2: 2008-2009 Shock Dynamics
-  p2 <- ggplot(shock_2008_effects, aes(x = year, y = shock_effect * 100)) +
-    geom_point(color = "#A23B72", size = 2) +
-    geom_line(color = "#A23B72") +
+  # Show both observed-counterfactual and the counterfactual baseline
+  p2 <- ggplot(shock_2008_effects, aes(x = year)) +
     geom_ribbon(
-      aes(ymin = (shock_effect - 1.96 * se) * 100, ymax = (shock_effect + 1.96 * se) * 100),
+      aes(ymin = ci_lower * 100, ymax = ci_upper * 100),
       alpha = 0.2, fill = "#A23B72"
     ) +
+    geom_line(aes(y = shock_effect * 100), color = "#A23B72", linewidth = 1) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
     labs(
-      title = "2008-2009 Financial Crisis Dynamics",
+      title = "2008-2009 Financial Crisis Dynamics (PhD)",
+      subtitle = "Shock effect = observed - counterfactual",
       x = "Year",
-      y = "Unemployment Rate Effect (%)"
+      y = "Unemployment Rate Effect (pp)"
     ) +
     theme_minimal() +
     theme(plot.title = element_text(face = "bold"))
 
   # Plot 3: 2020 Shock Dynamics
-  p3 <- ggplot(shock_2020_effects, aes(x = year, y = shock_effect * 100)) +
-    geom_point(color = "#C73E1D", size = 2) +
-    geom_line(color = "#C73E1D") +
+  p3 <- ggplot(shock_2020_effects, aes(x = year)) +
     geom_ribbon(
-      aes(ymin = (shock_effect - 1.96 * se) * 100, ymax = (shock_effect + 1.96 * se) * 100),
+      aes(ymin = ci_lower * 100, ymax = ci_upper * 100),
       alpha = 0.2, fill = "#C73E1D"
     ) +
+    geom_line(aes(y = shock_effect * 100), color = "#C73E1D", linewidth = 1) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
     labs(
-      title = "2020 COVID-19 Pandemic Dynamics",
+      title = "2020 COVID-19 Pandemic Dynamics (PhD)",
+      subtitle = "Shock effect = observed - counterfactual",
       x = "Year",
-      y = "Unemployment Rate Effect (%)"
+      y = "Unemployment Rate Effect (pp)"
     ) +
     theme_minimal() +
     theme(plot.title = element_text(face = "bold"))

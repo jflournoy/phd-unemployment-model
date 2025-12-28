@@ -1,61 +1,105 @@
+#' Create Fuzzy Impulse Function for Economic Shocks
+#'
+#' Creates a continuous shock intensity variable with gradual onset, peak, and
+#' exponential decay. This captures the idea that shocks don't have sharp boundaries
+#' and their effects persist well beyond the acute phase.
+#'
+#' @param year Numeric vector of years (can include fractions for months)
+#' @param onset_year Year when shock begins
+#' @param peak_year Year of maximum shock intensity
+#' @param decay_halflife Half-life of exponential decay in years
+#' @param max_intensity Maximum intensity at peak (default 1)
+#'
+#' @return Numeric vector of shock intensities (0 to max_intensity)
+#'
+#' @details
+#' The impulse function has three phases:
+#' 1. **Pre-onset**: intensity = 0
+#' 2. **Rising phase**: linear rise from onset to peak
+#' 3. **Decay phase**: exponential decay from peak with specified half-life
+#'
+#' For the 2008 financial crisis:
+#' - Onset ~2007.5 (subprime mortgage issues)
+#' - Peak ~2009.5 (unemployment peaked late)
+#' - Decay half-life ~2.5 years (slow recovery)
+#'
+#' For the 2020 COVID pandemic:
+#' - Onset ~2020.25 (March 2020)
+#' - Peak ~2020.33 (April 2020, very sharp)
+#' - Decay half-life ~1.5 years (faster recovery)
+#'
+#' @export
+create_shock_impulse <- function(year, onset_year, peak_year, decay_halflife,
+                                  max_intensity = 1) {
+  intensity <- numeric(length(year))
+
+  for (i in seq_along(year)) {
+    y <- year[i]
+    if (y < onset_year) {
+      # Pre-onset: no shock
+      intensity[i] <- 0
+    } else if (y <= peak_year) {
+      # Rising phase: linear increase from 0 to max
+      intensity[i] <- max_intensity * (y - onset_year) / (peak_year - onset_year)
+    } else {
+      # Decay phase: exponential falloff
+      years_since_peak <- y - peak_year
+      decay_rate <- log(2) / decay_halflife
+      intensity[i] <- max_intensity * exp(-decay_rate * years_since_peak)
+    }
+  }
+
+  intensity
+}
+
+
 #' Fit Quasi-Binomial GAM Model Across Education Levels
 #'
 #' Fits a quasi-binomial GAM to unemployment count data across all education levels,
-#' with education-specific trends and seasonal patterns (factor smooth interactions).
+#' with education-specific trends, shock dynamics, and seasonal patterns.
 #'
 #' @param data Data frame with columns: n_unemployed, n_employed, time_index, month, education
 #' @param education_levels Character vector of education levels to include.
 #'   If NULL (default), uses all levels in data.
 #' @param use_quasi Logical. If TRUE (default), uses quasi-binomial family to account for overdispersion.
 #'   If FALSE, uses standard binomial family.
-#' @param time_k Numeric. Basis dimension for time_index smooth (default 150). For population-representative
-#'   data (like CPS), higher values capture true variation rather than treating it as overdispersion.
-#'   Sensitivity analysis showed k=150 reduces dispersion from 3.74 to 1.78 with improved model fit (98.6% deviance explained).
+#' @param time_k Numeric. Basis dimension for time_index smooth (default 150).
 #'
 #' @return List containing:
 #'   - model: Fitted GAM object
-#'   - summary: Model summary statistics
-#'   - predictions: Data frame with fitted values
-#'   - dispersion: Estimated dispersion parameter
+#'   - formula: Model formula used
+#'   - data: Data with shock intensity variables added
+#'   - summary_stats: Model summary statistics including dispersion
+#'   - predictions: Data frame with fitted values and counterfactual predictions
 #'   - convergence_info: Convergence diagnostics
 #'
 #' @details
-#' The model structure is:
-#' cbind(n_unemployed, n_employed) ~ education + shock_2008_2009 + shock_2020 +
-#'   s(time_index, k=time_k, by=education, bs="tp") +
-#'   s(time_index, k=40, by=interaction(education, shock_2008_2009), bs="tp") +
-#'   s(time_index, k=40, by=interaction(education, shock_2020), bs="tp") +
-#'   s(month, k=12, bs="cc") + s(month, k=12, bs="cc", by=education)
+#' The model uses year-based adaptive smooths with clean time/season separation:
 #'
-#' This structure balances flexibility and stability through a seven-component decomposition:
-#' - Education main effects (intercept differences capturing baseline unemployment levels)
-#' - Economic shocks (binary indicators for 2007-2010 financial crisis and 2019-2021 pandemic)
-#'   Extended to include precursor years before official crisis start
-#' - Education-specific shock dynamics (shock × time × education interaction allowing different
-#'   unemployment responses across education levels during crises)
-#' - Education-specific economic trends (time_index smooth varies by education, flexible basis dimension)
-#' - Shared seasonal pattern (global month smooth using all data for stable seasonal curve, k=12)
-#' - Education-specific seasonal deviations (by=education month smooth allowing groups to deviate, k=12)
+#' cbind(n_unemployed, n_employed) ~
+#'   education +
+#'   s(year_frac, bs="ad", k=30) +
+#'   s(year_frac, education, bs="fs", k=20) +
+#'   s(month, bs="cc", k=12) +
+#'   s(month, education, bs="fs", k=12, xt=list(bs="cc"))
 #'
-#' Thin plate splines (bs="tp") provide maximum flexibility for capturing complex unemployment patterns
-#' across the full 25-year time span while maintaining numerical stability through bam() optimization.
+#' Key design choices:
 #'
-#' The education-specific shock × time interactions capture nonlinear crisis dynamics - unemployment
-#' doesn't just shift up during crises, and crisis responses vary by education level. PhD holders may have
-#' different crisis trajectories than high school graduates. Using k=40 for 48-month shock periods
-#' (2007-2010: 48 months, 2019-2021: 36 months) provides ~1 knot per month for detailed crisis dynamics per education group.
-#' The interaction() specification creates separate smooths for each education × shock combination,
-#' with shared smoothing parameters (id=2,3) across education levels for stability while allowing education-specific magnitudes.
+#' **Fixed effects for education:** Parametric terms capture baseline unemployment
+#' differences across 7 education levels.
 #'
-#' The two-component seasonality structure (k=12 shared + k=12 by-education) provides more stable
-#' estimation by pooling information while allowing education-specific deviations where the data
-#' strongly supports them. Groups with weak education-specific seasonality (e.g., PhD) will have
-#' their by-education smooth heavily penalized, preserving the shared pattern.
+#' **Year-based adaptive smooth (bs="ad"):** Using `year_frac` (year + month/12)
+#' instead of monthly `time_index` prevents seasonality from leaking into the
+#' time trend. Wiggliness varies automatically during volatile periods.
 #'
-#' The quasi-binomial family properly accounts for overdispersion common in
-#' unemployment count data. Use dispersion parameter to assess goodness of fit:
-#' - dispersion ~  1: binomial model sufficient
-#' - dispersion >> 1: overdispersion, quasi-binomial appropriate
+#' **Education deviations with partial pooling:** `s(year_frac, education, bs="fs")`
+#' models education-specific deviations from the global trend. Factor smooths
+#' shrink curves toward a common shape, borrowing strength across levels.
+#'
+#' **Strong seasonality:** Separate global seasonal effect `s(month, bs="cc")` plus
+#' education-specific seasonal deviations. Clean separation ensures no confounding.
+#'
+#' **Family:** Quasi-binomial accounts for overdispersion common in count data.
 #'
 #' @examples
 #' \dontrun{
@@ -96,28 +140,37 @@ fit_education_binomial_gam <- function(data,
     data$year <- 2000 + floor((data$time_index - 1) / 12)
   }
 
-  # Create shock dummy variables for major economic disruptions
-  # Extend before, during, and after crisis periods to capture full dynamics
-  # 2007-2010 Financial Crisis / Great Recession (includes precursor, crisis, recovery)
-  data$shock_2008_2009 <- as.integer(data$year >= 2007 & data$year <= 2010)
-  # 2019-2021 COVID-19 Pandemic (includes precursor, crisis, recovery)
-  data$shock_2020 <- as.integer(data$year >= 2019 & data$year <= 2021)
+  # Calculate precise year with month fraction
+  data$year_frac <- data$year + (data$month - 0.5) / 12
 
-  # Fit quasi-binomial GAM with education-specific trends and flexible seasonality
-  # Using thin plate splines (bs="tp") for maximum flexibility in capturing complex patterns
-  # Shock dynamics via education-specific shock × time interactions allow different unemployment trajectories
-  # during crises for each education level (PhD crisis response ≠ HS crisis response)
-  # Constrain smoothing parameters across factor levels (id=) for stability and parsimony:
-  # - Economic cycles: shared smoothing across education levels (id=1)
-  # - Crisis dynamics: shared smoothing within education groups, but education-specific magnitudes (id=2,3)
-  # - Seasonal variation: shared smoothing across education levels (id=4)
-  formula <- cbind(n_unemployed, n_employed) ~ education +
-    shock_2008_2009 + shock_2020 +
-    s(time_index, k = time_k, by = education, bs = "tp", id = 1) +
-    s(time_index, k = 40, by = interaction(education, shock_2008_2009), bs = "tp", id = 2) +
-    s(time_index, k = 40, by = interaction(education, shock_2020), bs = "tp", id = 3) +
-    s(month, k = 12, bs = "cc") +
-    s(month, k = 12, bs = "cc", by = education, id = 4)
+  # Year-based adaptive smooth with clean time/season separation
+  #
+  # Model structure:
+  # - education: Fixed effects for baseline education differences
+  # - s(year_frac, bs="ad"): Adaptive year-based smooth - wiggliness varies
+  #   (automatically more flexible during crisis periods like 2008, 2020)
+  #   Using year_frac instead of time_index prevents seasonality leakage
+  # - s(year_frac, education, bs="fs"): Education-specific year deviations
+  #   with partial pooling (shrinkage toward common shape)
+  # - s(month, bs="cc"): Global seasonal pattern (cyclic)
+  # - s(month, education, bs="fs"): Education-specific seasonal deviations
+  #
+  # Key features:
+  # - Clean separation of time trend and seasonality (no confounding)
+  # - No explicit COVID/shock modeling - adaptive basis handles it
+  # - Partial pooling via bs="fs" for education deviations
+  # - Strong seasonality: separate global + education-specific terms
+  formula <- cbind(n_unemployed, n_employed) ~
+    # Fixed effects: education level baselines
+    education +
+    # Adaptive year-based smooth (clean separation from seasonality)
+    s(year_frac, bs = "ad", k = 30) +
+    # Education-specific year deviations with partial pooling
+    s(year_frac, education, bs = "fs", k = 20) +
+    # Global seasonality (cyclic)
+    s(month, bs = "cc", k = 12) +
+    # Education-specific seasonal deviations
+    s(month, education, bs = "fs", k = 12, xt = list(bs = "cc"))
 
   # Fit model with specified family
   # Note: Always use quasibinomial for large datasets with overdispersion
@@ -144,16 +197,21 @@ fit_education_binomial_gam <- function(data,
     gcv_score = model$gcv.ubre
   )
 
-  # Generate predictions on original data with standard errors
+  # Generate predictions
   preds_se <- predict(model, type = "response", se.fit = TRUE)
+
+  # Observed unemployment rate
+  observed_rate <- data$n_unemployed / (data$n_unemployed + data$n_employed)
 
   predictions <- data.frame(
     education = data$education,
     year = data$year,
+    year_frac = data$year_frac,
     time_index = data$time_index,
     month = data$month,
     n_unemployed = data$n_unemployed,
     n_employed = data$n_employed,
+    observed_rate = observed_rate,
     fitted_prob = as.numeric(preds_se$fit),
     se = as.numeric(preds_se$se.fit),
     ci_lower = pmax(0, as.numeric(preds_se$fit - 1.96 * preds_se$se.fit)),
@@ -185,40 +243,60 @@ fit_education_binomial_gam <- function(data,
 
 #' Extract Education-Specific Unemployment Estimates
 #'
-#' Extract fitted unemployment rates for each education level at a specific time point
+#' Extract fitted unemployment rates for each education level at a specific time point.
+#' Uses the fuzzy impulse function to calculate shock intensities for that time.
 #'
 #' @param model_result Result from fit_education_binomial_gam()
 #' @param time_point Numeric. Time index for prediction (1-308 for monthly data 2000-2025)
 #' @param month Numeric. Month (1-12) for prediction
+#' @param counterfactual Logical. If TRUE, predict baseline (no shock) scenario.
+#'   If FALSE (default), predict with actual shock intensities for that time.
 #'
 #' @return Data frame with unemployment estimates and standard errors for each education level
 #'
 #' @export
-predict_education_unemployment <- function(model_result, time_point = 308, month = 6) {
+predict_education_unemployment <- function(model_result, time_point = 308, month = 6,
+                                            counterfactual = FALSE) {
   model <- model_result$model
   education_levels <- levels(model_result$data$education)
 
   # Infer year from time_point (assumes monthly data starting 2000)
   year <- 2000 + floor((time_point - 1) / 12)
+  year_frac <- year + (month - 0.5) / 12
 
-  # Create prediction data with shock variables (extended to include precursor + crisis + recovery)
+  # Calculate shock intensities using the fuzzy impulse function
+  # (or set to 0 for counterfactual)
+  if (counterfactual) {
+    shock_2008 <- 0
+    shock_2020 <- 0
+  } else {
+    shock_2008 <- create_shock_impulse(year_frac, 2007.5, 2009.75, 2.5)
+    shock_2020 <- create_shock_impulse(year_frac, 2020.17, 2020.33, 1.5)
+  }
+
+  # Create prediction data with shock intensities
   pred_data <- data.frame(
     education = factor(education_levels, levels = education_levels),
     time_index = time_point,
     month = month,
-    shock_2008_2009 = as.integer(year >= 2007 & year <= 2010),
-    shock_2020 = as.integer(year >= 2019 & year <= 2021)
+    shock_2008_intensity = shock_2008,
+    shock_2020_intensity = shock_2020
   )
 
   # Generate predictions with standard errors
-  preds <- predict(model, newdata = pred_data, type = "response", se.fit = TRUE)
+  preds <- mgcv::predict.bam(model, newdata = pred_data, type = "response", se.fit = TRUE)
 
   result <- data.frame(
     education = education_levels,
-    unemployment_rate = preds$fit,
-    se = preds$se.fit,
-    ci_lower = pmax(0, preds$fit - 1.96 * preds$se.fit),
-    ci_upper = pmin(1, preds$fit + 1.96 * preds$se.fit)
+    time_point = time_point,
+    year = year,
+    month = month,
+    shock_2008_intensity = shock_2008,
+    shock_2020_intensity = shock_2020,
+    unemployment_rate = as.numeric(preds$fit),
+    se = as.numeric(preds$se.fit),
+    ci_lower = pmax(0, as.numeric(preds$fit) - 1.96 * as.numeric(preds$se.fit)),
+    ci_upper = pmin(1, as.numeric(preds$fit) + 1.96 * as.numeric(preds$se.fit))
   )
 
   result
