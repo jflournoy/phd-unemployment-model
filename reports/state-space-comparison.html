@@ -121,6 +121,10 @@ window.Quarto = {
   <li><a href="#shock-effects" id="toc-shock-effects" class="nav-link" data-scroll-target="#shock-effects">Shock Effects</a></li>
   </ul></li>
   <li><a href="#latent-unemployment-trajectories" id="toc-latent-unemployment-trajectories" class="nav-link" data-scroll-target="#latent-unemployment-trajectories">Latent Unemployment Trajectories</a></li>
+  <li><a href="#non-seasonal-trend" id="toc-non-seasonal-trend" class="nav-link" data-scroll-target="#non-seasonal-trend">Non-Seasonal Trend</a>
+  <ul class="collapse">
+  <li><a href="#trend-vs-full-model-comparison" id="toc-trend-vs-full-model-comparison" class="nav-link" data-scroll-target="#trend-vs-full-model-comparison">Trend vs Full Model Comparison</a></li>
+  </ul></li>
   <li><a href="#comparison-with-gam" id="toc-comparison-with-gam" class="nav-link" data-scroll-target="#comparison-with-gam">Comparison with GAM</a>
   <ul class="collapse">
   <li><a href="#key-differences" id="toc-key-differences" class="nav-link" data-scroll-target="#key-differences">Key Differences</a></li>
@@ -262,58 +266,58 @@ Chain 1 Iteration:    1 / 2000 [  0%]  (Warmup) </code></pre>
 <pre><code>Chain 4 Iteration:    1 / 2000 [  0%]  (Warmup) </code></pre>
 </div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Chain 3 Iteration:  200 / 2000 [ 10%]  (Warmup) 
+<pre><code>Chain 2 Iteration:  200 / 2000 [ 10%]  (Warmup) 
 Chain 4 Iteration:  200 / 2000 [ 10%]  (Warmup) 
-Chain 2 Iteration:  200 / 2000 [ 10%]  (Warmup) 
+Chain 3 Iteration:  200 / 2000 [ 10%]  (Warmup) 
 Chain 1 Iteration:  200 / 2000 [ 10%]  (Warmup) 
-Chain 3 Iteration:  400 / 2000 [ 20%]  (Warmup) 
+Chain 2 Iteration:  400 / 2000 [ 20%]  (Warmup) 
 Chain 4 Iteration:  400 / 2000 [ 20%]  (Warmup) 
+Chain 3 Iteration:  400 / 2000 [ 20%]  (Warmup) 
+Chain 1 Iteration:  400 / 2000 [ 20%]  (Warmup) 
+Chain 2 Iteration:  600 / 2000 [ 30%]  (Warmup) 
 Chain 3 Iteration:  600 / 2000 [ 30%]  (Warmup) 
 Chain 4 Iteration:  600 / 2000 [ 30%]  (Warmup) 
-Chain 1 Iteration:  400 / 2000 [ 20%]  (Warmup) 
-Chain 3 Iteration:  800 / 2000 [ 40%]  (Warmup) 
-Chain 4 Iteration:  800 / 2000 [ 40%]  (Warmup) 
 Chain 1 Iteration:  600 / 2000 [ 30%]  (Warmup) 
+Chain 3 Iteration:  800 / 2000 [ 40%]  (Warmup) 
+Chain 2 Iteration:  800 / 2000 [ 40%]  (Warmup) 
+Chain 4 Iteration:  800 / 2000 [ 40%]  (Warmup) 
 Chain 1 Iteration:  800 / 2000 [ 40%]  (Warmup) 
 Chain 3 Iteration: 1000 / 2000 [ 50%]  (Warmup) 
 Chain 3 Iteration: 1001 / 2000 [ 50%]  (Sampling) 
 Chain 4 Iteration: 1000 / 2000 [ 50%]  (Warmup) 
 Chain 4 Iteration: 1001 / 2000 [ 50%]  (Sampling) 
-Chain 4 Iteration: 1200 / 2000 [ 60%]  (Sampling) 
 Chain 1 Iteration: 1000 / 2000 [ 50%]  (Warmup) 
 Chain 1 Iteration: 1001 / 2000 [ 50%]  (Sampling) 
-Chain 3 Iteration: 1200 / 2000 [ 60%]  (Sampling) 
-Chain 4 Iteration: 1400 / 2000 [ 70%]  (Sampling) 
-Chain 1 Iteration: 1200 / 2000 [ 60%]  (Sampling) 
-Chain 2 Iteration:  400 / 2000 [ 20%]  (Warmup) 
-Chain 4 Iteration: 1600 / 2000 [ 80%]  (Sampling) 
-Chain 1 Iteration: 1400 / 2000 [ 70%]  (Sampling) 
-Chain 3 Iteration: 1400 / 2000 [ 70%]  (Sampling) 
-Chain 4 Iteration: 1800 / 2000 [ 90%]  (Sampling) 
-Chain 1 Iteration: 1600 / 2000 [ 80%]  (Sampling) 
-Chain 4 Iteration: 2000 / 2000 [100%]  (Sampling) 
-Chain 4 finished in 673.4 seconds.
-Chain 1 Iteration: 1800 / 2000 [ 90%]  (Sampling) 
-Chain 2 Iteration:  600 / 2000 [ 30%]  (Warmup) 
-Chain 3 Iteration: 1600 / 2000 [ 80%]  (Sampling) 
-Chain 1 Iteration: 2000 / 2000 [100%]  (Sampling) 
-Chain 1 finished in 724.0 seconds.
-Chain 2 Iteration:  800 / 2000 [ 40%]  (Warmup) 
-Chain 3 Iteration: 1800 / 2000 [ 90%]  (Sampling) 
 Chain 2 Iteration: 1000 / 2000 [ 50%]  (Warmup) 
 Chain 2 Iteration: 1001 / 2000 [ 50%]  (Sampling) 
-Chain 3 Iteration: 2000 / 2000 [100%]  (Sampling) 
-Chain 3 finished in 916.3 seconds.
+Chain 3 Iteration: 1200 / 2000 [ 60%]  (Sampling) 
+Chain 4 Iteration: 1200 / 2000 [ 60%]  (Sampling) 
 Chain 2 Iteration: 1200 / 2000 [ 60%]  (Sampling) 
+Chain 3 Iteration: 1400 / 2000 [ 70%]  (Sampling) 
+Chain 4 Iteration: 1400 / 2000 [ 70%]  (Sampling) 
+Chain 1 Iteration: 1200 / 2000 [ 60%]  (Sampling) 
 Chain 2 Iteration: 1400 / 2000 [ 70%]  (Sampling) 
+Chain 4 Iteration: 1600 / 2000 [ 80%]  (Sampling) 
+Chain 3 Iteration: 1600 / 2000 [ 80%]  (Sampling) 
 Chain 2 Iteration: 1600 / 2000 [ 80%]  (Sampling) 
+Chain 4 Iteration: 1800 / 2000 [ 90%]  (Sampling) 
+Chain 3 Iteration: 1800 / 2000 [ 90%]  (Sampling) 
+Chain 1 Iteration: 1400 / 2000 [ 70%]  (Sampling) 
 Chain 2 Iteration: 1800 / 2000 [ 90%]  (Sampling) 
+Chain 4 Iteration: 2000 / 2000 [100%]  (Sampling) 
+Chain 4 finished in 618.4 seconds.
+Chain 3 Iteration: 2000 / 2000 [100%]  (Sampling) 
+Chain 3 finished in 622.3 seconds.
 Chain 2 Iteration: 2000 / 2000 [100%]  (Sampling) 
-Chain 2 finished in 1120.1 seconds.
+Chain 2 finished in 654.4 seconds.
+Chain 1 Iteration: 1600 / 2000 [ 80%]  (Sampling) 
+Chain 1 Iteration: 1800 / 2000 [ 90%]  (Sampling) 
+Chain 1 Iteration: 2000 / 2000 [100%]  (Sampling) 
+Chain 1 finished in 865.9 seconds.
 
 All 4 chains finished successfully.
-Mean chain execution time: 858.4 seconds.
-Total execution time: 1120.2 seconds.</code></pre>
+Mean chain execution time: 690.3 seconds.
+Total execution time: 866.0 seconds.</code></pre>
 </div>
 <details class="code-fold">
 <summary>Show code</summary>
@@ -329,7 +333,7 @@ Total execution time: 1120.2 seconds.</code></pre>
 <div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(<span class="st">"Divergent transitions: %d</span><span class="sc">\n</span><span class="st">"</span>, result<span class="sc">$</span>diagnostics<span class="sc">$</span>num_divergent))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>Divergent transitions: 6</code></pre>
+<pre><code>Divergent transitions: 8</code></pre>
 </div>
 <details class="code-fold">
 <summary>Show code</summary>
@@ -343,7 +347,7 @@ Total execution time: 1120.2 seconds.</code></pre>
 <div class="sourceCode cell-code" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(<span class="st">"E-BFMI: %s</span><span class="sc">\n</span><span class="st">"</span>, <span class="fu">paste</span>(<span class="fu">round</span>(result<span class="sc">$</span>diagnostics<span class="sc">$</span>ebfmi, <span class="dv">3</span>), <span class="at">collapse =</span> <span class="st">", "</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>E-BFMI: 0.477, 0.383, 0.459, 0.413</code></pre>
+<pre><code>E-BFMI: 0.479, 0.54, 0.383, 0.429</code></pre>
 </div>
 </div>
 </section>
@@ -374,13 +378,13 @@ Total execution time: 1120.2 seconds.</code></pre>
 <pre><code># A tibble: 7 × 4
   education      mean      q5    q95
   &lt;chr&gt;         &lt;dbl&gt;   &lt;dbl&gt;  &lt;dbl&gt;
-1 bachelors    0.0181 0.00796 0.0288
-2 high_school  0.0258 0.0128  0.0426
-3 less_than_hs 0.0263 0.0124  0.0434
-4 masters      0.0160 0.00656 0.0254
-5 phd          0.0124 0.00368 0.0211
-6 professional 0.0126 0.00372 0.0211
-7 some_college 0.0238 0.0123  0.0388</code></pre>
+1 bachelors    0.0176 0.00753 0.0278
+2 high_school  0.0252 0.0121  0.0417
+3 less_than_hs 0.0261 0.0121  0.0440
+4 masters      0.0157 0.00625 0.0250
+5 phd          0.0121 0.00318 0.0207
+6 professional 0.0125 0.00357 0.0211
+7 some_college 0.0233 0.0117  0.0380</code></pre>
 </div>
 <details class="code-fold">
 <summary>Show code</summary>
@@ -401,13 +405,13 @@ Total execution time: 1120.2 seconds.</code></pre>
 <pre><code># A tibble: 7 × 4
   education     mean    q5   q95
   &lt;chr&gt;        &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
-1 bachelors    0.614 0.356 0.918
-2 high_school  0.467 0.266 0.688
-3 less_than_hs 0.388 0.207 0.581
-4 masters      0.630 0.367 0.937
-5 phd          0.615 0.345 0.935
-6 professional 0.609 0.335 0.934
-7 some_college 0.510 0.309 0.742</code></pre>
+1 bachelors    0.597 0.339 0.904
+2 high_school  0.459 0.265 0.672
+3 less_than_hs 0.390 0.206 0.589
+4 masters      0.613 0.347 0.930
+5 phd          0.600 0.329 0.925
+6 professional 0.599 0.318 0.934
+7 some_college 0.499 0.300 0.720</code></pre>
 </div>
 <details class="code-fold">
 <summary>Show code</summary>
@@ -435,13 +439,13 @@ Total execution time: 1120.2 seconds.</code></pre>
 <pre><code># A tibble: 7 × 4
   education      mean      q5    q95
   &lt;chr&gt;         &lt;dbl&gt;   &lt;dbl&gt;  &lt;dbl&gt;
-1 bachelors    0.0291 0.0166  0.0431
-2 high_school  0.0522 0.0341  0.0709
-3 less_than_hs 0.0637 0.0414  0.0865
-4 masters      0.0253 0.0126  0.0398
-5 phd          0.0206 0.00652 0.0354
-6 professional 0.0212 0.00717 0.0369
-7 some_college 0.0446 0.0292  0.0610</code></pre>
+1 bachelors    0.0290 0.0161  0.0437
+2 high_school  0.0516 0.0331  0.0703
+3 less_than_hs 0.0628 0.0407  0.0851
+4 masters      0.0255 0.0128  0.0399
+5 phd          0.0205 0.00627 0.0358
+6 professional 0.0214 0.00722 0.0374
+7 some_college 0.0446 0.0281  0.0621</code></pre>
 </div>
 </div>
 <div class="cell">
@@ -508,13 +512,13 @@ Total execution time: 1120.2 seconds.</code></pre>
 <pre><code># A tibble: 7 × 4
   education      mean      q5    q95
   &lt;chr&gt;         &lt;dbl&gt;   &lt;dbl&gt;  &lt;dbl&gt;
-1 bachelors    0.0237 0.00809 0.0395
-2 high_school  0.0267 0.0111  0.0418
-3 less_than_hs 0.0269 0.0110  0.0422
-4 masters      0.0219 0.00745 0.0364
-5 phd          0.0187 0.00469 0.0333
-6 professional 0.0192 0.00470 0.0345
-7 some_college 0.0265 0.0114  0.0424</code></pre>
+1 bachelors    0.0235 0.00856 0.0384
+2 high_school  0.0268 0.0114  0.0425
+3 less_than_hs 0.0276 0.0124  0.0430
+4 masters      0.0218 0.00698 0.0369
+5 phd          0.0189 0.00460 0.0339
+6 professional 0.0195 0.00559 0.0345
+7 some_college 0.0262 0.0110  0.0419</code></pre>
 </div>
 <details class="code-fold">
 <summary>Show code</summary>
@@ -541,13 +545,13 @@ Total execution time: 1120.2 seconds.</code></pre>
 <pre><code># A tibble: 7 × 4
   education      mean      q5    q95
   &lt;chr&gt;         &lt;dbl&gt;   &lt;dbl&gt;  &lt;dbl&gt;
-1 bachelors    0.0308 0.00853 0.0542
-2 high_school  0.0299 0.00790 0.0534
-3 less_than_hs 0.0273 0.00606 0.0501
-4 masters      0.0281 0.00674 0.0515
-5 phd          0.0267 0.00550 0.0490
-6 professional 0.0241 0.00443 0.0462
-7 some_college 0.0305 0.00848 0.0534</code></pre>
+1 bachelors    0.0306 0.00862 0.0533
+2 high_school  0.0303 0.00784 0.0532
+3 less_than_hs 0.0275 0.00638 0.0500
+4 masters      0.0277 0.00602 0.0504
+5 phd          0.0269 0.00670 0.0490
+6 professional 0.0243 0.00518 0.0469
+7 some_college 0.0307 0.00958 0.0533</code></pre>
 </div>
 <details class="code-fold">
 <summary>Show code</summary>
@@ -572,8 +576,8 @@ Total execution time: 1120.2 seconds.</code></pre>
 <pre><code># A tibble: 2 × 4
   variable       mean    q5   q95
   &lt;chr&gt;         &lt;dbl&gt; &lt;dbl&gt; &lt;dbl&gt;
-1 halflife_2008 1.59  0.836  3.25
-2 halflife_2020 0.777 0.463  1.36</code></pre>
+1 halflife_2008 1.62  0.832  3.20
+2 halflife_2020 0.780 0.463  1.39</code></pre>
 </div>
 </div>
 <div class="cell">
@@ -679,6 +683,108 @@ Total execution time: 1120.2 seconds.</code></pre>
 </div>
 </div>
 </section>
+<section id="non-seasonal-trend" class="level2">
+<h2 class="anchored" data-anchor-id="non-seasonal-trend">Non-Seasonal Trend</h2>
+<p>The state space model allows us to extract the <strong>underlying trend</strong> by removing seasonal effects. This shows the unemployment dynamics driven only by:</p>
+<ul>
+<li>Baseline separation and finding rates</li>
+<li>Economic shock effects (2008, 2020)</li>
+<li>Stochastic innovations</li>
+</ul>
+<div class="cell">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb59"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Extract the non-seasonal trend</span></span>
+<span id="cb59-2"><a href="#cb59-2" aria-hidden="true" tabindex="-1"></a>trend <span class="ot">&lt;-</span> <span class="fu">extract_trend</span>(result, <span class="at">summary =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb59-3"><a href="#cb59-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb59-4"><a href="#cb59-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Create data for plotting</span></span>
+<span id="cb59-5"><a href="#cb59-5" aria-hidden="true" tabindex="-1"></a>trend_data <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb59-6"><a href="#cb59-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">year_frac =</span> trend<span class="sc">$</span>year_frac,</span>
+<span id="cb59-7"><a href="#cb59-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">education =</span> trend<span class="sc">$</span>education,</span>
+<span id="cb59-8"><a href="#cb59-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">mean =</span> trend<span class="sc">$</span>mean,</span>
+<span id="cb59-9"><a href="#cb59-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">lower =</span> trend<span class="sc">$</span>q5,</span>
+<span id="cb59-10"><a href="#cb59-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">upper =</span> trend<span class="sc">$</span>q95</span>
+<span id="cb59-11"><a href="#cb59-11" aria-hidden="true" tabindex="-1"></a>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb60"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(trend_data, <span class="fu">aes</span>(<span class="at">x =</span> year_frac)) <span class="sc">+</span></span>
+<span id="cb60-2"><a href="#cb60-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_ribbon</span>(<span class="fu">aes</span>(<span class="at">ymin =</span> lower <span class="sc">*</span> <span class="dv">100</span>, <span class="at">ymax =</span> upper <span class="sc">*</span> <span class="dv">100</span>, <span class="at">fill =</span> education),</span>
+<span id="cb60-3"><a href="#cb60-3" aria-hidden="true" tabindex="-1"></a>              <span class="at">alpha =</span> <span class="fl">0.3</span>) <span class="sc">+</span></span>
+<span id="cb60-4"><a href="#cb60-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">y =</span> mean <span class="sc">*</span> <span class="dv">100</span>, <span class="at">color =</span> education), <span class="at">linewidth =</span> <span class="dv">1</span>) <span class="sc">+</span></span>
+<span id="cb60-5"><a href="#cb60-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="fu">c</span>(<span class="fl">2008.75</span>, <span class="fl">2020.25</span>), <span class="at">linetype =</span> <span class="st">"dashed"</span>,</span>
+<span id="cb60-6"><a href="#cb60-6" aria-hidden="true" tabindex="-1"></a>             <span class="at">color =</span> <span class="st">"red"</span>, <span class="at">alpha =</span> <span class="fl">0.7</span>) <span class="sc">+</span></span>
+<span id="cb60-7"><a href="#cb60-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">annotate</span>(<span class="st">"text"</span>, <span class="at">x =</span> <span class="fl">2009.5</span>, <span class="at">y =</span> <span class="cn">Inf</span>, <span class="at">label =</span> <span class="st">"2008 Crisis"</span>,</span>
+<span id="cb60-8"><a href="#cb60-8" aria-hidden="true" tabindex="-1"></a>           <span class="at">vjust =</span> <span class="dv">2</span>, <span class="at">hjust =</span> <span class="dv">0</span>, <span class="at">size =</span> <span class="dv">3</span>, <span class="at">color =</span> <span class="st">"red"</span>) <span class="sc">+</span></span>
+<span id="cb60-9"><a href="#cb60-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">annotate</span>(<span class="st">"text"</span>, <span class="at">x =</span> <span class="dv">2021</span>, <span class="at">y =</span> <span class="cn">Inf</span>, <span class="at">label =</span> <span class="st">"COVID-19"</span>,</span>
+<span id="cb60-10"><a href="#cb60-10" aria-hidden="true" tabindex="-1"></a>           <span class="at">vjust =</span> <span class="dv">2</span>, <span class="at">hjust =</span> <span class="dv">0</span>, <span class="at">size =</span> <span class="dv">3</span>, <span class="at">color =</span> <span class="st">"red"</span>) <span class="sc">+</span></span>
+<span id="cb60-11"><a href="#cb60-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>education, <span class="at">scales =</span> <span class="st">"free_y"</span>, <span class="at">ncol =</span> <span class="dv">2</span>) <span class="sc">+</span></span>
+<span id="cb60-12"><a href="#cb60-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="at">breaks =</span> <span class="fu">seq</span>(<span class="dv">2000</span>, <span class="dv">2025</span>, <span class="dv">5</span>)) <span class="sc">+</span></span>
+<span id="cb60-13"><a href="#cb60-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_y_continuous</span>(<span class="at">labels =</span> scales<span class="sc">::</span><span class="fu">percent_format</span>(<span class="at">scale =</span> <span class="dv">1</span>)) <span class="sc">+</span></span>
+<span id="cb60-14"><a href="#cb60-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Year"</span>,</span>
+<span id="cb60-15"><a href="#cb60-15" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Unemployment Rate (Trend)"</span>,</span>
+<span id="cb60-16"><a href="#cb60-16" aria-hidden="true" tabindex="-1"></a>       <span class="at">title =</span> <span class="st">"Non-Seasonal Unemployment Trend by Education Level"</span>,</span>
+<span id="cb60-17"><a href="#cb60-17" aria-hidden="true" tabindex="-1"></a>       <span class="at">subtitle =</span> <span class="st">"Seasonal effects removed; shows baseline dynamics + shock impacts"</span>) <span class="sc">+</span></span>
+<span id="cb60-18"><a href="#cb60-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"none"</span>,</span>
+<span id="cb60-19"><a href="#cb60-19" aria-hidden="true" tabindex="-1"></a>        <span class="at">strip.text =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">10</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="state-space-comparison_files/figure-html/plot-trend-1.png" class="img-fluid figure-img" width="960"></p>
+<figcaption>Non-seasonal unemployment trend (shock + baseline dynamics only)</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<section id="trend-vs-full-model-comparison" class="level3">
+<h3 class="anchored" data-anchor-id="trend-vs-full-model-comparison">Trend vs Full Model Comparison</h3>
+<p>Compare the trend (without seasonality) to the full model (with seasonality) to visualize the seasonal component:</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Show code</summary>
+<div class="sourceCode cell-code" id="cb61"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb61-1"><a href="#cb61-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Combine trend and full data</span></span>
+<span id="cb61-2"><a href="#cb61-2" aria-hidden="true" tabindex="-1"></a>comparison_data <span class="ot">&lt;-</span> <span class="fu">rbind</span>(</span>
+<span id="cb61-3"><a href="#cb61-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transform</span>(plot_data[, <span class="fu">c</span>(<span class="st">"year_frac"</span>, <span class="st">"education"</span>, <span class="st">"mean"</span>)],</span>
+<span id="cb61-4"><a href="#cb61-4" aria-hidden="true" tabindex="-1"></a>            <span class="at">component =</span> <span class="st">"Full (with seasonal)"</span>),</span>
+<span id="cb61-5"><a href="#cb61-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transform</span>(trend_data[, <span class="fu">c</span>(<span class="st">"year_frac"</span>, <span class="st">"education"</span>, <span class="st">"mean"</span>)],</span>
+<span id="cb61-6"><a href="#cb61-6" aria-hidden="true" tabindex="-1"></a>            <span class="at">component =</span> <span class="st">"Trend (no seasonal)"</span>)</span>
+<span id="cb61-7"><a href="#cb61-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb61-8"><a href="#cb61-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb61-9"><a href="#cb61-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Focus on a subset for clarity</span></span>
+<span id="cb61-10"><a href="#cb61-10" aria-hidden="true" tabindex="-1"></a>sample_edu <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"phd"</span>, <span class="st">"bachelors"</span>, <span class="st">"less_than_hs"</span>)</span>
+<span id="cb61-11"><a href="#cb61-11" aria-hidden="true" tabindex="-1"></a>comparison_subset <span class="ot">&lt;-</span> comparison_data[comparison_data<span class="sc">$</span>education <span class="sc">%in%</span> sample_edu, ]</span>
+<span id="cb61-12"><a href="#cb61-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb61-13"><a href="#cb61-13" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(comparison_subset, <span class="fu">aes</span>(<span class="at">x =</span> year_frac, <span class="at">y =</span> mean <span class="sc">*</span> <span class="dv">100</span>,</span>
+<span id="cb61-14"><a href="#cb61-14" aria-hidden="true" tabindex="-1"></a>                               <span class="at">color =</span> education, <span class="at">linetype =</span> component)) <span class="sc">+</span></span>
+<span id="cb61-15"><a href="#cb61-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="at">linewidth =</span> <span class="fl">0.8</span>) <span class="sc">+</span></span>
+<span id="cb61-16"><a href="#cb61-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="fu">c</span>(<span class="fl">2008.75</span>, <span class="fl">2020.25</span>), <span class="at">linetype =</span> <span class="st">"dotted"</span>,</span>
+<span id="cb61-17"><a href="#cb61-17" aria-hidden="true" tabindex="-1"></a>             <span class="at">color =</span> <span class="st">"gray50"</span>, <span class="at">alpha =</span> <span class="fl">0.7</span>) <span class="sc">+</span></span>
+<span id="cb61-18"><a href="#cb61-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>education, <span class="at">scales =</span> <span class="st">"free_y"</span>, <span class="at">ncol =</span> <span class="dv">1</span>) <span class="sc">+</span></span>
+<span id="cb61-19"><a href="#cb61-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="at">breaks =</span> <span class="fu">seq</span>(<span class="dv">2000</span>, <span class="dv">2025</span>, <span class="dv">5</span>)) <span class="sc">+</span></span>
+<span id="cb61-20"><a href="#cb61-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_linetype_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">"Full (with seasonal)"</span> <span class="ot">=</span> <span class="st">"solid"</span>,</span>
+<span id="cb61-21"><a href="#cb61-21" aria-hidden="true" tabindex="-1"></a>                                    <span class="st">"Trend (no seasonal)"</span> <span class="ot">=</span> <span class="st">"dashed"</span>)) <span class="sc">+</span></span>
+<span id="cb61-22"><a href="#cb61-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Year"</span>,</span>
+<span id="cb61-23"><a href="#cb61-23" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Unemployment Rate (%)"</span>,</span>
+<span id="cb61-24"><a href="#cb61-24" aria-hidden="true" tabindex="-1"></a>       <span class="at">linetype =</span> <span class="st">"Component"</span>,</span>
+<span id="cb61-25"><a href="#cb61-25" aria-hidden="true" tabindex="-1"></a>       <span class="at">title =</span> <span class="st">"Seasonal Decomposition: Full Model vs Trend"</span>,</span>
+<span id="cb61-26"><a href="#cb61-26" aria-hidden="true" tabindex="-1"></a>       <span class="at">subtitle =</span> <span class="st">"Dashed line shows underlying trend; solid line includes seasonal fluctuations"</span>) <span class="sc">+</span></span>
+<span id="cb61-27"><a href="#cb61-27" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"bottom"</span>) <span class="sc">+</span></span>
+<span id="cb61-28"><a href="#cb61-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">guides</span>(<span class="at">color =</span> <span class="st">"none"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output-display">
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="state-space-comparison_files/figure-html/trend-vs-full-1.png" class="img-fluid figure-img" width="960"></p>
+<figcaption>Comparison of trend (dashed) vs full model with seasonality (solid)</figcaption>
+</figure>
+</div>
+</div>
+</div>
+</section>
+</section>
 <section id="comparison-with-gam" class="level2">
 <h2 class="anchored" data-anchor-id="comparison-with-gam">Comparison with GAM</h2>
 <section id="key-differences" class="level3">
@@ -732,41 +838,41 @@ Total execution time: 1120.2 seconds.</code></pre>
 <div class="cell">
 <details class="code-fold">
 <summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb59"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb59-1"><a href="#cb59-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Visualize shock impulse functions</span></span>
-<span id="cb59-2"><a href="#cb59-2" aria-hidden="true" tabindex="-1"></a>shock_times <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="dv">2000</span>, <span class="dv">2025</span>, <span class="at">by =</span> <span class="fl">0.1</span>)</span>
-<span id="cb59-3"><a href="#cb59-3" aria-hidden="true" tabindex="-1"></a>shock_2008_intensity <span class="ot">&lt;-</span> <span class="fu">sapply</span>(shock_times, <span class="cf">function</span>(t) {</span>
-<span id="cb59-4"><a href="#cb59-4" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (t <span class="sc">&lt;</span> <span class="fl">2007.75</span>) <span class="fu">return</span>(<span class="dv">0</span>)</span>
-<span id="cb59-5"><a href="#cb59-5" aria-hidden="true" tabindex="-1"></a>  <span class="cf">else</span> <span class="cf">if</span> (t <span class="sc">&lt;=</span> <span class="fl">2009.5</span>) <span class="fu">return</span>((t <span class="sc">-</span> <span class="fl">2007.75</span>) <span class="sc">/</span> (<span class="fl">2009.5</span> <span class="sc">-</span> <span class="fl">2007.75</span>))</span>
-<span id="cb59-6"><a href="#cb59-6" aria-hidden="true" tabindex="-1"></a>  <span class="cf">else</span> <span class="fu">return</span>(<span class="fu">exp</span>(<span class="sc">-</span><span class="fl">0.5</span> <span class="sc">*</span> (t <span class="sc">-</span> <span class="fl">2009.5</span>)))</span>
-<span id="cb59-7"><a href="#cb59-7" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb59-8"><a href="#cb59-8" aria-hidden="true" tabindex="-1"></a>shock_2020_intensity <span class="ot">&lt;-</span> <span class="fu">sapply</span>(shock_times, <span class="cf">function</span>(t) {</span>
-<span id="cb59-9"><a href="#cb59-9" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (t <span class="sc">&lt;</span> <span class="fl">2020.17</span>) <span class="fu">return</span>(<span class="dv">0</span>)</span>
-<span id="cb59-10"><a href="#cb59-10" aria-hidden="true" tabindex="-1"></a>  <span class="cf">else</span> <span class="cf">if</span> (t <span class="sc">&lt;=</span> <span class="fl">2020.33</span>) <span class="fu">return</span>((t <span class="sc">-</span> <span class="fl">2020.17</span>) <span class="sc">/</span> (<span class="fl">2020.33</span> <span class="sc">-</span> <span class="fl">2020.17</span>))</span>
-<span id="cb59-11"><a href="#cb59-11" aria-hidden="true" tabindex="-1"></a>  <span class="cf">else</span> <span class="fu">return</span>(<span class="fu">exp</span>(<span class="sc">-</span><span class="fl">1.0</span> <span class="sc">*</span> (t <span class="sc">-</span> <span class="fl">2020.33</span>)))</span>
-<span id="cb59-12"><a href="#cb59-12" aria-hidden="true" tabindex="-1"></a>})</span>
-<span id="cb59-13"><a href="#cb59-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb59-14"><a href="#cb59-14" aria-hidden="true" tabindex="-1"></a>impulse_df <span class="ot">&lt;-</span> <span class="fu">rbind</span>(</span>
-<span id="cb59-15"><a href="#cb59-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">data.frame</span>(<span class="at">year =</span> shock_times, <span class="at">intensity =</span> shock_2008_intensity,</span>
-<span id="cb59-16"><a href="#cb59-16" aria-hidden="true" tabindex="-1"></a>             <span class="at">shock =</span> <span class="st">"2008 Financial Crisis"</span>),</span>
-<span id="cb59-17"><a href="#cb59-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">data.frame</span>(<span class="at">year =</span> shock_times, <span class="at">intensity =</span> shock_2020_intensity,</span>
-<span id="cb59-18"><a href="#cb59-18" aria-hidden="true" tabindex="-1"></a>             <span class="at">shock =</span> <span class="st">"2020 COVID-19"</span>)</span>
-<span id="cb59-19"><a href="#cb59-19" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb59-20"><a href="#cb59-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb59-21"><a href="#cb59-21" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(impulse_df, <span class="fu">aes</span>(<span class="at">x =</span> year, <span class="at">y =</span> intensity, <span class="at">color =</span> shock)) <span class="sc">+</span></span>
-<span id="cb59-22"><a href="#cb59-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
-<span id="cb59-23"><a href="#cb59-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_area</span>(<span class="fu">aes</span>(<span class="at">fill =</span> shock), <span class="at">alpha =</span> <span class="fl">0.2</span>, <span class="at">position =</span> <span class="st">"identity"</span>) <span class="sc">+</span></span>
-<span id="cb59-24"><a href="#cb59-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_color_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">"2008 Financial Crisis"</span> <span class="ot">=</span> <span class="st">"#E74C3C"</span>,</span>
-<span id="cb59-25"><a href="#cb59-25" aria-hidden="true" tabindex="-1"></a>                                <span class="st">"2020 COVID-19"</span> <span class="ot">=</span> <span class="st">"#3498DB"</span>)) <span class="sc">+</span></span>
-<span id="cb59-26"><a href="#cb59-26" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">"2008 Financial Crisis"</span> <span class="ot">=</span> <span class="st">"#E74C3C"</span>,</span>
-<span id="cb59-27"><a href="#cb59-27" aria-hidden="true" tabindex="-1"></a>                               <span class="st">"2020 COVID-19"</span> <span class="ot">=</span> <span class="st">"#3498DB"</span>)) <span class="sc">+</span></span>
-<span id="cb59-28"><a href="#cb59-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="at">breaks =</span> <span class="fu">seq</span>(<span class="dv">2000</span>, <span class="dv">2025</span>, <span class="dv">5</span>)) <span class="sc">+</span></span>
-<span id="cb59-29"><a href="#cb59-29" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Year"</span>,</span>
-<span id="cb59-30"><a href="#cb59-30" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Shock Intensity"</span>,</span>
-<span id="cb59-31"><a href="#cb59-31" aria-hidden="true" tabindex="-1"></a>       <span class="at">color =</span> <span class="st">"Shock"</span>,</span>
-<span id="cb59-32"><a href="#cb59-32" aria-hidden="true" tabindex="-1"></a>       <span class="at">fill =</span> <span class="st">"Shock"</span>,</span>
-<span id="cb59-33"><a href="#cb59-33" aria-hidden="true" tabindex="-1"></a>       <span class="at">title =</span> <span class="st">"Shock Impulse Functions"</span>,</span>
-<span id="cb59-34"><a href="#cb59-34" aria-hidden="true" tabindex="-1"></a>       <span class="at">subtitle =</span> <span class="st">"Gradual onset, peak, and exponential decay"</span>) <span class="sc">+</span></span>
-<span id="cb59-35"><a href="#cb59-35" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"bottom"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb62"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb62-1"><a href="#cb62-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Visualize shock impulse functions</span></span>
+<span id="cb62-2"><a href="#cb62-2" aria-hidden="true" tabindex="-1"></a>shock_times <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="dv">2000</span>, <span class="dv">2025</span>, <span class="at">by =</span> <span class="fl">0.1</span>)</span>
+<span id="cb62-3"><a href="#cb62-3" aria-hidden="true" tabindex="-1"></a>shock_2008_intensity <span class="ot">&lt;-</span> <span class="fu">sapply</span>(shock_times, <span class="cf">function</span>(t) {</span>
+<span id="cb62-4"><a href="#cb62-4" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (t <span class="sc">&lt;</span> <span class="fl">2007.75</span>) <span class="fu">return</span>(<span class="dv">0</span>)</span>
+<span id="cb62-5"><a href="#cb62-5" aria-hidden="true" tabindex="-1"></a>  <span class="cf">else</span> <span class="cf">if</span> (t <span class="sc">&lt;=</span> <span class="fl">2009.5</span>) <span class="fu">return</span>((t <span class="sc">-</span> <span class="fl">2007.75</span>) <span class="sc">/</span> (<span class="fl">2009.5</span> <span class="sc">-</span> <span class="fl">2007.75</span>))</span>
+<span id="cb62-6"><a href="#cb62-6" aria-hidden="true" tabindex="-1"></a>  <span class="cf">else</span> <span class="fu">return</span>(<span class="fu">exp</span>(<span class="sc">-</span><span class="fl">0.5</span> <span class="sc">*</span> (t <span class="sc">-</span> <span class="fl">2009.5</span>)))</span>
+<span id="cb62-7"><a href="#cb62-7" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb62-8"><a href="#cb62-8" aria-hidden="true" tabindex="-1"></a>shock_2020_intensity <span class="ot">&lt;-</span> <span class="fu">sapply</span>(shock_times, <span class="cf">function</span>(t) {</span>
+<span id="cb62-9"><a href="#cb62-9" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (t <span class="sc">&lt;</span> <span class="fl">2020.17</span>) <span class="fu">return</span>(<span class="dv">0</span>)</span>
+<span id="cb62-10"><a href="#cb62-10" aria-hidden="true" tabindex="-1"></a>  <span class="cf">else</span> <span class="cf">if</span> (t <span class="sc">&lt;=</span> <span class="fl">2020.33</span>) <span class="fu">return</span>((t <span class="sc">-</span> <span class="fl">2020.17</span>) <span class="sc">/</span> (<span class="fl">2020.33</span> <span class="sc">-</span> <span class="fl">2020.17</span>))</span>
+<span id="cb62-11"><a href="#cb62-11" aria-hidden="true" tabindex="-1"></a>  <span class="cf">else</span> <span class="fu">return</span>(<span class="fu">exp</span>(<span class="sc">-</span><span class="fl">1.0</span> <span class="sc">*</span> (t <span class="sc">-</span> <span class="fl">2020.33</span>)))</span>
+<span id="cb62-12"><a href="#cb62-12" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb62-13"><a href="#cb62-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb62-14"><a href="#cb62-14" aria-hidden="true" tabindex="-1"></a>impulse_df <span class="ot">&lt;-</span> <span class="fu">rbind</span>(</span>
+<span id="cb62-15"><a href="#cb62-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">data.frame</span>(<span class="at">year =</span> shock_times, <span class="at">intensity =</span> shock_2008_intensity,</span>
+<span id="cb62-16"><a href="#cb62-16" aria-hidden="true" tabindex="-1"></a>             <span class="at">shock =</span> <span class="st">"2008 Financial Crisis"</span>),</span>
+<span id="cb62-17"><a href="#cb62-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">data.frame</span>(<span class="at">year =</span> shock_times, <span class="at">intensity =</span> shock_2020_intensity,</span>
+<span id="cb62-18"><a href="#cb62-18" aria-hidden="true" tabindex="-1"></a>             <span class="at">shock =</span> <span class="st">"2020 COVID-19"</span>)</span>
+<span id="cb62-19"><a href="#cb62-19" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb62-20"><a href="#cb62-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb62-21"><a href="#cb62-21" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(impulse_df, <span class="fu">aes</span>(<span class="at">x =</span> year, <span class="at">y =</span> intensity, <span class="at">color =</span> shock)) <span class="sc">+</span></span>
+<span id="cb62-22"><a href="#cb62-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="at">linewidth =</span> <span class="fl">1.2</span>) <span class="sc">+</span></span>
+<span id="cb62-23"><a href="#cb62-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_area</span>(<span class="fu">aes</span>(<span class="at">fill =</span> shock), <span class="at">alpha =</span> <span class="fl">0.2</span>, <span class="at">position =</span> <span class="st">"identity"</span>) <span class="sc">+</span></span>
+<span id="cb62-24"><a href="#cb62-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_color_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">"2008 Financial Crisis"</span> <span class="ot">=</span> <span class="st">"#E74C3C"</span>,</span>
+<span id="cb62-25"><a href="#cb62-25" aria-hidden="true" tabindex="-1"></a>                                <span class="st">"2020 COVID-19"</span> <span class="ot">=</span> <span class="st">"#3498DB"</span>)) <span class="sc">+</span></span>
+<span id="cb62-26"><a href="#cb62-26" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">"2008 Financial Crisis"</span> <span class="ot">=</span> <span class="st">"#E74C3C"</span>,</span>
+<span id="cb62-27"><a href="#cb62-27" aria-hidden="true" tabindex="-1"></a>                               <span class="st">"2020 COVID-19"</span> <span class="ot">=</span> <span class="st">"#3498DB"</span>)) <span class="sc">+</span></span>
+<span id="cb62-28"><a href="#cb62-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="at">breaks =</span> <span class="fu">seq</span>(<span class="dv">2000</span>, <span class="dv">2025</span>, <span class="dv">5</span>)) <span class="sc">+</span></span>
+<span id="cb62-29"><a href="#cb62-29" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Year"</span>,</span>
+<span id="cb62-30"><a href="#cb62-30" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Shock Intensity"</span>,</span>
+<span id="cb62-31"><a href="#cb62-31" aria-hidden="true" tabindex="-1"></a>       <span class="at">color =</span> <span class="st">"Shock"</span>,</span>
+<span id="cb62-32"><a href="#cb62-32" aria-hidden="true" tabindex="-1"></a>       <span class="at">fill =</span> <span class="st">"Shock"</span>,</span>
+<span id="cb62-33"><a href="#cb62-33" aria-hidden="true" tabindex="-1"></a>       <span class="at">title =</span> <span class="st">"Shock Impulse Functions"</span>,</span>
+<span id="cb62-34"><a href="#cb62-34" aria-hidden="true" tabindex="-1"></a>       <span class="at">subtitle =</span> <span class="st">"Gradual onset, peak, and exponential decay"</span>) <span class="sc">+</span></span>
+<span id="cb62-35"><a href="#cb62-35" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"bottom"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
@@ -786,13 +892,13 @@ Total execution time: 1120.2 seconds.</code></pre>
 <div class="cell">
 <details class="code-fold">
 <summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb60"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Get draws for key parameters</span></span>
-<span id="cb60-2"><a href="#cb60-2" aria-hidden="true" tabindex="-1"></a>draws <span class="ot">&lt;-</span> result<span class="sc">$</span>fit<span class="sc">$</span><span class="fu">draws</span>(<span class="at">format =</span> <span class="st">"draws_df"</span>)</span>
-<span id="cb60-3"><a href="#cb60-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb60-4"><a href="#cb60-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Separation rate trace</span></span>
-<span id="cb60-5"><a href="#cb60-5" aria-hidden="true" tabindex="-1"></a><span class="fu">mcmc_trace</span>(result<span class="sc">$</span>fit<span class="sc">$</span><span class="fu">draws</span>(), <span class="at">pars =</span> <span class="st">"separation_rate[1]"</span>) <span class="sc">+</span></span>
-<span id="cb60-6"><a href="#cb60-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Separation Rate (PhD)"</span>) <span class="sc">+</span></span>
-<span id="cb60-7"><a href="#cb60-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb63"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb63-1"><a href="#cb63-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Get draws for key parameters</span></span>
+<span id="cb63-2"><a href="#cb63-2" aria-hidden="true" tabindex="-1"></a>draws <span class="ot">&lt;-</span> result<span class="sc">$</span>fit<span class="sc">$</span><span class="fu">draws</span>(<span class="at">format =</span> <span class="st">"draws_df"</span>)</span>
+<span id="cb63-3"><a href="#cb63-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb63-4"><a href="#cb63-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Separation rate trace</span></span>
+<span id="cb63-5"><a href="#cb63-5" aria-hidden="true" tabindex="-1"></a><span class="fu">mcmc_trace</span>(result<span class="sc">$</span>fit<span class="sc">$</span><span class="fu">draws</span>(), <span class="at">pars =</span> <span class="st">"separation_rate[1]"</span>) <span class="sc">+</span></span>
+<span id="cb63-6"><a href="#cb63-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">title =</span> <span class="st">"Separation Rate (PhD)"</span>) <span class="sc">+</span></span>
+<span id="cb63-7"><a href="#cb63-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
@@ -809,25 +915,25 @@ Total execution time: 1120.2 seconds.</code></pre>
 <div class="cell">
 <details class="code-fold">
 <summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb61"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb61-1"><a href="#cb61-1" aria-hidden="true" tabindex="-1"></a>ppc_data <span class="ot">&lt;-</span> <span class="fu">extract_ppc_data</span>(result)</span>
-<span id="cb61-2"><a href="#cb61-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb61-3"><a href="#cb61-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Sample a few education levels for clarity</span></span>
-<span id="cb61-4"><a href="#cb61-4" aria-hidden="true" tabindex="-1"></a>sample_edu <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"phd"</span>, <span class="st">"bachelors"</span>, <span class="st">"less_than_hs"</span>)</span>
-<span id="cb61-5"><a href="#cb61-5" aria-hidden="true" tabindex="-1"></a>ppc_sample <span class="ot">&lt;-</span> ppc_data[ppc_data<span class="sc">$</span>education <span class="sc">%in%</span> sample_edu, ]</span>
-<span id="cb61-6"><a href="#cb61-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb61-7"><a href="#cb61-7" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(ppc_sample, <span class="fu">aes</span>(<span class="at">x =</span> year_frac)) <span class="sc">+</span></span>
-<span id="cb61-8"><a href="#cb61-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_ribbon</span>(<span class="fu">aes</span>(<span class="at">ymin =</span> predicted_rate_lower <span class="sc">*</span> <span class="dv">100</span>,</span>
-<span id="cb61-9"><a href="#cb61-9" aria-hidden="true" tabindex="-1"></a>                  <span class="at">ymax =</span> predicted_rate_upper <span class="sc">*</span> <span class="dv">100</span>),</span>
-<span id="cb61-10"><a href="#cb61-10" aria-hidden="true" tabindex="-1"></a>              <span class="at">fill =</span> <span class="st">"steelblue"</span>, <span class="at">alpha =</span> <span class="fl">0.3</span>) <span class="sc">+</span></span>
-<span id="cb61-11"><a href="#cb61-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">y =</span> predicted_rate <span class="sc">*</span> <span class="dv">100</span>), <span class="at">color =</span> <span class="st">"steelblue"</span>, <span class="at">linewidth =</span> <span class="fl">0.8</span>) <span class="sc">+</span></span>
-<span id="cb61-12"><a href="#cb61-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="fu">aes</span>(<span class="at">y =</span> observed_rate <span class="sc">*</span> <span class="dv">100</span>), <span class="at">alpha =</span> <span class="fl">0.5</span>, <span class="at">size =</span> <span class="dv">1</span>) <span class="sc">+</span></span>
-<span id="cb61-13"><a href="#cb61-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>education, <span class="at">scales =</span> <span class="st">"free_y"</span>) <span class="sc">+</span></span>
-<span id="cb61-14"><a href="#cb61-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="at">breaks =</span> <span class="fu">seq</span>(<span class="dv">2000</span>, <span class="dv">2025</span>, <span class="dv">5</span>)) <span class="sc">+</span></span>
-<span id="cb61-15"><a href="#cb61-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Year"</span>,</span>
-<span id="cb61-16"><a href="#cb61-16" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Unemployment Rate (%)"</span>,</span>
-<span id="cb61-17"><a href="#cb61-17" aria-hidden="true" tabindex="-1"></a>       <span class="at">title =</span> <span class="st">"Posterior Predictive Check"</span>,</span>
-<span id="cb61-18"><a href="#cb61-18" aria-hidden="true" tabindex="-1"></a>       <span class="at">subtitle =</span> <span class="st">"Points: observed; Line: predicted mean; Band: 95% prediction interval"</span>) <span class="sc">+</span></span>
-<span id="cb61-19"><a href="#cb61-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">strip.text =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">11</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb64"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb64-1"><a href="#cb64-1" aria-hidden="true" tabindex="-1"></a>ppc_data <span class="ot">&lt;-</span> <span class="fu">extract_ppc_data</span>(result)</span>
+<span id="cb64-2"><a href="#cb64-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb64-3"><a href="#cb64-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Sample a few education levels for clarity</span></span>
+<span id="cb64-4"><a href="#cb64-4" aria-hidden="true" tabindex="-1"></a>sample_edu <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"phd"</span>, <span class="st">"bachelors"</span>, <span class="st">"less_than_hs"</span>)</span>
+<span id="cb64-5"><a href="#cb64-5" aria-hidden="true" tabindex="-1"></a>ppc_sample <span class="ot">&lt;-</span> ppc_data[ppc_data<span class="sc">$</span>education <span class="sc">%in%</span> sample_edu, ]</span>
+<span id="cb64-6"><a href="#cb64-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb64-7"><a href="#cb64-7" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(ppc_sample, <span class="fu">aes</span>(<span class="at">x =</span> year_frac)) <span class="sc">+</span></span>
+<span id="cb64-8"><a href="#cb64-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_ribbon</span>(<span class="fu">aes</span>(<span class="at">ymin =</span> predicted_rate_lower <span class="sc">*</span> <span class="dv">100</span>,</span>
+<span id="cb64-9"><a href="#cb64-9" aria-hidden="true" tabindex="-1"></a>                  <span class="at">ymax =</span> predicted_rate_upper <span class="sc">*</span> <span class="dv">100</span>),</span>
+<span id="cb64-10"><a href="#cb64-10" aria-hidden="true" tabindex="-1"></a>              <span class="at">fill =</span> <span class="st">"steelblue"</span>, <span class="at">alpha =</span> <span class="fl">0.3</span>) <span class="sc">+</span></span>
+<span id="cb64-11"><a href="#cb64-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>(<span class="fu">aes</span>(<span class="at">y =</span> predicted_rate <span class="sc">*</span> <span class="dv">100</span>), <span class="at">color =</span> <span class="st">"steelblue"</span>, <span class="at">linewidth =</span> <span class="fl">0.8</span>) <span class="sc">+</span></span>
+<span id="cb64-12"><a href="#cb64-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="fu">aes</span>(<span class="at">y =</span> observed_rate <span class="sc">*</span> <span class="dv">100</span>), <span class="at">alpha =</span> <span class="fl">0.5</span>, <span class="at">size =</span> <span class="dv">1</span>) <span class="sc">+</span></span>
+<span id="cb64-13"><a href="#cb64-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>education, <span class="at">scales =</span> <span class="st">"free_y"</span>) <span class="sc">+</span></span>
+<span id="cb64-14"><a href="#cb64-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_x_continuous</span>(<span class="at">breaks =</span> <span class="fu">seq</span>(<span class="dv">2000</span>, <span class="dv">2025</span>, <span class="dv">5</span>)) <span class="sc">+</span></span>
+<span id="cb64-15"><a href="#cb64-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Year"</span>,</span>
+<span id="cb64-16"><a href="#cb64-16" aria-hidden="true" tabindex="-1"></a>       <span class="at">y =</span> <span class="st">"Unemployment Rate (%)"</span>,</span>
+<span id="cb64-17"><a href="#cb64-17" aria-hidden="true" tabindex="-1"></a>       <span class="at">title =</span> <span class="st">"Posterior Predictive Check"</span>,</span>
+<span id="cb64-18"><a href="#cb64-18" aria-hidden="true" tabindex="-1"></a>       <span class="at">subtitle =</span> <span class="st">"Points: observed; Line: predicted mean; Band: 95% prediction interval"</span>) <span class="sc">+</span></span>
+<span id="cb64-19"><a href="#cb64-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">strip.text =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">11</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
 <div class="quarto-figure quarto-figure-center">
@@ -845,26 +951,26 @@ Total execution time: 1120.2 seconds.</code></pre>
 <div class="cell">
 <details class="code-fold">
 <summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb62"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb62-1"><a href="#cb62-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute LOO for state space model</span></span>
-<span id="cb62-2"><a href="#cb62-2" aria-hidden="true" tabindex="-1"></a>loo_ss <span class="ot">&lt;-</span> <span class="fu">compute_loo</span>(result)</span>
-<span id="cb62-3"><a href="#cb62-3" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(loo_ss)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb65"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb65-1"><a href="#cb65-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Compute LOO for state space model</span></span>
+<span id="cb65-2"><a href="#cb65-2" aria-hidden="true" tabindex="-1"></a>loo_ss <span class="ot">&lt;-</span> <span class="fu">compute_loo</span>(result)</span>
+<span id="cb65-3"><a href="#cb65-3" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(loo_ss)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>
 Computed from 4000 by 2170 log-likelihood matrix.
 
          Estimate    SE
-elpd_loo  -9122.4  76.2
-p_loo       426.8  25.9
-looic     18244.8 152.5
+elpd_loo  -9125.6  76.8
+p_loo       428.0  27.0
+looic     18251.1 153.7
 ------
 MCSE of elpd_loo is NA.
 MCSE and ESS estimates assume independent draws (r_eff=1).
 
 Pareto k diagnostic values:
                          Count Pct.    Min. ESS
-(-Inf, 0.7]   (good)     2103  96.9%   150     
-   (0.7, 1]   (bad)        62   2.9%   &lt;NA&gt;    
+(-Inf, 0.7]   (good)     2113  97.4%   84      
+   (0.7, 1]   (bad)        52   2.4%   &lt;NA&gt;    
    (1, Inf)   (very bad)    5   0.2%   &lt;NA&gt;    
 See help('pareto-k-diagnostic') for details.</code></pre>
 </div>
@@ -889,7 +995,7 @@ See help('pareto-k-diagnostic') for details.</code></pre>
 <div class="cell">
 <details class="code-fold">
 <summary>Show code</summary>
-<div class="sourceCode cell-code" id="cb64"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb64-1"><a href="#cb64-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sessionInfo</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb67"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb67-1"><a href="#cb67-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sessionInfo</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>R version 4.3.2 (2023-10-31)

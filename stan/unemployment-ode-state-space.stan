@@ -195,6 +195,37 @@ generated quantities {
   real halflife_2008 = log(2) / decay_2008;
   real halflife_2020 = log(2) / decay_2020;
 
+  // Non-seasonal trend: unemployment driven by baseline rates + shocks only
+  // This removes the seasonal modulation of the finding rate
+  array[T] vector[N_edu] u_trend;
+  {
+    array[T] vector[N_edu] logit_u_trend;
+
+    // Initialize at same point as full model
+    logit_u_trend[1] = logit_u_init;
+    u_trend[1] = inv_logit(logit_u_trend[1]);
+
+    // Evolve using baseline finding rate (no seasonal)
+    for (t in 2:T) {
+      for (i in 1:N_edu) {
+        // Effective separation rate (baseline + shock effects)
+        real s_eff = separation_rate[i]
+                     + shock_2008[t] * shock_2008_effect[i]
+                     + shock_2020[t] * shock_2020_effect[i];
+
+        // Baseline finding rate (NO seasonal adjustment)
+        real f_base = finding_rate[i];
+
+        // Discretized ODE without seasonal
+        real du_dt = s_eff * (1 - u_trend[t-1][i]) - f_base * u_trend[t-1][i];
+
+        // Same innovations as full model to maintain comparable trajectory
+        logit_u_trend[t][i] = logit_u_trend[t-1][i] + du_dt + logit_u_innov[t-1][i];
+      }
+      u_trend[t] = inv_logit(logit_u_trend[t]);
+    }
+  }
+
   // Log-likelihood for LOO-CV
   array[T, N_edu] real log_lik;
   for (t in 1:T) {

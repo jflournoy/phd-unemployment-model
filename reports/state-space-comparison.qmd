@@ -261,6 +261,91 @@ ggplot(plot_data, aes(x = year_frac)) +
         strip.text = element_text(size = 10))
 ```
 
+## Non-Seasonal Trend
+
+The state space model allows us to extract the **underlying trend** by removing seasonal effects. This shows the unemployment dynamics driven only by:
+
+- Baseline separation and finding rates
+- Economic shock effects (2008, 2020)
+- Stochastic innovations
+
+```{r extract-trend}
+# Extract the non-seasonal trend
+trend <- extract_trend(result, summary = TRUE)
+
+# Create data for plotting
+trend_data <- data.frame(
+  year_frac = trend$year_frac,
+  education = trend$education,
+  mean = trend$mean,
+  lower = trend$q5,
+  upper = trend$q95
+)
+```
+
+```{r plot-trend}
+#| fig-cap: "Non-seasonal unemployment trend (shock + baseline dynamics only)"
+#| fig-height: 8
+
+ggplot(trend_data, aes(x = year_frac)) +
+  geom_ribbon(aes(ymin = lower * 100, ymax = upper * 100, fill = education),
+              alpha = 0.3) +
+  geom_line(aes(y = mean * 100, color = education), linewidth = 1) +
+  geom_vline(xintercept = c(2008.75, 2020.25), linetype = "dashed",
+             color = "red", alpha = 0.7) +
+  annotate("text", x = 2009.5, y = Inf, label = "2008 Crisis",
+           vjust = 2, hjust = 0, size = 3, color = "red") +
+  annotate("text", x = 2021, y = Inf, label = "COVID-19",
+           vjust = 2, hjust = 0, size = 3, color = "red") +
+  facet_wrap(~education, scales = "free_y", ncol = 2) +
+  scale_x_continuous(breaks = seq(2000, 2025, 5)) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+  labs(x = "Year",
+       y = "Unemployment Rate (Trend)",
+       title = "Non-Seasonal Unemployment Trend by Education Level",
+       subtitle = "Seasonal effects removed; shows baseline dynamics + shock impacts") +
+  theme(legend.position = "none",
+        strip.text = element_text(size = 10))
+```
+
+### Trend vs Full Model Comparison
+
+Compare the trend (without seasonality) to the full model (with seasonality) to visualize the seasonal component:
+
+```{r trend-vs-full}
+#| fig-cap: "Comparison of trend (dashed) vs full model with seasonality (solid)"
+#| fig-height: 6
+
+# Combine trend and full data
+comparison_data <- rbind(
+  transform(plot_data[, c("year_frac", "education", "mean")],
+            component = "Full (with seasonal)"),
+  transform(trend_data[, c("year_frac", "education", "mean")],
+            component = "Trend (no seasonal)")
+)
+
+# Focus on a subset for clarity
+sample_edu <- c("phd", "bachelors", "less_than_hs")
+comparison_subset <- comparison_data[comparison_data$education %in% sample_edu, ]
+
+ggplot(comparison_subset, aes(x = year_frac, y = mean * 100,
+                               color = education, linetype = component)) +
+  geom_line(linewidth = 0.8) +
+  geom_vline(xintercept = c(2008.75, 2020.25), linetype = "dotted",
+             color = "gray50", alpha = 0.7) +
+  facet_wrap(~education, scales = "free_y", ncol = 1) +
+  scale_x_continuous(breaks = seq(2000, 2025, 5)) +
+  scale_linetype_manual(values = c("Full (with seasonal)" = "solid",
+                                    "Trend (no seasonal)" = "dashed")) +
+  labs(x = "Year",
+       y = "Unemployment Rate (%)",
+       linetype = "Component",
+       title = "Seasonal Decomposition: Full Model vs Trend",
+       subtitle = "Dashed line shows underlying trend; solid line includes seasonal fluctuations") +
+  theme(legend.position = "bottom") +
+  guides(color = "none")
+```
+
 ## Comparison with GAM
 
 ### Key Differences

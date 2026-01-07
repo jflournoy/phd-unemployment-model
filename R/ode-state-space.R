@@ -272,6 +272,49 @@ extract_latent_rates <- function(result, summary = TRUE) {
 }
 
 
+#' Extract Non-Seasonal Trend
+#'
+#' Extracts the unemployment trajectory without seasonal effects.
+#' This shows the underlying dynamics driven by separation/finding rates
+#' and economic shocks.
+#'
+#' @param result Result from fit_ode_state_space()
+#' @param summary If TRUE, return summary statistics. If FALSE, return
+#'   full posterior draws.
+#'
+#' @return Data frame with trend estimates by time and education
+#' @export
+extract_trend <- function(result, summary = TRUE) {
+  fit <- result$fit
+  stan_data <- result$stan_data
+
+  if (summary) {
+    # Get summary for all u_trend parameters
+    trend_summary <- fit$summary(variables = "u_trend")
+
+    # Parse parameter names to get indices
+    trend_summary$time_index <- as.integer(
+      gsub("u_trend\\[(\\d+),\\d+\\]", "\\1", trend_summary$variable)
+    )
+    trend_summary$edu_index <- as.integer(
+      gsub("u_trend\\[\\d+,(\\d+)\\]", "\\1", trend_summary$variable)
+    )
+
+    # Add labels
+    trend_summary$time_point <- stan_data$time_points[trend_summary$time_index]
+    trend_summary$education <- stan_data$education_levels[trend_summary$edu_index]
+
+    # Add year_frac for plotting
+    trend_summary$year_frac <- stan_data$year_frac[trend_summary$time_index]
+
+    trend_summary
+  } else {
+    # Return full draws
+    fit$draws(variables = "u_trend", format = "draws_df")
+  }
+}
+
+
 #' Posterior Predictive Check Data
 #'
 #' Extracts simulated data from the posterior for comparison with
