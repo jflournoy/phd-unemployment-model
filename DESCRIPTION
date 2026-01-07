@@ -13,6 +13,7 @@ RoxygenNote: 7.3.3
 Depends:
     R (>= 4.0.0)
 Imports:
+    bayesplot (>= 1.10.0),
     brms (>= 2.19.0),
     cmdstanr,
     data.table (>= 1.14.0),
@@ -22,6 +23,7 @@ Imports:
     gratia (>= 0.8.0),
     here (>= 1.0.0),
     ipumsr (>= 0.7.0),
+    loo (>= 2.6.0),
     lubridate (>= 1.9.0),
     marginaleffects (>= 0.18.0),
     mgcv (>= 1.8.0),
