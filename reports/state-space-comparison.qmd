@@ -417,13 +417,15 @@ The Stan model takes ~10 minutes to fit. To avoid refitting on every render, we 
 #| cache: false
 
 # Check if we can load from targets cache
-cached_model_path <- here("models", "ode-state-space-fit.qs")
+# Use cmdstanr's native save_object() for proper serialization
+# qs/RDS don't work because CmdStanMCMC references external CSV files
+cached_model_path <- here("models", "ode-state-space-fit.rds")
 use_cached <- file.exists(cached_model_path)
 
 if (use_cached) {
   cat("Loading cached model from:", cached_model_path, "\n")
   cat("(To refit, delete this file or run targets::tar_make(model_ode_state_space))\n\n")
-  result <- qs::qread(cached_model_path)
+  result <- readRDS(cached_model_path)
 } else {
   cat("No cached model found. Fitting model (this takes ~10 minutes)...\n")
   cat("TIP: Run targets::tar_make(model_ode_state_space) to cache the fit.\n\n")
@@ -441,9 +443,17 @@ if (use_cached) {
     refresh = 200
   )
 
-  # Save for future renders
+  # Save using cmdstanr's native method (saves draws internally)
   dir.create(dirname(cached_model_path), showWarnings = FALSE, recursive = TRUE)
-  qs::qsave(result, cached_model_path)
+  result$fit$save_object(file = cached_model_path)
+  # Also save stan_data and diagnostics alongside
+  result_full <- list(
+    fit = readRDS(cached_model_path),  # Re-read the properly saved fit
+    stan_data = result$stan_data,
+    diagnostics = result$diagnostics
+  )
+  saveRDS(result_full, cached_model_path)
+  result <- result_full
   cat("Model saved to:", cached_model_path, "\n")
 }
 
@@ -984,9 +994,10 @@ cat("Total divergent transitions:", n_divergent, "\n")
 
 if (n_divergent > 0) {
   # Pairs plot for key parameters - shows where divergences occur
+  # Using reparameterized names (logit-scale hierarchical params)
   p_pairs <- mcmc_pairs(
     draws,
-    pars = c("mu_separation", "sigma_separation", "separation_rate[1]", "sigma_state"),
+    pars = c("mu_logit_separation", "sigma_logit_separation", "separation_rate[1]", "sigma_state"),
     np = np,
     off_diag_args = list(size = 0.75, alpha = 0.5)
   )
@@ -1016,11 +1027,12 @@ mcmc_nuts_energy(np, binwidth = 1) +
 #| fig-height: 10
 
 # Trace plots for multiple key parameters
-p1 <- mcmc_trace(draws, pars = "mu_separation", np = np) +
-  labs(title = "Hierarchical Mean: Separation Rate")
+# Using reparameterized names (logit-scale hierarchical params)
+p1 <- mcmc_trace(draws, pars = "mu_logit_separation", np = np) +
+  labs(title = "Hierarchical Mean: Separation Rate (logit scale)")
 
-p2 <- mcmc_trace(draws, pars = "sigma_separation", np = np) +
-  labs(title = "Hierarchical SD: Separation Rate")
+p2 <- mcmc_trace(draws, pars = "sigma_logit_separation", np = np) +
+  labs(title = "Hierarchical SD: Separation Rate (logit scale)")
 
 p3 <- mcmc_trace(draws, pars = "separation_rate[1]", np = np) +
   labs(title = "Separation Rate (PhD)")
@@ -1038,7 +1050,9 @@ library(patchwork)
 #| fig-cap: "Convergence diagnostics: Rhat should be < 1.01, ESS should be > 400"
 
 # Get summary with Rhat and ESS
-key_params <- c("mu_separation", "sigma_separation", "mu_finding", "sigma_finding",
+# Using reparameterized names (logit-scale hierarchical params)
+key_params <- c("mu_logit_separation", "sigma_logit_separation",
+                "mu_logit_finding", "sigma_logit_finding",
                 paste0("separation_rate[", 1:stan_data$N_edu, "]"),
                 paste0("finding_rate[", 1:stan_data$N_edu, "]"),
                 paste0("shock_2008_effect[", 1:stan_data$N_edu, "]"),
