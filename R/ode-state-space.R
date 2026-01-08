@@ -103,7 +103,7 @@ prepare_stan_data <- function(data, education_order = NULL) {
 #' @param iter_sampling Number of sampling iterations per chain (default 1000)
 #' @param iter_warmup Number of warmup iterations per chain (default 1000)
 #' @param adapt_delta Target average proposal acceptance probability
-#'   (default 0.95, higher for difficult posteriors)
+#'   (default 0.99, higher to avoid divergences)
 #' @param max_treedepth Maximum tree depth for NUTS sampler (default 12)
 #' @param parallel_chains Number of chains to run in parallel
 #' @param refresh How often to print progress (default 100)
@@ -119,7 +119,7 @@ fit_ode_state_space <- function(data,
                                  chains = 4,
                                  iter_sampling = 1000,
                                  iter_warmup = 1000,
-                                 adapt_delta = 0.95,
+                                 adapt_delta = 0.99,
                                  max_treedepth = 12,
                                  parallel_chains = 4,
                                  refresh = 100,

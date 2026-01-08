@@ -3,7 +3,7 @@
 // Models unemployment dynamics as a discretized ODE system with:
 // - Education-specific separation and finding rates
 // - Economic shock effects (2008, 2020)
-// - Seasonal patterns
+// - Direct seasonal effects on unemployment (logit scale)
 // - Hierarchical structure across education levels
 // - Beta-binomial observation model for overdispersion
 //
@@ -101,10 +101,6 @@ parameters {
   vector<lower=0.1, upper=5>[N_edu] decay_2008;
   vector<lower=0.1, upper=5>[N_edu] decay_2020;
 
-  // Seasonal effects on finding rate (sum-to-zero constraint)
-  // These affect the rate at which unemployed find jobs
-  matrix[11, N_edu] seasonal_finding_raw;
-
   // Direct seasonal effects on unemployment (sum-to-zero constraint)
   // These capture observed seasonal patterns directly (e.g., academic calendar)
   matrix[11, N_edu] seasonal_u_raw;
@@ -120,9 +116,6 @@ transformed parameters {
   // Latent unemployment rates on probability scale
   array[T] vector<lower=0, upper=1>[N_edu] u;
 
-  // Seasonal effects on finding rate with sum-to-zero
-  matrix[12, N_edu] seasonal_finding;
-
   // Direct seasonal effects on unemployment (logit scale) with sum-to-zero
   matrix[12, N_edu] seasonal_u;
 
@@ -135,11 +128,6 @@ transformed parameters {
 
   // Build seasonal effects with sum-to-zero constraint
   for (i in 1:N_edu) {
-    // Finding rate seasonality
-    seasonal_finding[1:11, i] = seasonal_finding_raw[, i];
-    seasonal_finding[12, i] = -sum(seasonal_finding_raw[, i]);
-
-    // Direct unemployment seasonality
     seasonal_u[1:11, i] = seasonal_u_raw[, i];
     seasonal_u[12, i] = -sum(seasonal_u_raw[, i]);
   }
@@ -167,11 +155,8 @@ transformed parameters {
                    + shock_2008_intensity[t][i] * shock_2008_effect[i]
                    + shock_2020_intensity[t][i] * shock_2020_effect[i];
 
-      // Effective finding rate (baseline + finding rate seasonality)
-      real f_eff = finding_rate[i] * (1 + seasonal_finding[month[t], i]);
-
       // Discretized ODE: dU/dt = s*(1-U) - f*U
-      real du_dt = s_eff * (1 - u[t-1][i]) - f_eff * u[t-1][i];
+      real du_dt = s_eff * (1 - u[t-1][i]) - finding_rate[i] * u[t-1][i];
 
       // State evolution on logit scale with:
       // - ODE dynamics (du_dt)
@@ -206,9 +191,6 @@ model {
   // Education-specific: allows different recovery speeds
   decay_2008 ~ normal(0.5, 0.3);
   decay_2020 ~ normal(1.0, 0.5);
-
-  // Seasonal effects on finding rate (modest - this is multiplicative)
-  to_vector(seasonal_finding_raw) ~ normal(0, 0.10);
 
   // Direct seasonal effects on unemployment (logit scale)
   // This allows substantial seasonal patterns to be captured directly
@@ -261,7 +243,7 @@ generated quantities {
   }
 
   // Non-seasonal trend: unemployment driven by baseline rates + shocks only
-  // This removes the seasonal modulation of the finding rate
+  // This removes the direct seasonal effect on unemployment
   // Uses SAME innovations as full model for comparable trajectory
   array[T] vector[N_edu] u_trend;
   {

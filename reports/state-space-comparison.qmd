@@ -158,23 +158,15 @@ e^{-\lambda_i (t - t_{\text{peak}})} & t > t_{\text{peak}}
 
 The half-life of recovery is $t_{1/2} = \ln(2)/\lambda_i$. Different education levels may recover at different speeds.
 
-#### 2.3 Seasonal Effects (Two Components)
+#### 2.3 Seasonal Effects
 
-The model uses **two seasonal components** to capture observed patterns:
-
-**1. Finding Rate Seasonality**: Job finding rates vary seasonally (academic hiring, summer jobs):
-
-$$f_i^{\text{eff}}(t) = f_i \cdot (1 + \gamma^f_{m(t),i})$$
-
-This affects the rate at which unemployed workers find jobs. Prior: $\gamma^f_{m,i} \sim \text{Normal}(0, 0.10)$.
-
-**2. Direct Unemployment Seasonality**: A direct seasonal effect on the unemployment rate (logit scale):
+The model includes a **direct seasonal effect on unemployment** (on the logit scale):
 
 $$\text{logit}(u_{t,i}) = \text{logit}(u_{t-1,i}) + \Delta u_{t,i} + \gamma^u_{m(t),i} + \epsilon_{t,i}$$
 
-This captures observed seasonal patterns that may not be fully explained by finding rate dynamics (e.g., academic calendar effects for PhDs). Prior: $\gamma^u_{m,i} \sim \text{Normal}(0, 0.05)$.
+This captures observed seasonal patterns such as academic calendar effects for PhDs, summer employment fluctuations, and annual hiring cycles. Prior: $\gamma^u_{m,i} \sim \text{Normal}(0, 0.05)$ with a sum-to-zero constraint.
 
-**Why two components?** The finding rate effect is economically interpretable (hiring seasonality), but its impact on unemployment is dampened by the ODE integration. The direct effect captures any additional observed seasonality.
+**Design choice**: We use a direct effect on unemployment rather than modulating the finding rate because the two approaches are not separately identifiable from the data. The direct approach is simpler and more flexible.
 
 #### 2.4 State Space Formulation
 
@@ -424,12 +416,13 @@ cat(sprintf("Date range: %.2f to %.2f\n",
 
 # Fit the ODE state space model
 # Using moderate iterations for demonstration
+# adapt_delta = 0.99 to avoid divergences in this state space model
 result <- fit_ode_state_space(
   counts_data,
   chains = 4,
   iter_sampling = 1000,
   iter_warmup = 1000,
-  adapt_delta = 0.95,
+  adapt_delta = 0.99,
   max_treedepth = 12,
   parallel_chains = 4,
   refresh = 200
@@ -688,9 +681,9 @@ ggplot(seas_subset, aes(x = year_frac)) +
         strip.text = element_text(size = 12, face = "bold"))
 ```
 
-### Monthly Seasonal Pattern: Direct Effect on Unemployment
+### Monthly Seasonal Pattern
 
-The model now includes a **direct seasonal effect on unemployment** (on the logit scale), in addition to the indirect effect through finding rates. This captures observed seasonal patterns like academic hiring calendars.
+The model includes a **direct seasonal effect on unemployment** (on the logit scale). This captures observed seasonal patterns like academic hiring calendars, summer employment fluctuations, and annual hiring cycles.
 
 ```{r monthly-seasonal-u}
 #| fig-cap: "Direct monthly seasonal effects on unemployment by education level"
@@ -728,49 +721,6 @@ ggplot(seasonal_u_plot, aes(x = month_label, y = mean, group = education)) +
        y = "Seasonal Effect (logit scale)",
        title = "Direct Seasonal Effects on Unemployment",
        subtitle = "Positive = higher unemployment; Negative = lower unemployment; Band = 90% CI") +
-  theme(legend.position = "none",
-        axis.text.x = element_text(angle = 45, hjust = 1),
-        strip.text = element_text(size = 12, face = "bold"))
-```
-
-### Monthly Seasonal Pattern: Finding Rate
-
-The effect of seasonality on job finding rates (how easy it is to find a job):
-
-```{r monthly-seasonal-finding}
-#| fig-cap: "Monthly seasonal effects on job finding rate by education level"
-#| fig-height: 8
-
-# Extract finding rate seasonal parameters
-seasonal_f_summary <- result$fit$summary(variables = "seasonal_finding")
-
-# Parse indices
-seasonal_f_summary$month <- as.integer(
-  gsub("seasonal_finding\\[(\\d+),\\d+\\]", "\\1", seasonal_f_summary$variable)
-)
-seasonal_f_summary$edu_index <- as.integer(
-  gsub("seasonal_finding\\[\\d+,(\\d+)\\]", "\\1", seasonal_f_summary$variable)
-)
-seasonal_f_summary$education <- stan_data$education_levels[seasonal_f_summary$edu_index]
-
-# Create month labels
-seasonal_f_summary$month_label <- factor(month_labels[seasonal_f_summary$month],
-                                          levels = month_labels)
-
-# Plot for selected education levels
-seasonal_f_plot <- seasonal_f_summary[seasonal_f_summary$education %in% sample_edu, ]
-
-ggplot(seasonal_f_plot, aes(x = month_label, y = mean * 100, group = education)) +
-  geom_ribbon(aes(ymin = q5 * 100, ymax = q95 * 100, fill = education),
-              alpha = 0.3) +
-  geom_line(aes(color = education), linewidth = 1.2) +
-  geom_point(aes(color = education), size = 3) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
-  facet_wrap(~education, ncol = 1, scales = "free_y") +
-  labs(x = "Month",
-       y = "Seasonal Effect on Finding Rate (%)",
-       title = "Seasonal Effects on Job Finding Rate",
-       subtitle = "Positive = easier to find jobs; Negative = harder; Band = 90% CI") +
   theme(legend.position = "none",
         axis.text.x = element_text(angle = 45, hjust = 1),
         strip.text = element_text(size = 12, face = "bold"))
@@ -891,7 +841,8 @@ The most recent year of data to see current dynamics:
 
 ```{r recent-zoom}
 #| fig-cap: "Most recent 12 months of unemployment dynamics"
-#| fig-height: 8
+#| fig-height: 4
+#| fig-width: 12
 
 # Get the most recent year
 max_year <- max(decomp_subset$year_frac)
@@ -908,24 +859,24 @@ ggplot() +
   # Model trajectories
   geom_line(data = recent_data,
             aes(x = year_frac, y = rate * 100, color = type),
-            linewidth = 0.8) +
+            linewidth = 1) +
   # Observed data points
   geom_point(data = recent_obs,
              aes(x = year_frac, y = observed * 100),
              alpha = 0.6, size = 2, color = "black") +
-  facet_wrap(~education, scales = "free_y", ncol = 1) +
+  facet_wrap(~education, scales = "free_y", nrow = 1) +
   scale_color_manual(values = c("Pure ODE" = "#E74C3C",
                                 "Trend (no seasonal)" = "#F39C12",
                                 "Full Model" = "#3498DB")) +
-  scale_x_continuous(breaks = seq(floor(max_year - 1), ceiling(max_year), 0.25),
-                     labels = function(x) format(x, nsmall = 2)) +
+  scale_x_continuous(breaks = seq(floor(max_year - 1), ceiling(max_year), 0.5),
+                     labels = function(x) format(x, nsmall = 1)) +
   labs(x = "Year",
        y = "Unemployment Rate (%)",
        color = "Component",
        title = "Most Recent 12 Months",
        subtitle = "Black points = observed data; Lines = model components") +
   theme(legend.position = "bottom",
-        strip.text = element_text(size = 12, face = "bold"),
+        strip.text = element_text(size = 11, face = "bold"),
         axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
