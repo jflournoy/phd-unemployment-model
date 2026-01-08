@@ -472,3 +472,218 @@ compute_loo <- function(result) {
   # Compute LOO
   loo::loo(log_lik, cores = 4)
 }
+
+
+#' Fit Fast ODE State Space Model (Multithreaded)
+#'
+#' Fits the optimized Bayesian ODE-based state space model with
+#' multithreading support using Stan's reduce_sum for parallel
+#' likelihood evaluation.
+#'
+#' @param data Count data with n_unemployed, n_employed, time_index,
+#'   month, education, year
+#' @param chains Number of MCMC chains (default 4)
+#' @param iter_sampling Number of sampling iterations per chain (default 1000)
+#' @param iter_warmup Number of warmup iterations per chain (default 1000)
+#' @param adapt_delta Target average proposal acceptance probability
+#'   (default 0.99)
+#' @param max_treedepth Maximum tree depth for NUTS sampler (default 12)
+#' @param parallel_chains Number of chains to run in parallel
+#' @param threads_per_chain Number of threads per chain for reduce_sum
+#' @param grainsize Grainsize for reduce_sum parallelization (default auto)
+#' @param refresh How often to print progress (default 100)
+#' @param stan_file Path to Stan model file (default uses fast version)
+#'
+#' @return List with:
+#'   \item{fit}{CmdStanMCMC object with posterior samples}
+#'   \item{stan_data}{Prepared Stan data list}
+#'   \item{diagnostics}{Convergence diagnostics summary}
+#'   \item{timing}{Sampling time statistics}
+#'
+#' @details
+#' The fast model uses several optimizations:
+#' \itemize{
+#'   \item \code{reduce_sum} for parallel likelihood calculation
+#'   \item Vectorized operations in transformed parameters
+#'   \item Matrix storage for better memory layout
+#'   \item Pre-computed shock timing in transformed data
+#' }
+#'
+#' For optimal performance:
+#' \itemize{
+#'   \item Set \code{threads_per_chain} to number of cores / chains
+#'   \item Use \code{parallel_chains = 1} if using many threads per chain
+#'   \item Adjust grainsize if T * N_edu is small (< 100)
+#' }
+#'
+#' @export
+fit_ode_state_space_fast <- function(data,
+                                      chains = 4,
+                                      iter_sampling = 1000,
+                                      iter_warmup = 1000,
+                                      adapt_delta = 0.99,
+                                      max_treedepth = 12,
+                                      parallel_chains = 4,
+                                      threads_per_chain = 1,
+                                      grainsize = NULL,
+                                      refresh = 100,
+                                      stan_file = NULL) {
+
+  # Prepare data
+  stan_data <- prepare_stan_data(data)
+
+  # Auto-calculate grainsize if not specified
+  # Optimal grainsize is typically N_obs / (threads_per_chain * 2-4)
+  if (is.null(grainsize)) {
+    n_obs <- stan_data$T * stan_data$N_edu
+    grainsize <- max(1, floor(n_obs / (threads_per_chain * 4)))
+  }
+  stan_data$grainsize <- as.integer(grainsize)
+
+  # Find Stan file
+  if (is.null(stan_file)) {
+    stan_file <- here::here("stan", "unemployment-ode-state-space-fast.stan")
+  }
+
+  if (!file.exists(stan_file)) {
+    stop("Stan model file not found: ", stan_file)
+  }
+
+  # Compile model with threading support
+  message("Compiling fast Stan model with threading support...")
+  model <- cmdstanr::cmdstan_model(
+    stan_file,
+    cpp_options = list(stan_threads = TRUE)
+  )
+
+  # Fit model
+  message("Fitting fast ODE state space model...")
+  message(sprintf("  Time points: %d", stan_data$T))
+  message(sprintf("  Education levels: %d", stan_data$N_edu))
+  message(sprintf("  Observations: %d", stan_data$T * stan_data$N_edu))
+  message(sprintf("  Chains: %d, Parallel chains: %d", chains, parallel_chains))
+  message(sprintf("  Threads per chain: %d", threads_per_chain))
+  message(sprintf("  Grainsize: %d", grainsize))
+  message(sprintf("  Iterations: %d warmup + %d sampling", iter_warmup, iter_sampling))
+
+  start_time <- Sys.time()
+
+  fit <- model$sample(
+    data = stan_data[c("T", "N_edu", "n_unemployed", "n_total", "month",
+                       "year_frac", "shock_2008_onset", "shock_2008_peak",
+                       "shock_2020_onset", "shock_2020_peak", "grainsize")],
+    chains = chains,
+    parallel_chains = parallel_chains,
+    threads_per_chain = threads_per_chain,
+    iter_sampling = iter_sampling,
+    iter_warmup = iter_warmup,
+    adapt_delta = adapt_delta,
+    max_treedepth = max_treedepth,
+    refresh = refresh
+  )
+
+  end_time <- Sys.time()
+  elapsed <- as.numeric(difftime(end_time, start_time, units = "mins"))
+
+  # Get diagnostics
+  diag_summary <- fit$diagnostic_summary()
+  diagnostics <- list(
+    num_divergent = sum(diag_summary$num_divergent),
+    max_treedepth_exceeded = sum(diag_summary$num_max_treedepth),
+    ebfmi = diag_summary$ebfmi
+  )
+
+  message(sprintf("Model fitting complete in %.1f minutes.", elapsed))
+  if (diagnostics$num_divergent > 0) {
+    warning(sprintf("%d divergent transitions detected!",
+                    diagnostics$num_divergent))
+  }
+
+  list(
+    fit = fit,
+    stan_data = stan_data,
+    diagnostics = diagnostics,
+    timing = list(
+      elapsed_mins = elapsed,
+      chains = chains,
+      threads_per_chain = threads_per_chain,
+      parallel_chains = parallel_chains
+    )
+  )
+}
+
+
+#' Extract Trend from Fast Model
+#'
+#' Extracts the unemployment trajectory without seasonal effects from
+#' the fast model. Uses matrix output format.
+#'
+#' @param result Result from fit_ode_state_space_fast()
+#' @param summary If TRUE, return summary statistics.
+#'
+#' @return Data frame with trend estimates by time and education
+#' @export
+extract_trend_fast <- function(result, summary = TRUE) {
+  fit <- result$fit
+  stan_data <- result$stan_data
+
+  if (summary) {
+    # Get summary for trend parameters (matrix format in fast model)
+    trend_summary <- fit$summary(variables = "u_trend_mat")
+
+    # Parse parameter names to get indices
+    trend_summary$time_index <- as.integer(
+      gsub("u_trend_mat\\[(\\d+),\\d+\\]", "\\1", trend_summary$variable)
+    )
+    trend_summary$edu_index <- as.integer(
+      gsub("u_trend_mat\\[\\d+,(\\d+)\\]", "\\1", trend_summary$variable)
+    )
+
+    # Add labels
+    trend_summary$time_point <- stan_data$time_points[trend_summary$time_index]
+    trend_summary$education <- stan_data$education_levels[trend_summary$edu_index]
+    trend_summary$year_frac <- stan_data$year_frac[trend_summary$time_index]
+
+    trend_summary
+  } else {
+    fit$draws(variables = "u_trend_mat", format = "draws_df")
+  }
+}
+
+
+#' Extract Latent Rates from Fast Model
+#'
+#' Extracts the posterior distribution of latent unemployment rates
+#' from the fast model. Uses matrix output format.
+#'
+#' @param result Result from fit_ode_state_space_fast()
+#' @param summary If TRUE, return summary statistics.
+#'
+#' @return Data frame with unemployment rate estimates by time and education
+#' @export
+extract_latent_rates_fast <- function(result, summary = TRUE) {
+  fit <- result$fit
+  stan_data <- result$stan_data
+
+  if (summary) {
+    # Get summary for u_mat parameters
+    u_summary <- fit$summary(variables = "u_mat")
+
+    # Parse parameter names to get indices
+    u_summary$time_index <- as.integer(
+      gsub("u_mat\\[(\\d+),\\d+\\]", "\\1", u_summary$variable)
+    )
+    u_summary$edu_index <- as.integer(
+      gsub("u_mat\\[\\d+,(\\d+)\\]", "\\1", u_summary$variable)
+    )
+
+    # Add labels
+    u_summary$time_point <- stan_data$time_points[u_summary$time_index]
+    u_summary$education <- stan_data$education_levels[u_summary$edu_index]
+    u_summary$year_frac <- stan_data$year_frac[u_summary$time_index]
+
+    u_summary
+  } else {
+    fit$draws(variables = "u_mat", format = "draws_df")
+  }
+}
