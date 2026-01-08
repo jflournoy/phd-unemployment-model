@@ -27,6 +27,8 @@ Imports:
     lubridate (>= 1.9.0),
     marginaleffects (>= 0.18.0),
     mgcv (>= 1.8.0),
+    patchwork (>= 1.1.0),
+    qs (>= 0.25.0),
     quarto (>= 1.2.0),
     readr (>= 2.1.0),
     targets (>= 1.4.0),
@@ -36,7 +38,6 @@ Suggests:
     testthat (>= 3.0.0),
     covr,
     knitr,
-    patchwork,
     reshape2,
     rmarkdown,
     scales

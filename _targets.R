@@ -15,7 +15,8 @@ library(tarchetypes)  # For tar_quarto() and other helpers
 
 # Set target options
 tar_option_set(
-  packages = c("phdunemployment", "data.table", "mgcv", "ggplot2"),
+  packages = c("phdunemployment", "data.table", "mgcv", "ggplot2",
+               "cmdstanr", "qs"),  # Added for Stan model caching
   format = "rds",  # Default format for R objects
   error = "continue",  # Continue if one target fails
   memory = "transient",  # Free memory after each target
@@ -216,13 +217,76 @@ list(
     path = "reports/quasi-binomial-validation/quasi-binomial-validation.qmd"
   )
 
-  # Future: Add Bayesian model targets here
-  # tar_target(
-  #   model_beta_binomial_stan,
-  #   {
-  #     fit_beta_binomial_brms(education_counts)
-  #   },
-  #   # These will be SLOW - caching is critical
-  #   deployment = "main"  # Run sequentially, not in parallel
-  # )
+  # ==========================================================================
+  # Bayesian State Space Model (Stan via cmdstanr)
+  # ==========================================================================
+  #
+  # The ODE state space model takes ~10 minutes to fit.
+  # Caching via targets is critical to avoid re-fitting on every report render.
+
+  ## Stan model compilation (cached separately from fitting)
+  tar_target(
+    stan_model_compiled,
+    {
+      stan_file <- here::here("stan", "unemployment-ode-state-space.stan")
+      cmdstanr::cmdstan_model(stan_file, compile = TRUE)
+    },
+    # Return the model object for use in fitting
+    format = "qs"  # Fast serialization
+  ),
+
+  ## Fit ODE State Space Model
+  ## Uses education_counts data, fits full Bayesian model
+  tar_target(
+    model_ode_state_space,
+    {
+      cat("\n", strrep("=", 80), "\n")
+      cat("STARTING STAN MODEL FITTING: ODE State Space Model\n")
+      cat("Timestamp:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
+      cat("Data rows:", nrow(education_counts), "\n")
+      cat("Chains: 4, Iterations: 2000 (1000 warmup + 1000 sampling)\n")
+      cat("adapt_delta: 0.99 (high to avoid divergences)\n")
+      cat(strrep("=", 80), "\n\n")
+
+      start_time <- Sys.time()
+
+      result <- fit_ode_state_space(
+        education_counts,
+        chains = 4,
+        iter_sampling = 1000,
+        iter_warmup = 1000,
+        adapt_delta = 0.99,
+        max_treedepth = 12,
+        parallel_chains = 4,
+        refresh = 200
+      )
+
+      end_time <- Sys.time()
+      elapsed <- as.numeric(difftime(end_time, start_time, units = "mins"))
+
+      cat("\n", strrep("=", 80), "\n")
+      cat("STAN MODEL FITTING COMPLETED\n")
+      cat("Total runtime:", round(elapsed, 1), "minutes\n")
+      cat("Divergent transitions:", result$diagnostics$num_divergent, "\n")
+      cat("Max treedepth exceeded:", result$diagnostics$max_treedepth_exceeded, "\n")
+      cat(strrep("=", 80), "\n\n")
+
+      result
+    },
+    # This target is SLOW - only rerun if data or Stan code changes
+    format = "qs"
+  ),
+
+  ## Save Stan model results to file for report access
+  ## The report can load this instead of re-fitting
+  tar_target(
+    model_ode_state_space_file,
+    {
+      path <- here::here("models", "ode-state-space-fit.qs")
+      dir.create(dirname(path), showWarnings = FALSE, recursive = TRUE)
+      qs::qsave(model_ode_state_space, path)
+      path
+    },
+    format = "file"
+  )
 )

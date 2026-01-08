@@ -411,22 +411,41 @@ cat(sprintf("Date range: %.2f to %.2f\n",
 
 ## Model Fitting
 
+The Stan model takes ~10 minutes to fit. To avoid refitting on every render, we use the `targets` pipeline for caching. Run `targets::tar_make(model_ode_state_space)` to fit and cache the model.
+
 ```{r fit-model}
 #| cache: false
 
-# Fit the ODE state space model
-# Using moderate iterations for demonstration
-# adapt_delta = 0.99 to avoid divergences in this state space model
-result <- fit_ode_state_space(
-  counts_data,
-  chains = 4,
-  iter_sampling = 1000,
-  iter_warmup = 1000,
-  adapt_delta = 0.99,
-  max_treedepth = 12,
-  parallel_chains = 4,
-  refresh = 200
-)
+# Check if we can load from targets cache
+cached_model_path <- here("models", "ode-state-space-fit.qs")
+use_cached <- file.exists(cached_model_path)
+
+if (use_cached) {
+  cat("Loading cached model from:", cached_model_path, "\n")
+  cat("(To refit, delete this file or run targets::tar_make(model_ode_state_space))\n\n")
+  result <- qs::qread(cached_model_path)
+} else {
+  cat("No cached model found. Fitting model (this takes ~10 minutes)...\n")
+  cat("TIP: Run targets::tar_make(model_ode_state_space) to cache the fit.\n\n")
+
+  # Fit the ODE state space model
+  # adapt_delta = 0.99 to avoid divergences in this state space model
+  result <- fit_ode_state_space(
+    counts_data,
+    chains = 4,
+    iter_sampling = 1000,
+    iter_warmup = 1000,
+    adapt_delta = 0.99,
+    max_treedepth = 12,
+    parallel_chains = 4,
+    refresh = 200
+  )
+
+  # Save for future renders
+  dir.create(dirname(cached_model_path), showWarnings = FALSE, recursive = TRUE)
+  qs::qsave(result, cached_model_path)
+  cat("Model saved to:", cached_model_path, "\n")
+}
 
 # Display diagnostics
 cat("\n=== Convergence Diagnostics ===\n")
@@ -943,19 +962,125 @@ ggplot(impulse_df, aes(x = year, y = intensity, color = shock)) +
 
 ## Model Diagnostics
 
+Understanding why divergences occur helps improve the model. Divergent transitions typically arise from:
+
+1. **Hard parameter bounds** - `separation_rate<0, 0.2>` and `decay<0.1, 5>` create gradient discontinuities at boundaries
+2. **Hierarchical funnel geometry** - When `sigma_separation` is small, `separation_rate` values must concentrate tightly
+3. **Beta-binomial with small counts** - Low unemployment counts (especially for PhD) can create tricky geometry
+
+### Divergence Diagnostics
+
+```{r divergence-diagnostics}
+#| fig-cap: "Divergence analysis: where in parameter space do divergences occur?"
+#| fig-height: 8
+
+# Get the sampler diagnostics
+np <- bayesplot::nuts_params(result$fit)
+draws <- result$fit$draws(format = "draws_df")
+
+# Check if we have divergences
+n_divergent <- sum(np$Value[np$Parameter == "divergent__"])
+cat("Total divergent transitions:", n_divergent, "\n")
+
+if (n_divergent > 0) {
+  # Pairs plot for key parameters - shows where divergences occur
+  p_pairs <- mcmc_pairs(
+    draws,
+    pars = c("mu_separation", "sigma_separation", "separation_rate[1]", "sigma_state"),
+    np = np,
+    off_diag_args = list(size = 0.75, alpha = 0.5)
+  )
+  print(p_pairs)
+} else {
+  cat("No divergent transitions - model geometry is well-behaved!\n")
+}
+```
+
+### Energy Diagnostics (E-BFMI)
+
+Low E-BFMI indicates the sampler is having trouble exploring the posterior. Values below 0.2 are concerning.
+
+```{r energy-diagnostics}
+#| fig-cap: "Energy diagnostics: E-BFMI should be > 0.2 for each chain"
+
+# Energy plot
+mcmc_nuts_energy(np, binwidth = 1) +
+  labs(title = "NUTS Energy Diagnostic",
+       subtitle = "Overlapping distributions indicate good exploration")
+```
+
 ### Trace Plots for Key Parameters
 
 ```{r trace-plots}
 #| fig-cap: "MCMC trace plots for key parameters"
-#| fig-height: 8
+#| fig-height: 10
 
-# Get draws for key parameters
-draws <- result$fit$draws(format = "draws_df")
+# Trace plots for multiple key parameters
+p1 <- mcmc_trace(draws, pars = "mu_separation", np = np) +
+  labs(title = "Hierarchical Mean: Separation Rate")
 
-# Separation rate trace
-mcmc_trace(result$fit$draws(), pars = "separation_rate[1]") +
-  labs(title = "Separation Rate (PhD)") +
+p2 <- mcmc_trace(draws, pars = "sigma_separation", np = np) +
+  labs(title = "Hierarchical SD: Separation Rate")
+
+p3 <- mcmc_trace(draws, pars = "separation_rate[1]", np = np) +
+  labs(title = "Separation Rate (PhD)")
+
+p4 <- mcmc_trace(draws, pars = "sigma_state", np = np) +
+  labs(title = "State Innovation Noise")
+
+library(patchwork)
+(p1 / p2 / p3 / p4)
+```
+
+### Rhat and Effective Sample Size
+
+```{r rhat-ess}
+#| fig-cap: "Convergence diagnostics: Rhat should be < 1.01, ESS should be > 400"
+
+# Get summary with Rhat and ESS
+key_params <- c("mu_separation", "sigma_separation", "mu_finding", "sigma_finding",
+                paste0("separation_rate[", 1:stan_data$N_edu, "]"),
+                paste0("finding_rate[", 1:stan_data$N_edu, "]"),
+                paste0("shock_2008_effect[", 1:stan_data$N_edu, "]"),
+                paste0("shock_2020_effect[", 1:stan_data$N_edu, "]"),
+                "sigma_state", "phi")
+
+param_summary <- result$fit$summary(variables = key_params)
+
+# Rhat histogram
+p_rhat <- ggplot(param_summary, aes(x = rhat)) +
+  geom_histogram(binwidth = 0.002, fill = "steelblue", alpha = 0.7) +
+  geom_vline(xintercept = 1.01, color = "red", linetype = "dashed") +
+  labs(x = "Rhat", y = "Count", title = "Rhat Distribution",
+       subtitle = "All values should be < 1.01 (red line)") +
   theme_minimal()
+
+# ESS histogram
+p_ess <- ggplot(param_summary, aes(x = ess_bulk)) +
+  geom_histogram(binwidth = 100, fill = "darkgreen", alpha = 0.7) +
+  geom_vline(xintercept = 400, color = "red", linetype = "dashed") +
+  labs(x = "Effective Sample Size (bulk)", y = "Count", title = "ESS Distribution",
+       subtitle = "All values should be > 400 (red line)") +
+  theme_minimal()
+
+p_rhat + p_ess
+
+# Print summary of worst parameters
+cat("\n=== Parameters with Rhat > 1.01 ===\n")
+bad_rhat <- param_summary[param_summary$rhat > 1.01, ]
+if (nrow(bad_rhat) > 0) {
+  print(bad_rhat[, c("variable", "rhat", "ess_bulk")])
+} else {
+  cat("None - all parameters have Rhat < 1.01\n")
+}
+
+cat("\n=== Parameters with ESS < 400 ===\n")
+low_ess <- param_summary[param_summary$ess_bulk < 400, ]
+if (nrow(low_ess) > 0) {
+  print(low_ess[, c("variable", "rhat", "ess_bulk")])
+} else {
+  cat("None - all parameters have ESS > 400\n")
+}
 ```
 
 ### Posterior Predictive Check
