@@ -59,181 +59,263 @@ The state space model addresses these issues with:
 - **Shock persistence**: Decay parameters estimate how quickly effects fade
 - **Education heterogeneity**: Hierarchical priors allow varying effects across education levels
 
-## Model Structure: A Detailed Walkthrough
+## Model Structure: A Comprehensive Mathematical Walkthrough
 
-This section provides a comprehensive explanation of the Stan model, walking through each component.
+This section provides a detailed explanation of the Stan model, including the economic theory, mathematical derivations, and implementation details.
 
-### 1. The Economic Foundation: Labor Market Flows
+### 1. Economic Foundation: Labor Market Flow Dynamics
 
-The model is built on the fundamental labor economics concept of **job separation** and **job finding**:
+The model is built on the **stock-flow** framework from labor economics. At any point in time, the labor force is divided into two stocks: employed ($E$) and unemployed ($U$), with $E + U = L$ (total labor force). Workers flow between these states:
 
-$$\frac{dU}{dt} = s \cdot (1-U) - f \cdot U$$
+```
+       separation (s)
+  E ─────────────────────→ U
+    ←────────────────────
+       finding (f)
+```
 
-Where:
+#### 1.1 The Continuous-Time ODE
 
-- $U$ = unemployment rate (proportion of labor force unemployed)
-- $1-U$ = employment rate
-- $s$ = **separation rate**: monthly probability that an employed person loses their job
-- $f$ = **finding rate**: monthly probability that an unemployed person finds a job
+The rate of change in unemployment follows the ordinary differential equation:
 
-**Intuition**: Unemployment increases when employed people lose jobs ($s \cdot (1-U)$) and decreases when unemployed people find jobs ($f \cdot U$).
+$$\frac{dU}{dt} = s \cdot E - f \cdot U = s \cdot (L - U) - f \cdot U$$
 
-**Equilibrium**: At steady state ($dU/dt = 0$), the equilibrium unemployment rate is:
+Dividing by $L$ to get rates (lowercase $u = U/L$):
 
-$$U^* = \frac{s}{s + f}$$
+$$\frac{du}{dt} = s \cdot (1-u) - f \cdot u$$
 
-This is a key insight: unemployment depends on the *ratio* of separation to finding rates, not their absolute levels.
+**Term-by-term interpretation:**
 
-### 2. The Stan Model: Block-by-Block
+- $s \cdot (1-u)$: **Inflow to unemployment** — employed workers (fraction $1-u$) lose jobs at rate $s$
+- $f \cdot u$: **Outflow from unemployment** — unemployed workers (fraction $u$) find jobs at rate $f$
+- Net change = inflow − outflow
 
-#### 2.1 Functions Block: Shock Impulse Response
+#### 1.2 Equilibrium Analysis
+
+At equilibrium, $\frac{du}{dt} = 0$, so:
+
+$$s \cdot (1-u^*) = f \cdot u^*$$
+
+Solving for $u^*$:
+
+$$s - s \cdot u^* = f \cdot u^*$$
+$$s = u^* \cdot (s + f)$$
+$$\boxed{u^* = \frac{s}{s + f}}$$
+
+**Economic implications:**
+
+- If $s = 0.02$ (2% monthly separation) and $f = 0.30$ (30% monthly finding): $u^* = 0.02/(0.02+0.30) = 6.25\%$
+- **Higher education** → Lower $s$, higher $f$ → Lower equilibrium unemployment
+- **Shocks** temporarily increase $s$ → Push $u$ above equilibrium
+
+#### 1.3 Dynamics: Speed of Adjustment
+
+The ODE can be rewritten as:
+
+$$\frac{du}{dt} = s - (s + f) \cdot u = (s + f) \cdot \left(\frac{s}{s+f} - u\right) = (s + f) \cdot (u^* - u)$$
+
+This shows that $u$ moves toward $u^*$ at rate $(s + f)$. The **half-life** of adjustment is:
+
+$$t_{1/2} = \frac{\ln(2)}{s + f}$$
+
+With $s + f \approx 0.32$ per month, the half-life is about 2 months — unemployment adjusts quickly to equilibrium.
+
+### 2. Extending the Basic Model
+
+The real world is more complex. We extend the model with:
+
+#### 2.1 Education Heterogeneity
+
+Different education levels have different labor market characteristics:
+
+$$\frac{du_i}{dt} = s_i \cdot (1-u_i) - f_i \cdot u_i$$
+
+where $i$ indexes education level. We use **hierarchical priors**:
+
+$$s_i \sim \text{Normal}(\mu_s, \sigma_s) \quad \text{with } \mu_s \sim \text{Normal}(0.02, 0.01)$$
+
+This allows education levels to share information while having distinct rates.
+
+#### 2.2 Economic Shocks
+
+During recessions, separation rates spike. We model this as:
+
+$$s_i^{\text{eff}}(t) = s_i + I_{2008}(t) \cdot \delta_{2008,i} + I_{2020}(t) \cdot \delta_{2020,i}$$
+
+where $I(t)$ is a **shock impulse function** and $\delta_i$ is the education-specific shock effect.
+
+**Impulse function design** (for 2008):
+
+$$I_{2008}(t) = \begin{cases}
+0 & t < t_{\text{onset}} \\
+\frac{t - t_{\text{onset}}}{t_{\text{peak}} - t_{\text{onset}}} & t_{\text{onset}} \leq t \leq t_{\text{peak}} \\
+e^{-\lambda_i (t - t_{\text{peak}})} & t > t_{\text{peak}}
+\end{cases}$$
+
+- **Before onset** ($t < 2007.75$): No effect
+- **Rise phase** ($2007.75 \leq t \leq 2009.5$): Linear rise as crisis develops
+- **Decay phase** ($t > 2009.5$): Exponential recovery with **education-specific** decay rate $\lambda_i$
+
+The half-life of recovery is $t_{1/2} = \ln(2)/\lambda_i$. Different education levels may recover at different speeds.
+
+#### 2.3 Seasonal Effects (Two Components)
+
+The model uses **two seasonal components** to capture observed patterns:
+
+**1. Finding Rate Seasonality**: Job finding rates vary seasonally (academic hiring, summer jobs):
+
+$$f_i^{\text{eff}}(t) = f_i \cdot (1 + \gamma^f_{m(t),i})$$
+
+This affects the rate at which unemployed workers find jobs. Prior: $\gamma^f_{m,i} \sim \text{Normal}(0, 0.10)$.
+
+**2. Direct Unemployment Seasonality**: A direct seasonal effect on the unemployment rate (logit scale):
+
+$$\text{logit}(u_{t,i}) = \text{logit}(u_{t-1,i}) + \Delta u_{t,i} + \gamma^u_{m(t),i} + \epsilon_{t,i}$$
+
+This captures observed seasonal patterns that may not be fully explained by finding rate dynamics (e.g., academic calendar effects for PhDs). Prior: $\gamma^u_{m,i} \sim \text{Normal}(0, 0.05)$.
+
+**Why two components?** The finding rate effect is economically interpretable (hiring seasonality), but its impact on unemployment is dampened by the ODE integration. The direct effect captures any additional observed seasonality.
+
+#### 2.4 State Space Formulation
+
+We observe **counts** (binomial samples from the latent unemployment rate), not the true rate. The model has two layers:
+
+**Process model** (latent state evolution):
+$$\text{logit}(u_{t,i}) = \text{logit}(u_{t-1,i}) + \Delta u_{t,i} + \epsilon_{t,i}$$
+
+where:
+- $\Delta u_{t,i}$ is the ODE-predicted change
+- $\epsilon_{t,i} \sim \text{Normal}(0, \sigma_{\text{state}})$ is the **innovation** (captures unexplained dynamics)
+
+**Observation model** (data likelihood):
+$$n_{\text{unemployed},t,i} \sim \text{Beta-Binomial}(n_{\text{total},t,i}, u_{t,i} \cdot \phi, (1-u_{t,i}) \cdot \phi)$$
+
+The **beta-binomial** distribution allows for overdispersion (more variance than binomial) through parameter $\phi$.
+
+### 3. Stan Implementation: Block by Block
+
+The Stan model implements this in several blocks:
+
+#### 3.1 Functions Block
 
 ```stan
 functions {
   real shock_impulse(real t, real onset, real peak, real decay_rate) {
-    if (t < onset) {
-      return 0;
-    } else if (t <= peak) {
-      return (t - onset) / (peak - onset);  // Linear rise
-    } else {
-      return exp(-decay_rate * (t - peak)); // Exponential decay
-    }
+    if (t < onset) return 0;
+    else if (t <= peak) return (t - onset) / (peak - onset);
+    else return exp(-decay_rate * (t - peak));
   }
 }
 ```
 
-**Purpose**: Models how economic shocks affect the labor market over time.
+This defines the impulse response function $I(t)$ for shocks.
 
-- **Before onset**: No effect (shock hasn't started)
-- **Onset to peak**: Linear rise as shock intensifies (e.g., layoffs accelerating)
-- **After peak**: Exponential decay as economy recovers
-
-**Example for 2008 crisis**:
-
-- Onset: ~2007.75 (subprime crisis begins)
-- Peak: ~2009.5 (unemployment peaks)
-- Decay: Half-life of ~1.4 years (estimated)
-
-#### 2.2 Data Block: Observed Quantities
+#### 3.2 Data Block
 
 ```stan
 data {
-  int<lower=1> T;                           // Number of time points
-  int<lower=1> N_edu;                       // Number of education levels
-  array[T, N_edu] int<lower=0> n_unemployed; // Unemployment counts
-  array[T, N_edu] int<lower=0> n_total;      // Total labor force counts
-  array[T] int<lower=1, upper=12> month;     // Month indicator
+  int<lower=1> T;                           // Time points (months)
+  int<lower=1> N_edu;                       // Education levels
+  array[T, N_edu] int<lower=0> n_unemployed; // Counts
+  array[T, N_edu] int<lower=0> n_total;      // Denominators
+  array[T] int<lower=1, upper=12> month;     // For seasonality
   array[T] real<lower=0> year_frac;          // Continuous time
-  // Shock timing parameters...
+  // Shock timing...
 }
 ```
 
-**Key data structures**:
+#### 3.3 Transformed Data Block
 
-- `n_unemployed[t, i]`: Count of unemployed people at time $t$ for education level $i$
-- `n_total[t, i]`: Total labor force (employed + unemployed)
-- `month[t]`: Which month (1-12) for seasonal effects
-- `year_frac[t]`: Continuous time for shock calculations
-
-#### 2.3 Transformed Data: Pre-compute Shock Intensities
+Pre-computes shock rise phases and time-since-peak for efficiency:
 
 ```stan
 transformed data {
-  array[T] real shock_2008;
-  array[T] real shock_2020;
-
-  for (t in 1:T) {
-    shock_2008[t] = shock_impulse(year_frac[t], shock_2008_onset,
-                                   shock_2008_peak, 0.5);
-    shock_2020[t] = shock_impulse(year_frac[t], shock_2020_onset,
-                                   shock_2020_peak, 1.0);
-  }
+  array[T] real shock_2008_rise;
+  array[T] real time_since_2008_peak;
+  // ... (computed from onset/peak timing)
 }
 ```
 
-**Purpose**: Pre-computes the shock intensity at each time point. The decay rates (0.5 for 2008, 1.0 for 2020) are fixed based on the faster COVID recovery.
-
-#### 2.4 Parameters Block: What We're Estimating
+#### 3.4 Parameters Block
 
 ```stan
 parameters {
-  // Initial latent unemployment rates (logit scale)
-  vector[N_edu] logit_u_init;
+  // Latent states
+  vector[N_edu] logit_u_init;              // Initial unemployment
+  array[T-1] vector[N_edu] logit_u_innov;  // Innovations
 
-  // Innovations (random walk component)
-  array[T-1] vector[N_edu] logit_u_innov;
-
-  // Education-specific separation rates
+  // Separation rates (hierarchical)
   real<lower=0> mu_separation;
   real<lower=0> sigma_separation;
   vector<lower=0, upper=0.2>[N_edu] separation_rate;
 
-  // Education-specific finding rates
+  // Finding rates (hierarchical)
   real<lower=0> mu_finding;
   real<lower=0> sigma_finding;
   vector<lower=0, upper=1>[N_edu] finding_rate;
 
-  // Shock effects (by education)
+  // Shock effects (education-specific)
   vector<lower=0>[N_edu] shock_2008_effect;
   vector<lower=0>[N_edu] shock_2020_effect;
-
-  // Shock decay rates
-  real<lower=0.1, upper=5> decay_2008;
-  real<lower=0.1, upper=5> decay_2020;
+  vector<lower=0.1, upper=5>[N_edu] decay_2008;  // Education-specific decay
+  vector<lower=0.1, upper=5>[N_edu] decay_2020;
 
   // Seasonal effects (11 free, 12th constrained)
   matrix[11, N_edu] seasonal_raw;
 
-  // State evolution noise
+  // Noise parameters
   real<lower=0> sigma_state;
-
-  // Overdispersion parameter
   real<lower=1> phi;
 }
 ```
 
-**Parameter groups**:
+#### 3.5 Transformed Parameters Block
 
-1. **Latent states**: `logit_u_init` and `logit_u_innov` - the underlying unemployment rate trajectory
-2. **Separation rates**: Hierarchical structure with shared mean (`mu_separation`) and education-specific rates
-3. **Finding rates**: Same hierarchical structure
-4. **Shock effects**: Education-specific sensitivity to each crisis (constrained positive)
-5. **Seasonal effects**: 12 monthly adjustments (sum-to-zero constraint)
-6. **Noise/dispersion**: State evolution noise and observation overdispersion
-
-#### 2.5 Transformed Parameters: State Evolution
+This is where the ODE dynamics are computed:
 
 ```stan
 transformed parameters {
-  array[T] vector<lower=0, upper=1>[N_edu] u;  // Latent unemployment
+  array[T] vector<lower=0, upper=1>[N_edu] u;
   matrix[12, N_edu] seasonal;
   array[T] vector[N_edu] logit_u;
+  array[T] vector[N_edu] shock_2008_intensity;
+  array[T] vector[N_edu] shock_2020_intensity;
 
-  // Sum-to-zero seasonal constraint
+  // Build sum-to-zero seasonal constraint
   for (i in 1:N_edu) {
     seasonal[1:11, i] = seasonal_raw[, i];
     seasonal[12, i] = -sum(seasonal_raw[, i]);
   }
 
-  // Initialize first time point
+  // Compute education-specific shock intensities
+  for (t in 1:T) {
+    for (i in 1:N_edu) {
+      shock_2008_intensity[t][i] = shock_2008_rise[t] *
+        exp(-decay_2008[i] * time_since_2008_peak[t]);
+      shock_2020_intensity[t][i] = shock_2020_rise[t] *
+        exp(-decay_2020[i] * time_since_2020_peak[t]);
+    }
+  }
+
+  // Initialize
   logit_u[1] = logit_u_init;
   u[1] = inv_logit(logit_u[1]);
 
-  // State evolution: discretized ODE
+  // State evolution
   for (t in 2:T) {
     for (i in 1:N_edu) {
-      // Effective separation rate (baseline + shock effects)
+      // Effective separation rate
       real s_eff = separation_rate[i]
-                   + shock_2008[t] * shock_2008_effect[i]
-                   + shock_2020[t] * shock_2020_effect[i];
+                   + shock_2008_intensity[t][i] * shock_2008_effect[i]
+                   + shock_2020_intensity[t][i] * shock_2020_effect[i];
 
-      // Effective finding rate (baseline + seasonal)
+      // Effective finding rate with seasonal
       real f_eff = finding_rate[i] * (1 + seasonal[month[t], i]);
 
-      // Discretized ODE: dU/dt = s*(1-U) - f*U
+      // Discretized ODE
       real du_dt = s_eff * (1 - u[t-1][i]) - f_eff * u[t-1][i];
 
-      // State evolution with innovation
+      // Evolution with innovation
       logit_u[t][i] = logit_u[t-1][i] + du_dt + logit_u_innov[t-1][i];
     }
     u[t] = inv_logit(logit_u[t]);
@@ -241,114 +323,82 @@ transformed parameters {
 }
 ```
 
-**This is the heart of the model**:
-
-1. **Effective separation rate**: Baseline + shock effects during crises
-2. **Effective finding rate**: Baseline × seasonal multiplier
-3. **ODE discretization**: Euler method approximation of the differential equation
-4. **Logit-scale evolution**: Ensures unemployment stays in (0, 1)
-5. **Innovations**: Allow deviations from pure ODE dynamics (capturing other factors)
-
-#### 2.6 Model Block: Priors and Likelihood
+#### 3.6 Model Block (Priors and Likelihood)
 
 ```stan
 model {
   // === PRIORS ===
 
-  // Separation rates (literature: 1-3% per month)
+  // Separation rates (1-3% per month from literature)
   mu_separation ~ normal(0.02, 0.01);
   sigma_separation ~ exponential(50);
   separation_rate ~ normal(mu_separation, sigma_separation);
 
-  // Finding rates (literature: 20-40% per month)
+  // Finding rates (20-40% per month)
   mu_finding ~ normal(0.30, 0.10);
   sigma_finding ~ exponential(5);
   finding_rate ~ normal(mu_finding, sigma_finding);
 
-  // Shock effects (positive: shocks increase job loss)
+  // Shock effects (positive by constraint)
   shock_2008_effect ~ normal(0.02, 0.01);
   shock_2020_effect ~ normal(0.03, 0.015);
 
-  // Seasonal effects (modest amplitude)
-  to_vector(seasonal_raw) ~ normal(0, 0.05);
+  // Decay rates (education-specific)
+  decay_2008 ~ normal(0.5, 0.3);
+  decay_2020 ~ normal(1.0, 0.5);
+
+  // Seasonal effects (substantial amplitude allowed)
+  to_vector(seasonal_raw) ~ normal(0, 0.15);
 
   // State innovations
+  sigma_state ~ exponential(20);
   for (t in 1:(T-1)) {
     logit_u_innov[t] ~ normal(0, sigma_state);
   }
 
+  // Overdispersion
+  phi ~ exponential(0.05);
+
   // === LIKELIHOOD ===
 
-  // Beta-binomial observation model
   for (t in 1:T) {
     for (i in 1:N_edu) {
       if (n_total[t, i] > 0) {
         real u_safe = fmin(fmax(u[t][i], 1e-6), 1 - 1e-6);
-        real alpha = u_safe * phi;
-        real beta_param = (1 - u_safe) * phi;
-        n_unemployed[t, i] ~ beta_binomial(n_total[t, i], alpha, beta_param);
+        n_unemployed[t, i] ~ beta_binomial(n_total[t, i],
+                                            u_safe * phi,
+                                            (1 - u_safe) * phi);
       }
     }
   }
 }
 ```
 
-**Prior choices**:
+#### 3.7 Generated Quantities Block
 
-- **Separation rates**: Centered at 2%/month with tight prior (labor economics literature)
-- **Finding rates**: Centered at 30%/month with moderate uncertainty
-- **Shock effects**: Positive by design, centered at 2-3 percentage points
+Computes derived quantities and model decomposition:
 
-**Likelihood**:
+- **Equilibrium rates**: $u^*_i = s_i / (s_i + f_i)$
+- **Half-lives**: $t_{1/2} = \ln(2) / \lambda_i$ (education-specific)
+- **Trend trajectory**: Evolution without seasonal effects
+- **Pure ODE trajectory**: Evolution without innovations or seasonality
+- **Seasonal effects**: Difference between full model and trend
+- **Log-likelihood**: For LOO cross-validation
+- **Posterior predictive**: For model checking
 
-- **Beta-binomial**: Handles overdispersion in count data
-- **phi parameter**: Controls dispersion (larger = less overdispersion)
+### 4. Why This Model Succeeds Where GAM Fails
 
-#### 2.7 Generated Quantities: Derived Values
-
-```stan
-generated quantities {
-  // Equilibrium unemployment rates
-  vector[N_edu] u_equilibrium;
-  for (i in 1:N_edu) {
-    u_equilibrium[i] = separation_rate[i] / (separation_rate[i] + finding_rate[i]);
-  }
-
-  // Shock half-lives
-  real halflife_2008 = log(2) / decay_2008;
-  real halflife_2020 = log(2) / decay_2020;
-
-  // Non-seasonal trend (for decomposition)
-  array[T] vector[N_edu] u_trend;
-  // ... (computes trajectory without seasonal effects)
-
-  // Log-likelihood for LOO-CV
-  array[T, N_edu] real log_lik;
-
-  // Posterior predictive samples
-  array[T, N_edu] int n_unemployed_rep;
-}
-```
-
-**Key outputs**:
-
-1. **Equilibrium rates**: Long-run steady state for each education level
-2. **Shock half-lives**: How long until shock effects decay by 50%
-3. **Non-seasonal trend**: Underlying dynamics without seasonal oscillations
-4. **Log-likelihood**: For model comparison via LOO-CV
-5. **Predictive samples**: For posterior predictive checks
-
-### 3. Why This Model Succeeds Where GAM Fails
-
-| Feature | GAM | State Space |
-|---------|-----|-------------|
+| Feature | GAM Approach | State Space Model |
+|---------|-------------|-------------------|
 | **Shock mechanism** | Indicator variable (absorbed by trend) | Explicit ODE term with decay |
 | **Temporal structure** | Smooth function (static) | Dynamic state evolution |
 | **Prior information** | Penalty on curvature | Informative economic priors |
 | **Shock identification** | Competes with 501-EDF trend | Structurally separated from trend |
 | **Interpretation** | Abstract smooth values | Separation/finding rates |
+| **Recovery dynamics** | Not modeled | Education-specific decay rates |
+| **Seasonality** | Cyclic smooth | Finding rate multiplier |
 
-**The key insight**: By building economic structure into the model (separation → unemployment → finding), shock effects have a clear mechanistic role that can't be absorbed by other components.
+**The fundamental insight**: By building economic structure into the model (separation → unemployment → finding), shock effects have a clear mechanistic role that cannot be absorbed by other components. The GAM's flexible smooth can explain away shocks; the state space model's structured dynamics cannot.
 
 ## Data Preparation
 
@@ -464,9 +514,17 @@ shock20 <- params$shock_2020_effects
 shock20$education <- stan_data$education_levels
 print(shock20[, c("education", "mean", "q5", "q95")], digits = 4)
 
-cat("\n=== Shock Persistence (Half-Lives) ===\n")
-cat("(Time for shock effect to decay by 50%)\n\n")
-print(params$shock_halflives[, c("variable", "mean", "q5", "q95")], digits = 2)
+cat("\n=== 2008 Shock Half-Lives (Education-Specific) ===\n")
+cat("(Time in years for shock effect to decay by 50%)\n\n")
+hl08 <- params$halflife_2008
+hl08$education <- stan_data$education_levels
+print(hl08[, c("education", "mean", "q5", "q95")], digits = 2)
+
+cat("\n=== 2020 COVID Half-Lives (Education-Specific) ===\n")
+cat("(Time in years for shock effect to decay by 50%)\n\n")
+hl20 <- params$halflife_2020
+hl20$education <- stan_data$education_levels
+print(hl20[, c("education", "mean", "q5", "q95")], digits = 2)
 ```
 
 ```{r plot-shock-effects}
@@ -599,85 +657,275 @@ ggplot(trend_data, aes(x = year_frac)) +
         strip.text = element_text(size = 10))
 ```
 
-### Trend vs Full Model Comparison
+### Seasonal Oscillation: Direct Visualization
 
-Compare the trend (without seasonality) to the full model (with seasonality) to visualize the seasonal component:
+The seasonal effect is the difference between the full model (with seasonality) and the trend (without). This directly shows how much unemployment oscillates due to seasonal hiring patterns.
 
-```{r trend-vs-full}
-#| fig-cap: "Comparison of trend (red) vs full model with seasonality (blue) - seasonal oscillations visible"
+```{r seasonal-oscillation}
+#| fig-cap: "Seasonal oscillation in unemployment rates (Full model minus Trend)"
 #| fig-height: 8
 
-# Focus on a subset for clarity
+# Extract seasonal effects directly computed by the model
+seasonal_effects <- extract_seasonal_effects(result, summary = TRUE)
+
+# Focus on key education levels
 sample_edu <- c("phd", "bachelors", "less_than_hs")
+seas_subset <- seasonal_effects[seasonal_effects$education %in% sample_edu, ]
 
-# Get subset data
-full_subset <- plot_data[plot_data$education %in% sample_edu, ]
-trend_subset <- trend_data[trend_data$education %in% sample_edu, ]
-
-# Plot with two separate geom_lines for better visibility
-ggplot() +
-  # Trend line (thicker, red, plotted first)
-  geom_line(data = trend_subset,
-            aes(x = year_frac, y = mean * 100),
-            color = "#E74C3C", linewidth = 1.2, alpha = 0.9) +
-  # Full model line (blue, with seasonal oscillations)
-  geom_line(data = full_subset,
-            aes(x = year_frac, y = mean * 100),
-            color = "#3498DB", linewidth = 0.6, alpha = 0.8) +
-  geom_vline(xintercept = c(2008.75, 2020.25), linetype = "dashed",
-             color = "gray40", alpha = 0.7) +
+# Plot the seasonal oscillation over time
+ggplot(seas_subset, aes(x = year_frac)) +
+  geom_ribbon(aes(ymin = q5 * 100, ymax = q95 * 100, fill = education),
+              alpha = 0.3) +
+  geom_line(aes(y = mean * 100, color = education), linewidth = 0.6) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
   facet_wrap(~education, scales = "free_y", ncol = 1) +
   scale_x_continuous(breaks = seq(2000, 2025, 5)) +
   labs(x = "Year",
-       y = "Unemployment Rate (%)",
-       title = "Seasonal Decomposition: Full Model vs Trend",
-       subtitle = "Red = underlying trend (no seasonal); Blue = full model with seasonal oscillations") +
-  theme(strip.text = element_text(size = 12, face = "bold"))
+       y = "Seasonal Effect (percentage points)",
+       title = "Seasonal Oscillation in Unemployment by Education",
+       subtitle = "Positive = unemployment above trend; Negative = below trend; Band = 90% CI") +
+  theme(legend.position = "none",
+        strip.text = element_text(size = 12, face = "bold"))
 ```
 
-### Seasonal Amplitude by Education
+### Monthly Seasonal Pattern: Direct Effect on Unemployment
 
-Extract and visualize the estimated seasonal effects:
+The model now includes a **direct seasonal effect on unemployment** (on the logit scale), in addition to the indirect effect through finding rates. This captures observed seasonal patterns like academic hiring calendars.
 
-```{r seasonal-effects}
-#| fig-cap: "Estimated seasonal effects on job finding rate by education level"
+```{r monthly-seasonal-u}
+#| fig-cap: "Direct monthly seasonal effects on unemployment by education level"
+#| fig-height: 8
 
-# Extract seasonal parameters
-seasonal_draws <- result$fit$draws(variables = "seasonal", format = "draws_df")
-
-# Get summary for each month and education
-seasonal_summary <- result$fit$summary(variables = "seasonal")
+# Extract direct seasonal unemployment parameters
+seasonal_u_summary <- result$fit$summary(variables = "seasonal_u")
 
 # Parse indices
-seasonal_summary$month <- as.integer(
-  gsub("seasonal\\[(\\d+),\\d+\\]", "\\1", seasonal_summary$variable)
+seasonal_u_summary$month <- as.integer(
+  gsub("seasonal_u\\[(\\d+),\\d+\\]", "\\1", seasonal_u_summary$variable)
 )
-seasonal_summary$edu_index <- as.integer(
-  gsub("seasonal\\[\\d+,(\\d+)\\]", "\\1", seasonal_summary$variable)
+seasonal_u_summary$edu_index <- as.integer(
+  gsub("seasonal_u\\[\\d+,(\\d+)\\]", "\\1", seasonal_u_summary$variable)
 )
-seasonal_summary$education <- stan_data$education_levels[seasonal_summary$edu_index]
+seasonal_u_summary$education <- stan_data$education_levels[seasonal_u_summary$edu_index]
 
 # Create month labels
 month_labels <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-seasonal_summary$month_label <- factor(month_labels[seasonal_summary$month],
-                                        levels = month_labels)
+seasonal_u_summary$month_label <- factor(month_labels[seasonal_u_summary$month],
+                                          levels = month_labels)
 
 # Plot for selected education levels
-seasonal_plot <- seasonal_summary[seasonal_summary$education %in% sample_edu, ]
+seasonal_u_plot <- seasonal_u_summary[seasonal_u_summary$education %in% sample_edu, ]
 
-ggplot(seasonal_plot, aes(x = month_label, y = mean * 100, color = education, group = education)) +
-  geom_line(linewidth = 1) +
-  geom_point(size = 2) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
-  geom_ribbon(aes(ymin = q5 * 100, ymax = q95 * 100, fill = education),
-              alpha = 0.2, color = NA) +
-  facet_wrap(~education, ncol = 1) +
+ggplot(seasonal_u_plot, aes(x = month_label, y = mean, group = education)) +
+  geom_ribbon(aes(ymin = q5, ymax = q95, fill = education),
+              alpha = 0.3) +
+  geom_line(aes(color = education), linewidth = 1.2) +
+  geom_point(aes(color = education), size = 3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  facet_wrap(~education, ncol = 1, scales = "free_y") +
   labs(x = "Month",
-       y = "Seasonal Effect (%)",
-       title = "Seasonal Effects on Job Finding Rate",
-       subtitle = "Positive = easier to find jobs; Negative = harder to find jobs") +
+       y = "Seasonal Effect (logit scale)",
+       title = "Direct Seasonal Effects on Unemployment",
+       subtitle = "Positive = higher unemployment; Negative = lower unemployment; Band = 90% CI") +
   theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.text = element_text(size = 12, face = "bold"))
+```
+
+### Monthly Seasonal Pattern: Finding Rate
+
+The effect of seasonality on job finding rates (how easy it is to find a job):
+
+```{r monthly-seasonal-finding}
+#| fig-cap: "Monthly seasonal effects on job finding rate by education level"
+#| fig-height: 8
+
+# Extract finding rate seasonal parameters
+seasonal_f_summary <- result$fit$summary(variables = "seasonal_finding")
+
+# Parse indices
+seasonal_f_summary$month <- as.integer(
+  gsub("seasonal_finding\\[(\\d+),\\d+\\]", "\\1", seasonal_f_summary$variable)
+)
+seasonal_f_summary$edu_index <- as.integer(
+  gsub("seasonal_finding\\[\\d+,(\\d+)\\]", "\\1", seasonal_f_summary$variable)
+)
+seasonal_f_summary$education <- stan_data$education_levels[seasonal_f_summary$edu_index]
+
+# Create month labels
+seasonal_f_summary$month_label <- factor(month_labels[seasonal_f_summary$month],
+                                          levels = month_labels)
+
+# Plot for selected education levels
+seasonal_f_plot <- seasonal_f_summary[seasonal_f_summary$education %in% sample_edu, ]
+
+ggplot(seasonal_f_plot, aes(x = month_label, y = mean * 100, group = education)) +
+  geom_ribbon(aes(ymin = q5 * 100, ymax = q95 * 100, fill = education),
+              alpha = 0.3) +
+  geom_line(aes(color = education), linewidth = 1.2) +
+  geom_point(aes(color = education), size = 3) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  facet_wrap(~education, ncol = 1, scales = "free_y") +
+  labs(x = "Month",
+       y = "Seasonal Effect on Finding Rate (%)",
+       title = "Seasonal Effects on Job Finding Rate",
+       subtitle = "Positive = easier to find jobs; Negative = harder; Band = 90% CI") +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.text = element_text(size = 12, face = "bold"))
+```
+
+### Model Decomposition: Full vs Trend vs Pure ODE
+
+This visualization compares three trajectories:
+
+1. **Full model** (blue): Includes all components - ODE dynamics, shocks, seasonality, and stochastic innovations
+2. **Trend** (orange): Removes seasonality but keeps innovations (shows underlying dynamics)
+3. **Pure ODE** (red): Only structural ODE dynamics - no innovations, no seasonality (shows what separation/finding rates alone predict)
+
+```{r model-decomposition}
+#| fig-cap: "Model decomposition showing structural dynamics vs observed trajectory"
+#| fig-height: 10
+
+# Extract pure ODE trajectory
+pure_ode <- extract_pure_ode(result, summary = TRUE)
+
+# Debug: Check data dimensions
+cat("Full model data rows:", nrow(plot_data), "\n")
+cat("Trend data rows:", nrow(trend_data), "\n")
+cat("Pure ODE data rows:", nrow(pure_ode), "\n")
+
+# Create separate data frames with only needed columns
+pure_ode_df <- data.frame(
+  year_frac = pure_ode$year_frac,
+  education = pure_ode$education,
+  rate = pure_ode$mean,
+  type = "Pure ODE"
+)
+
+full_df <- data.frame(
+  year_frac = plot_data$year_frac,
+  education = plot_data$education,
+  rate = plot_data$mean,
+  type = "Full Model"
+)
+
+trend_df <- data.frame(
+  year_frac = trend_data$year_frac,
+  education = trend_data$education,
+  rate = trend_data$mean,
+  type = "Trend (no seasonal)"
+)
+
+# Combine all
+decomp_data <- rbind(pure_ode_df, trend_df, full_df)
+
+# Debug: Check combined data
+cat("Combined data rows:", nrow(decomp_data), "\n")
+cat("Types present:", unique(decomp_data$type), "\n")
+
+decomp_data$type <- factor(decomp_data$type,
+                           levels = c("Pure ODE", "Trend (no seasonal)", "Full Model"))
+
+# Subset to key education levels
+decomp_subset <- decomp_data[decomp_data$education %in% sample_edu, ]
+cat("Subset rows:", nrow(decomp_subset), "\n")
+cat("Types in subset:", unique(as.character(decomp_subset$type)), "\n")
+
+# Plot with explicit linewidths (no aesthetic mapping)
+ggplot(decomp_subset, aes(x = year_frac, y = rate * 100, color = type)) +
+  geom_line(linewidth = 0.8) +
+  geom_vline(xintercept = c(2008.75, 2020.25), linetype = "dashed",
+             color = "gray40", alpha = 0.5) +
+  facet_wrap(~education, scales = "free_y", ncol = 1) +
+  scale_color_manual(values = c("Pure ODE" = "#E74C3C",
+                                "Trend (no seasonal)" = "#F39C12",
+                                "Full Model" = "#3498DB")) +
+  scale_x_continuous(breaks = seq(2000, 2025, 5)) +
+  labs(x = "Year",
+       y = "Unemployment Rate (%)",
+       color = "Model Component",
+       title = "Decomposition of Unemployment Dynamics",
+       subtitle = "Red = pure ODE; Orange = trend + innovations; Blue = full model with seasonality") +
+  theme(legend.position = "bottom",
+        strip.text = element_text(size = 12, face = "bold"))
+```
+
+### Zoom: Seasonal Oscillation Detail (2017-2019)
+
+A closer look at a few years to see the seasonal oscillation clearly:
+
+```{r seasonal-zoom}
+#| fig-cap: "Detailed view of seasonal oscillation (2017-2019)"
+#| fig-height: 8
+
+# Zoom into 2017-2019 to see seasonal pattern clearly
+zoom_years <- decomp_subset[decomp_subset$year_frac >= 2017 &
+                             decomp_subset$year_frac <= 2020, ]
+
+cat("Zoom rows:", nrow(zoom_years), "\n")
+cat("Types in zoom:", unique(as.character(zoom_years$type)), "\n")
+
+ggplot(zoom_years, aes(x = year_frac, y = rate * 100, color = type)) +
+  geom_line(linewidth = 0.8) +
+  facet_wrap(~education, scales = "free_y", ncol = 1) +
+  scale_color_manual(values = c("Pure ODE" = "#E74C3C",
+                                "Trend (no seasonal)" = "#F39C12",
+                                "Full Model" = "#3498DB")) +
+  scale_x_continuous(breaks = seq(2017, 2020, 1),
+                     minor_breaks = seq(2017, 2020, 0.25)) +
+  labs(x = "Year",
+       y = "Unemployment Rate (%)",
+       color = "Component",
+       title = "Seasonal Pattern Detail (2017-2019)",
+       subtitle = "Blue oscillation around orange trend shows seasonal hiring patterns") +
+  theme(legend.position = "bottom",
+        strip.text = element_text(size = 12, face = "bold"),
+        panel.grid.minor.x = element_line(color = "gray90"))
+```
+
+### Zoom: Most Recent 12 Months
+
+The most recent year of data to see current dynamics:
+
+```{r recent-zoom}
+#| fig-cap: "Most recent 12 months of unemployment dynamics"
+#| fig-height: 8
+
+# Get the most recent year
+max_year <- max(decomp_subset$year_frac)
+recent_data <- decomp_subset[decomp_subset$year_frac >= (max_year - 1), ]
+
+cat("Recent period:", max_year - 1, "to", max_year, "\n")
+cat("Recent rows:", nrow(recent_data), "\n")
+
+# Also get observed data for this period
+recent_obs <- plot_data[plot_data$education %in% sample_edu &
+                         plot_data$year_frac >= (max_year - 1), ]
+
+ggplot() +
+  # Model trajectories
+  geom_line(data = recent_data,
+            aes(x = year_frac, y = rate * 100, color = type),
+            linewidth = 0.8) +
+  # Observed data points
+  geom_point(data = recent_obs,
+             aes(x = year_frac, y = observed * 100),
+             alpha = 0.6, size = 2, color = "black") +
+  facet_wrap(~education, scales = "free_y", ncol = 1) +
+  scale_color_manual(values = c("Pure ODE" = "#E74C3C",
+                                "Trend (no seasonal)" = "#F39C12",
+                                "Full Model" = "#3498DB")) +
+  scale_x_continuous(breaks = seq(floor(max_year - 1), ceiling(max_year), 0.25),
+                     labels = function(x) format(x, nsmall = 2)) +
+  labs(x = "Year",
+       y = "Unemployment Rate (%)",
+       color = "Component",
+       title = "Most Recent 12 Months",
+       subtitle = "Black points = observed data; Lines = model components") +
+  theme(legend.position = "bottom",
+        strip.text = element_text(size = 12, face = "bold"),
         axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
