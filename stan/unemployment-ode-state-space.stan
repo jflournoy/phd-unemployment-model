@@ -2,13 +2,19 @@
 //
 // Models unemployment dynamics as a discretized ODE system with:
 // - Education-specific separation and finding rates
-// - Economic shock effects (2008, 2020)
+// - Economic shock effects (2008, 2020) with education-specific decay
 // - Direct seasonal effects on unemployment (logit scale)
 // - Hierarchical structure across education levels
 // - Beta-binomial observation model for overdispersion
 //
+// Key design choices for efficient sampling:
+// - NON-CENTERED PARAMETERIZATION for hierarchical parameters (avoids funnels)
+// - UNBOUNDED PARAMETERIZATION via log/logit transforms (avoids hard boundaries)
+// - All bounded parameters transformed: separation_rate, finding_rate, decay, phi
+//
 // Author: Claude Code
 // Date: 2025-12-28
+// Updated: 2026-01-08 (reparameterization for better sampling)
 
 functions {
   // Fuzzy impulse function for shock intensity
@@ -83,36 +89,80 @@ parameters {
   // Latent unemployment rate innovations (logit scale)
   array[T-1] vector[N_edu] logit_u_innov;
 
-  // Hierarchical separation rates (monthly probability of job loss)
-  real<lower=0> mu_separation;
-  real<lower=0> sigma_separation;
-  vector<lower=0, upper=0.2>[N_edu] separation_rate;  // Max 20%/month
+  // === NON-CENTERED HIERARCHICAL PARAMETERS ===
+  // Using non-centered parameterization to avoid funnel geometry
+  // Raw parameters are standard normal, transformed in transformed parameters
 
-  // Hierarchical finding rates (monthly probability of finding job)
-  real<lower=0> mu_finding;
-  real<lower=0> sigma_finding;
-  vector<lower=0, upper=1>[N_edu] finding_rate;  // Max 100%/month
+  // Hierarchical separation rates (non-centered, logit scale)
+  // separation_rate in [0, 0.2] -> logit(rate/0.2) is unbounded
+  real mu_logit_separation;           // Mean on logit(rate/0.2) scale
+  real<lower=0> sigma_logit_separation;  // SD on logit scale
+  vector[N_edu] separation_raw;       // N(0,1) raw values (non-centered)
 
-  // Shock effects (increase in separation rate during shocks)
-  vector<lower=0>[N_edu] shock_2008_effect;
-  vector<lower=0>[N_edu] shock_2020_effect;
+  // Hierarchical finding rates (non-centered, logit scale)
+  // finding_rate in [0, 1] -> logit(rate) is unbounded
+  real mu_logit_finding;              // Mean on logit scale
+  real<lower=0> sigma_logit_finding;  // SD on logit scale
+  vector[N_edu] finding_raw;          // N(0,1) raw values (non-centered)
 
-  // Shock decay rates (education-specific: different groups recover differently)
-  vector<lower=0.1, upper=5>[N_edu] decay_2008;
-  vector<lower=0.1, upper=5>[N_edu] decay_2020;
+  // Shock effects (log scale to ensure positivity)
+  // Using log-normal to avoid hard boundary at 0
+  vector[N_edu] log_shock_2008_effect;
+  vector[N_edu] log_shock_2020_effect;
+
+  // Shock decay rates (log scale for [0.1, 5] -> unconstrained)
+  // decay = 0.1 + 4.9 * inv_logit(decay_raw) maps (-inf, inf) -> (0.1, 5)
+  vector[N_edu] decay_2008_raw;
+  vector[N_edu] decay_2020_raw;
 
   // Direct seasonal effects on unemployment (sum-to-zero constraint)
-  // These capture observed seasonal patterns directly (e.g., academic calendar)
   matrix[11, N_edu] seasonal_u_raw;
 
-  // State evolution noise (logit scale)
-  real<lower=0> sigma_state;
+  // State evolution noise (log scale)
+  real log_sigma_state;
 
-  // Beta-binomial dispersion parameter (larger = less overdispersion)
-  real<lower=1> phi;
+  // Beta-binomial dispersion (log scale, phi > 1)
+  real log_phi_minus_1;  // log(phi - 1), so phi = 1 + exp(log_phi_minus_1) > 1
 }
 
 transformed parameters {
+  // === TRANSFORM RAW PARAMETERS TO CONSTRAINED SCALE ===
+
+  // Separation rates: non-centered, then transform from logit scale
+  // separation_rate = 0.2 * inv_logit(logit_separation)
+  vector[N_edu] logit_separation;
+  vector<lower=0, upper=0.2>[N_edu] separation_rate;
+  for (i in 1:N_edu) {
+    logit_separation[i] = mu_logit_separation + sigma_logit_separation * separation_raw[i];
+    separation_rate[i] = 0.2 * inv_logit(logit_separation[i]);
+  }
+
+  // Finding rates: non-centered, then transform from logit scale
+  vector[N_edu] logit_finding;
+  vector<lower=0, upper=1>[N_edu] finding_rate;
+  for (i in 1:N_edu) {
+    logit_finding[i] = mu_logit_finding + sigma_logit_finding * finding_raw[i];
+    finding_rate[i] = inv_logit(logit_finding[i]);
+  }
+
+  // Shock effects: exp transform (log-normal)
+  vector<lower=0>[N_edu] shock_2008_effect = exp(log_shock_2008_effect);
+  vector<lower=0>[N_edu] shock_2020_effect = exp(log_shock_2020_effect);
+
+  // Decay rates: transform from unbounded to [0.1, 5]
+  vector<lower=0.1, upper=5>[N_edu] decay_2008;
+  vector<lower=0.1, upper=5>[N_edu] decay_2020;
+  for (i in 1:N_edu) {
+    decay_2008[i] = 0.1 + 4.9 * inv_logit(decay_2008_raw[i]);
+    decay_2020[i] = 0.1 + 4.9 * inv_logit(decay_2020_raw[i]);
+  }
+
+  // State noise and dispersion
+  real<lower=0> sigma_state = exp(log_sigma_state);
+  real<lower=1> phi = 1 + exp(log_phi_minus_1);
+
+  // === LATENT STATE DYNAMICS ===
+
   // Latent unemployment rates on probability scale
   array[T] vector<lower=0, upper=1>[N_edu] u;
 
@@ -169,47 +219,49 @@ transformed parameters {
 }
 
 model {
-  // === Priors ===
+  // === Priors (Non-Centered Parameterization) ===
 
-  // Separation rate priors (informed by labor economics literature)
-  // Monthly job separation ~1-3% on average
-  mu_separation ~ normal(0.02, 0.01);
-  sigma_separation ~ exponential(50);
-  separation_rate ~ normal(mu_separation, sigma_separation);
+  // Separation rate hierarchical priors (on logit scale)
+  // Monthly job separation ~1-3% => logit(0.02/0.2) ≈ -2.2
+  mu_logit_separation ~ normal(-2.2, 0.5);  // Centers around 2% separation
+  sigma_logit_separation ~ exponential(2);  // Allows moderate variation
+  separation_raw ~ std_normal();  // Non-centered: raw ~ N(0,1)
 
-  // Finding rate priors
-  // Monthly job finding rate ~20-40% for unemployed
-  mu_finding ~ normal(0.30, 0.10);
-  sigma_finding ~ exponential(5);
-  finding_rate ~ normal(mu_finding, sigma_finding);
+  // Finding rate hierarchical priors (on logit scale)
+  // Monthly job finding rate ~30% => logit(0.30) ≈ -0.85
+  mu_logit_finding ~ normal(-0.85, 0.5);  // Centers around 30% finding
+  sigma_logit_finding ~ exponential(2);   // Allows moderate variation
+  finding_raw ~ std_normal();  // Non-centered: raw ~ N(0,1)
 
-  // Shock effect priors (positive: shocks increase separation)
-  shock_2008_effect ~ normal(0.02, 0.01);
-  shock_2020_effect ~ normal(0.03, 0.015);
+  // Shock effect priors (log scale for log-normal)
+  // E[shock] ≈ 0.02 => log(0.02) ≈ -3.9
+  log_shock_2008_effect ~ normal(-3.9, 0.5);  // ~0.02 with factor ~1.6 variation
+  log_shock_2020_effect ~ normal(-3.5, 0.5);  // ~0.03 with factor ~1.6 variation
 
-  // Decay rate priors (half-life of 6-18 months typical)
-  // Education-specific: allows different recovery speeds
-  decay_2008 ~ normal(0.5, 0.3);
-  decay_2020 ~ normal(1.0, 0.5);
+  // Decay rate priors (on transformed scale)
+  // decay ~ 0.5-1.0 typical => inv_logit maps 0 to 0.5
+  decay_2008_raw ~ normal(0, 1);  // Centered on mid-range
+  decay_2020_raw ~ normal(0.5, 1);  // Slightly higher for COVID
 
   // Direct seasonal effects on unemployment (logit scale)
-  // This allows substantial seasonal patterns to be captured directly
   // Prior of 0.05 on logit scale ≈ ±0.5 percentage points at 3% unemployment
   to_vector(seasonal_u_raw) ~ normal(0, 0.05);
 
   // Initial states (informed by typical unemployment levels)
   logit_u_init ~ normal(-3.5, 0.5);  // ~3% unemployment
 
-  // State noise
-  sigma_state ~ exponential(20);
+  // State noise (log scale)
+  // sigma_state ~ 0.05 => log(0.05) ≈ -3
+  log_sigma_state ~ normal(-3, 1);
 
-  // State innovations (non-centered parameterization)
+  // State innovations
   for (t in 1:(T-1)) {
     logit_u_innov[t] ~ normal(0, sigma_state);
   }
 
-  // Overdispersion parameter
-  phi ~ exponential(0.05);
+  // Overdispersion parameter (log scale)
+  // phi ~ 20 => log(phi-1) ≈ log(19) ≈ 3
+  log_phi_minus_1 ~ normal(3, 1);
 
   // === Likelihood ===
 
