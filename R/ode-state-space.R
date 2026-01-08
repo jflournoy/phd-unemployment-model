@@ -222,8 +222,11 @@ extract_economic_params <- function(result, prob = 0.95) {
     finding_rates = extract_param("finding_rate"),
     shock_2008_effects = extract_param("shock_2008_effect"),
     shock_2020_effects = extract_param("shock_2020_effect"),
+    decay_2008 = extract_param("decay_2008"),
+    decay_2020 = extract_param("decay_2020"),
     equilibrium_rates = extract_param("u_equilibrium"),
-    shock_halflives = fit$summary(c("halflife_2008", "halflife_2020")),
+    halflife_2008 = extract_param("halflife_2008"),
+    halflife_2020 = extract_param("halflife_2020"),
     overdispersion = fit$summary("phi"),
     state_noise = fit$summary("sigma_state")
   )
@@ -311,6 +314,94 @@ extract_trend <- function(result, summary = TRUE) {
   } else {
     # Return full draws
     fit$draws(variables = "u_trend", format = "draws_df")
+  }
+}
+
+
+#' Extract Pure ODE Trajectory
+#'
+#' Extracts the unemployment trajectory driven purely by ODE dynamics
+#' without stochastic innovations or seasonal effects. This shows what
+#' the structural model predicts based on separation/finding rates
+#' and shock effects alone.
+#'
+#' @param result Result from fit_ode_state_space()
+#' @param summary If TRUE, return summary statistics. If FALSE, return
+#'   full posterior draws.
+#'
+#' @return Data frame with pure ODE trajectory estimates by time and education
+#' @export
+extract_pure_ode <- function(result, summary = TRUE) {
+  fit <- result$fit
+  stan_data <- result$stan_data
+
+  if (summary) {
+    # Get summary for all u_ode_pure parameters
+    ode_summary <- fit$summary(variables = "u_ode_pure")
+
+    # Parse parameter names to get indices
+    ode_summary$time_index <- as.integer(
+      gsub("u_ode_pure\\[(\\d+),\\d+\\]", "\\1", ode_summary$variable)
+    )
+    ode_summary$edu_index <- as.integer(
+      gsub("u_ode_pure\\[\\d+,(\\d+)\\]", "\\1", ode_summary$variable)
+    )
+
+    # Add labels
+    ode_summary$time_point <- stan_data$time_points[ode_summary$time_index]
+    ode_summary$education <- stan_data$education_levels[ode_summary$edu_index]
+
+    # Add year_frac for plotting
+    ode_summary$year_frac <- stan_data$year_frac[ode_summary$time_index]
+
+    ode_summary
+  } else {
+    # Return full draws
+    fit$draws(variables = "u_ode_pure", format = "draws_df")
+  }
+}
+
+
+#' Extract Seasonal Effects
+#'
+#' Extracts the computed seasonal effect at each time point, representing
+#' the difference between the full model (with seasonality) and the
+#' trend (without seasonality).
+#'
+#' @param result Result from fit_ode_state_space()
+#' @param summary If TRUE, return summary statistics. If FALSE, return
+#'   full posterior draws.
+#'
+#' @return Data frame with seasonal effect estimates by time and education
+#' @export
+extract_seasonal_effects <- function(result, summary = TRUE) {
+  fit <- result$fit
+  stan_data <- result$stan_data
+
+  if (summary) {
+    # Get summary for all seasonal_effect parameters
+    seas_summary <- fit$summary(variables = "seasonal_effect")
+
+    # Parse parameter names to get indices
+    seas_summary$time_index <- as.integer(
+      gsub("seasonal_effect\\[(\\d+),\\d+\\]", "\\1", seas_summary$variable)
+    )
+    seas_summary$edu_index <- as.integer(
+      gsub("seasonal_effect\\[\\d+,(\\d+)\\]", "\\1", seas_summary$variable)
+    )
+
+    # Add labels
+    seas_summary$time_point <- stan_data$time_points[seas_summary$time_index]
+    seas_summary$education <- stan_data$education_levels[seas_summary$edu_index]
+
+    # Add year_frac and month for plotting
+    seas_summary$year_frac <- stan_data$year_frac[seas_summary$time_index]
+    seas_summary$month <- stan_data$month[seas_summary$time_index]
+
+    seas_summary
+  } else {
+    # Return full draws
+    fit$draws(variables = "seasonal_effect", format = "draws_df")
   }
 }
 
