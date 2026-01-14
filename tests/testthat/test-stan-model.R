@@ -14,7 +14,8 @@ library(data.table)
 
 # Skip all tests if cmdstan is not available
 skip_if_no_cmdstan <- function() {
-  if (!cmdstanr::cmdstan_path() %||% !file.exists(cmdstanr::cmdstan_path())) {
+  cmdstan_path <- try(cmdstanr::cmdstan_path(), silent = TRUE)
+  if (inherits(cmdstan_path, "try-error") || is.null(cmdstan_path) || !file.exists(cmdstan_path)) {
     skip("CmdStan not available")
   }
 }
@@ -433,4 +434,127 @@ test_that("model converges on real data subset", {
   # ESS should be > 100 (reduced threshold for short run)
   expect_true(all(sep_summary$ess_bulk > 100),
               info = "ESS too low for separation_rate")
+})
+
+# ============================================================================
+# Section 6: Hierarchical Seasonal Effects Tests (TDD)
+# ============================================================================
+
+test_that("model has hierarchical seasonal effects parameters", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_if(Sys.getenv("SKIP_SLOW_TESTS") == "TRUE", "Skipping slow test")
+
+  # Load real data for fitting
+  data_path <- here::here("data", "education-spectrum-counts.rds")
+  if (!file.exists(data_path)) {
+    skip("Education counts data not available")
+  }
+
+  counts_data <- readRDS(data_path)
+  counts_data <- as.data.table(counts_data)
+
+  # Use efficient model
+  model_path <- here::here("stan", "unemployment-ode-state-space-efficient.stan")
+  if (!file.exists(model_path)) {
+    skip("Efficient Stan model file not found")
+  }
+
+  # Prepare Stan data
+  subset_edu <- c("phd", "masters", "bachelors")
+  counts_subset <- counts_data[
+    education %in% subset_edu & year >= 2015 & year <= 2019
+  ]
+
+  stan_data <- phdunemployment::prepare_stan_data(
+    counts_subset,
+    education_order = subset_edu
+  )
+
+  # Compile model
+  model <- cmdstanr::cmdstan_model(model_path)
+
+  # Fit with minimal iterations
+  fit <- model$sample(
+    data = stan_data,
+    chains = 2,
+    parallel_chains = 2,
+    iter_sampling = 400,
+    iter_warmup = 400,
+    adapt_delta = 0.95,
+    refresh = 0,
+    show_messages = FALSE
+  )
+
+  # ====== TDD ASSERTIONS ======
+  # These will FAIL until hierarchical seasonal effects are implemented
+
+  # 1. Model should have mu_seasonal parameter (population mean)
+  all_vars <- fit$metadata()$model_params
+  expect_true("mu_seasonal" %in% all_vars,
+              info = "mu_seasonal parameter not found in model")
+
+  # 2. Model should have sigma_seasonal parameter (between-education SD)
+  expect_true("sigma_seasonal" %in% all_vars,
+              info = "sigma_seasonal parameter not found in model")
+
+  # 3. Seasonal effects should still exist (now as deviations)
+  expect_true("seasonal_u" %in% all_vars,
+              info = "seasonal_u parameter not found in model")
+
+  # 4. Check that hierarchical parameters have sensible posteriors
+  mu_seasonal_summary <- fit$summary("mu_seasonal")
+  expect_equal(nrow(mu_seasonal_summary), 11,
+               info = "mu_seasonal should have 11 months (sum-to-zero)")
+
+  sigma_seasonal_summary <- fit$summary("sigma_seasonal")
+  expect_equal(nrow(sigma_seasonal_summary), 1,
+               info = "sigma_seasonal should be scalar")
+
+  # 5. Check that sigma_seasonal is positive
+  expect_true(sigma_seasonal_summary$q5 > 0,
+              info = "sigma_seasonal should be strictly positive")
+
+  # 6. Check that hierarchical pooling works: education-specific
+  # seasonal effects should be smaller than independent effects
+  seasonal_summary <- fit$summary("seasonal_u")
+  mean_abs_seasonal <- mean(abs(seasonal_summary$mean))
+
+  # With pooling, effects should be modest (< 1% on logit scale)
+  expect_lt(mean_abs_seasonal, 0.02,
+            info = "Pooled seasonal effects should be modest")
+})
+
+test_that("hierarchical seasonal priors are properly specified", {
+  skip_if_no_cmdstan()
+
+  # Test that hierarchical seasonal priors are in the Stan code
+  model_path <- here::here("stan", "unemployment-ode-state-space-efficient.stan")
+  if (!file.exists(model_path)) {
+    skip("Efficient Stan model file not found")
+  }
+
+  stan_code <- readLines(model_path)
+
+  # Check for hierarchical seasonal parameters in parameters block
+  expect_true(any(grepl("vector\\[11\\]\\s+mu_seasonal", stan_code)),
+              info = "mu_seasonal declaration not found")
+
+  expect_true(any(grepl("real<lower=0>\\s+sigma_seasonal", stan_code)),
+              info = "sigma_seasonal declaration not found")
+
+  # Check for non-centered parameterization
+  expect_true(any(grepl("seasonal_u_raw", stan_code)),
+              info = "seasonal_u_raw (non-centered) not found")
+
+  # Check for sum-to-zero constraint on mu_seasonal
+  expect_true(any(grepl("sum.*mu_seasonal.*==.*0|mu_seasonal.*sum.*zero", stan_code, ignore.case = TRUE)),
+              info = "Sum-to-zero constraint on mu_seasonal not found")
+
+  # Check for proper priors in model block
+  expect_true(any(grepl("mu_seasonal.*~.*normal", stan_code)),
+              info = "Prior on mu_seasonal not found")
+
+  expect_true(any(grepl("sigma_seasonal.*~.*exponential", stan_code)),
+              info = "Prior on sigma_seasonal not found")
 })
