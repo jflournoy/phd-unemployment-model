@@ -21,30 +21,60 @@
 
 ## Next Steps (Backlog)
 
-### 1. Multi-threaded Refactoring of Hierarchical Variance Analysis ⚠️ (Priority: HIGH)
-- **Description**: Refactor `scripts/analyze-hierarchical-variance.R` to use functional programming patterns and parallel processing for improved performance and maintainability
+### 1. Stan Model Optimization with Threading and Functions ⚠️ (Priority: HIGH)
+- **Description**: Refactor the ODE state space Stan model to use Stan functions and multi-threaded likelihood evaluation for improved sampling efficiency
 - **Scope**:
-  - Extract helper functions into modular, reusable components in `R/`
-  - Implement parallel processing for parameter extraction across education levels
-  - Create wrapper functions for visualization generation
-  - Consider `parallel::mclapply()` or `furrr::future_map()` for concurrent operations
+  - Extract ODE solver logic into Stan functions (currently inline in model block)
+  - Extract likelihood computation into reusable Stan functions
+  - Implement `reduce_sum()` for parallel likelihood evaluation across time points and education levels
+  - Optimize hierarchical parameter transformations with functions
 - **Benefits**:
-  - Faster analysis execution on multi-core systems
-  - Improved code reusability across other analysis scripts
-  - Better testability via functional decomposition
-  - Foundation for scaling to larger hierarchical models
-- **Estimated Effort**: Medium (4-6 refactoring iterations)
+  - Faster model sampling through parallelized likelihood computation
+  - Improved code maintainability and readability
+  - Foundation for scaling to larger datasets and models
+  - Potential 2-4x speedup on multi-core systems
+- **Estimated Effort**: High (8-12 hours, requires careful testing)
 - **Dependencies**: Completion of hierarchical variance analysis
 
 **Proposed Architecture**:
-```r
-# New functions in R/hierarchical-analysis.R
-extract_hierarchical_param_info()      # Extract σ from model output
-interpret_pooling_strength()           # Categorize by σ threshold
-compare_pooling_across_parameters()    # Generate comparison table
-create_variance_visualization()        # Generate publication-quality plots
-create_education_comparison_plots()    # Generate faceted comparisons
+```stan
+// New functions in unemployment-ode-state-space-efficient.stan
+
+// ODE solver wrapper function
+vector ode_unemployment_dynamics(
+  vector y_init,
+  vector u_eq,
+  vector adj_speed,
+  vector shock_intensity,
+  vector decay,
+  vector seasonal,
+  // ... other parameters
+) {
+  // Encapsulate ODE solving logic
+}
+
+// Likelihood function for time point and education combination
+real partial_log_likelihood(
+  int start_idx,
+  int end_idx,
+  data array[] int n_unemployed,
+  data array[] int n_total,
+  vector u,
+  real phi
+) {
+  // Compute log-likelihood for subset of data (for reduce_sum)
+}
+
+// In model block: use reduce_sum for parallelization
+target += reduce_sum(partial_log_likelihood, 1, grainsize,
+                     n_unemployed, n_total, u, phi);
 ```
+
+**Testing Strategy**:
+- Verify results match current implementation
+- Benchmark sampling time improvement
+- Check gradient computation correctness
+- Validate on 4+ core systems
 
 ---
 
@@ -94,17 +124,38 @@ create_education_comparison_plots()    # Generate faceted comparisons
 
 ## Architecture Notes
 
-### Current Implementation
-- Single-threaded R script (`scripts/analyze-hierarchical-variance.R`)
-- Direct computation without intermediate caching
-- Monolithic 413-line script with embedded visualizations
+### Current Stan Model Implementation
+- **Language**: Stan (probabilistic programming)
+- **File**: `stan/unemployment-ode-state-space-efficient.stan` (~470 lines)
+- **Sampling**: Single-threaded likelihood evaluation
+- **ODE Logic**: Inline in `transformed parameters` block
+- **Likelihood**: Loop-based computation in `model` block
+- **Runtime**: ~51.5 minutes for 4 chains × 3000 iterations (2170 data rows)
 
-### Proposed Improvements
-1. **Modularization**: Break into testable functions in `R/` package
-2. **Parallelization**: Use `furrr` or `parallel` for multi-threaded execution
-3. **Caching**: Cache intermediate results for faster re-analysis
-4. **Testing**: Add unit tests for each analytical function
-5. **Documentation**: Roxygen2 comments for function discoverability
+### Current Limitations
+1. **Sequential Likelihood**: No parallelization across time points or education levels
+2. **Code Duplication**: ODE solving and likelihood logic not factored into functions
+3. **Scalability**: Difficult to extend to larger datasets or more complex models
+4. **Maintainability**: Inline logic makes the model harder to read and debug
+
+### Proposed Stan Improvements
+1. **Functions Block**: Extract reusable components
+   - `ode_unemployment_dynamics()` - Encapsulate ODE system
+   - `compute_shock_intensity()` - Calculate exponential decay
+   - `partial_log_likelihood()` - Likelihood for data subset (reduce_sum compatible)
+
+2. **Parallelization**: Use `reduce_sum()` for efficiency
+   - Partition likelihood computation across cores
+   - Typical targets: 100-500 observations per thread
+
+3. **Numerical Stability**: Improved computation patterns
+   - Log-space computations where appropriate
+   - Better handling of extreme parameter values
+
+4. **Testing**: Validation scripts
+   - Compare old vs new model outputs (should match exactly)
+   - Benchmark on various core counts
+   - Verify gradient computations
 
 ---
 
@@ -116,7 +167,22 @@ create_education_comparison_plots()    # Generate faceted comparisons
 ---
 
 ## Performance Targets
+
+### Stan Model Optimization (Primary Focus)
+- **Current sampling time**: 51.5 minutes (4 chains × 3000 iter on 8-core system)
+- **Target with threading**: 20-25 minutes (50% reduction)
+- **Speedup mechanism**: `reduce_sum()` parallelization across likelihood evaluations
+- **Expected benefit**: 2-4x reduction in likelihood computation time
+
+### Analysis and Reporting
 - Hierarchical variance analysis runtime: <10 seconds (currently ~15s)
 - Memory usage: <500MB for full model analysis
 - Report rendering time: <2 minutes including all analyses
+
+### Validation Criteria
+- ✓ Output numerically identical to sequential version (diff < 1e-10)
+- ✓ Gradient checks pass (numerical gradient matches autodiff)
+- ✓ Effective sample size improves or stays constant
+- ✓ Rhat remains < 1.01 for all parameters
+- ✓ No divergences introduced
 
