@@ -246,7 +246,7 @@ list(
       cat("Timestamp:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
       cat("Data rows:", nrow(education_counts), "\n")
       cat("Chains: 4, Iterations: 3000 (1500 warmup + 1500 sampling)\n")
-      cat("Hierarchical: u_eq, adj_speed, shock_2008/2020, decay_2008/2020, seasonal\n")
+      cat("Hierarchical: u_eq, adj_speed, shock_2008/2020, decay_2008/2020, seasonal, spline_smooth\n")
       cat("adapt_delta: 0.95, K_spline: 25\n")
       cat(strrep("=", 80), "\n\n")
 

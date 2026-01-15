@@ -50,7 +50,7 @@ This report presents a hierarchical Bayesian state space model for unemployment 
 **Hierarchical Structure**
 - Population-level means with education-specific deviations
 - Pooling strengthens inference for small groups
-- Hierarchical parameters: equilibrium unemployment, adjustment speed, shock magnitudes, recovery rates, seasonal effects
+- Hierarchical parameters: equilibrium unemployment, adjustment speed, shock magnitudes, recovery rates, seasonal effects, spline smoothness
 
 **Shock Modeling**
 - Explicit shock effects on separation rates (2008, 2020)
@@ -462,17 +462,23 @@ seasonal_u[1:11, i] = μ_seasonal + σ_seasonal * seasonal_u_raw[, i]
 - 12th month derived: `seasonal_u[12, i] = -sum(seasonal_u[1:11, i])`
 - Modest effects (~1-3% on logit scale)
 
+**6. Spline Smoothness (σ_spline)**
+```
+μ_log_sigma_spline ~ Normal(-0.22, 0.4)   # Population mean on log scale
+σ_log_sigma_spline ~ Exponential(2)       # Between-education SD (mean = 0.5)
+sigma_spline[i] = exp(μ_log_sigma_spline + σ_log_sigma_spline * sigma_spline_raw[i])
+```
+- Education-specific residual smoothness on spline coefficients
+- PhDs may have smoother trajectories than less-educated workers
+- Data-informed: exp(-0.22) ≈ 0.8 from exploratory fits
+- Hierarchical pooling prevents overfitting of smoothness parameters
+
 ### Non-Hierarchical Parameters
 
 **Initial States**
 - Starting unemployment levels
 - Not hierarchical (equilibrium handles long-run behavior)
 - Prior: Normal(-3.0, 0.5) on logit scale
-
-**Spline Smoothness**
-- Global σ_spline parameter
-- Data-informed: Normal(0.8, 0.3)
-- Controls residual smooth variation
 
 **Overdispersion**
 - Beta-binomial φ parameter
