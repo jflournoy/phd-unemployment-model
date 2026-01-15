@@ -492,6 +492,117 @@ sigma_spline[i] = exp(μ_log_sigma_spline + σ_log_sigma_spline * sigma_spline_r
 3. **Identifiability**: Constrains some_college adjustment speed through population effect
 4. **Interpretability**: Population means are directly interpretable aggregates
 
+## Hierarchical Variance Analysis: Comparing Pooling Strength
+
+A key question for hierarchical models: **Which unemployment dynamics show the most education-specific variation?**
+
+The hierarchical structure allows us to directly compare the strength of pooling across all parameter groups by examining the between-education standard deviation ($\sigma$) for each.
+
+### Between-Education Variance Summary
+
+```{r hierarchical-variance}
+#| fig-cap: "Between-education variance (σ) for all hierarchical parameters"
+
+# Load the variance analysis results
+variance_file <- here("results", "hierarchical-variance-summary.rds")
+
+if (!file.exists(variance_file)) {
+  cat("Running hierarchical variance analysis...\n")
+  system("Rscript scripts/analyze-hierarchical-variance.R")
+}
+
+variance_summary <- readRDS(variance_file)
+
+# Display summary table
+cat("\n=== Between-Education Variance (σ) ===\n")
+cat("Smaller σ = stronger pooling = more similar across education\n\n")
+
+knitr::kable(
+  variance_summary[, .(Parameter = parameter,
+                       `σ (mean)` = sprintf("%.3f", sigma_mean),
+                       `90% CI` = sprintf("[%.3f, %.3f]", sigma_q5, sigma_q95),
+                       `Edu CV` = sprintf("%.1f%%", edu_cv * 100),
+                       `Pooling Strength` = pooling)],
+  align = c("l", "r", "r", "r", "l")
+)
+```
+
+```{r variance-comparison-plot}
+#| fig-cap: "Comparing pooling strength across all hierarchical parameters"
+#| fig-height: 6
+#| fig-width: 10
+
+knitr::include_graphics(here("reports", "figures", "hierarchical-variance-comparison.png"))
+```
+
+### Interpretation: Universal vs. Education-Specific Dynamics
+
+**Tight Pooling (σ < 0.15)** - Nearly universal across education:
+```{r tight-pooling}
+tight <- variance_summary[sigma_mean < 0.15, parameter]
+if (length(tight) > 0) {
+  cat(paste0("  • ", tight, collapse = "\n"), "\n\n")
+  cat("→ These dynamics are fundamental to all education levels\n")
+  cat("→ Education-specific differences are small relative to uncertainty\n")
+  cat("→ The data supports a common mechanism\n")
+} else {
+  cat("No parameters show tight pooling.\n")
+}
+```
+
+**Moderate Pooling (0.15 ≤ σ < 0.4)** - Some education differences:
+```{r moderate-pooling}
+moderate <- variance_summary[sigma_mean >= 0.15 & sigma_mean < 0.4, parameter]
+if (length(moderate) > 0) {
+  cat(paste0("  • ", moderate, collapse = "\n"), "\n\n")
+  cat("→ Modest education-specific variation exists\n")
+  cat("→ Pooling provides moderate regularization\n")
+  cat("→ Groups are similar but distinguishable\n")
+} else {
+  cat("No parameters show moderate pooling.\n")
+}
+```
+
+**Weak Pooling (σ ≥ 0.4)** - Substantial education differences:
+```{r weak-pooling}
+weak <- variance_summary[sigma_mean >= 0.4, parameter]
+if (length(weak) > 0) {
+  cat(paste0("  • ", weak, collapse = "\n"), "\n\n")
+  cat("→ Education levels genuinely differ in these dynamics\n")
+  cat("→ Pooling provides modest shrinkage but preserves differences\n")
+  cat("→ The data supports education-specific mechanisms\n")
+} else {
+  cat("No parameters show weak pooling.\n")
+}
+```
+
+### Education-Specific Parameter Values
+
+To visualize the differences, compare selected parameters with different pooling strengths:
+
+```{r education-specific-comparison}
+#| fig-cap: "Education-specific parameter values for parameters with different pooling strengths"
+#| fig-height: 6
+#| fig-width: 10
+
+knitr::include_graphics(here("reports", "figures", "education-specific-parameters.png"))
+```
+
+### Key Insights
+
+1. **Most Variable**: `r variance_summary[1, parameter]` (σ = `r sprintf("%.2f", variance_summary[1, sigma_mean])`)
+   - Education levels differ substantially in this aspect of unemployment dynamics
+   - Hierarchical prior prevents overfitting while allowing genuine differences
+
+2. **Least Variable**: `r variance_summary[.N, parameter]` (σ = `r sprintf("%.3f", variance_summary[.N, sigma_mean])`)
+   - All education levels share nearly identical dynamics for this parameter
+   - Strong pooling is appropriate and improves estimation efficiency
+
+3. **Practical Implications**:
+   - Parameters with weak pooling (high σ) require education-specific interpretation
+   - Parameters with tight pooling (low σ) can be summarized at the population level
+   - The hierarchy automatically discovers which dynamics are universal vs. education-specific
+
 ## Data Preparation
 
 ```{r load-data}
@@ -1161,8 +1272,8 @@ p3 <- mcmc_trace(draws, pars = "mu_log_shock_2020", np = np) +
 p4 <- mcmc_trace(draws, pars = "sigma_log_shock_2008", np = np) +
   labs(title = "Hierarchical SD: 2008 Shock (between-education variation)")
 
-p5 <- mcmc_trace(draws, pars = "sigma_spline", np = np) +
-  labs(title = "Spline Deviation Scale")
+p5 <- mcmc_trace(draws, pars = "sigma_log_sigma_spline", np = np) +
+  labs(title = "Hierarchical SD: Spline Smoothness (between-education variation)")
 
 library(patchwork)
 (p1 / p2 / p3 / p4 / p5)
@@ -1189,8 +1300,11 @@ key_params <- c(
   paste0("shock_2020_effect[", 1:stan_data$N_edu, "]"),
   paste0("decay_2008[", 1:stan_data$N_edu, "]"),
   paste0("decay_2020[", 1:stan_data$N_edu, "]"),
+  # Hierarchical spline smoothness
+  "mu_log_sigma_spline", "sigma_log_sigma_spline",
+  paste0("sigma_spline[", 1:stan_data$N_edu, "]"),
   # Global parameters
-  "sigma_spline", "phi"
+  "phi"
 )
 
 param_summary <- result$fit$summary(variables = key_params)
