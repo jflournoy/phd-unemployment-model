@@ -218,47 +218,50 @@ list(
   )
 
   # ==========================================================================
-  # Bayesian State Space Model (Stan via cmdstanr)
+  # Bayesian State Space Model (Stan via cmdstanr) - Efficient Hierarchical
   # ==========================================================================
   #
-  # The ODE state space model takes ~10 minutes to fit.
+  # The efficient ODE state space model with hierarchical pooling takes ~28 minutes.
   # Caching via targets is critical to avoid re-fitting on every report render.
 
-  ## Stan model compilation (cached separately from fitting)
+  ## Stan model compilation (efficient version with hierarchical decay)
   tar_target(
     stan_model_compiled,
     {
-      stan_file <- here::here("stan", "unemployment-ode-state-space.stan")
+      stan_file <- here::here("stan", "unemployment-ode-state-space-efficient.stan")
       cmdstanr::cmdstan_model(stan_file, compile = TRUE)
     },
     # Return the model object for use in fitting
     format = "qs"  # Fast serialization
   ),
 
-  ## Fit ODE State Space Model
-  ## Uses education_counts data, fits full Bayesian model
+  ## Fit Efficient ODE State Space Model with Hierarchical Pooling
+  ## Hierarchical: u_eq, adj_speed, shock effects, decay rates, seasonal effects
+  ## Data-informed priors, prior-centered initialization
   tar_target(
-    model_ode_state_space,
+    model_ode_state_space_efficient,
     {
       cat("\n", strrep("=", 80), "\n")
-      cat("STARTING STAN MODEL FITTING: ODE State Space Model\n")
+      cat("STARTING STAN MODEL FITTING: Efficient ODE State Space (Hierarchical)\n")
       cat("Timestamp:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
       cat("Data rows:", nrow(education_counts), "\n")
-      cat("Chains: 4, Iterations: 2000 (1000 warmup + 1000 sampling)\n")
-      cat("adapt_delta: 0.99 (high to avoid divergences)\n")
+      cat("Chains: 4, Iterations: 3000 (1500 warmup + 1500 sampling)\n")
+      cat("Hierarchical: u_eq, adj_speed, shock_2008/2020, decay_2008/2020, seasonal\n")
+      cat("adapt_delta: 0.95, K_spline: 25\n")
       cat(strrep("=", 80), "\n\n")
 
       start_time <- Sys.time()
 
-      result <- fit_ode_state_space(
+      result <- fit_ode_state_space_efficient(
         education_counts,
+        K_spline = 25,
         chains = 4,
-        iter_sampling = 1000,
-        iter_warmup = 1000,
-        adapt_delta = 0.99,
+        iter_sampling = 1500,
+        iter_warmup = 1500,
+        adapt_delta = 0.95,
         max_treedepth = 12,
         parallel_chains = 4,
-        refresh = 200
+        refresh = 500
       )
 
       end_time <- Sys.time()
@@ -269,6 +272,7 @@ list(
       cat("Total runtime:", round(elapsed, 1), "minutes\n")
       cat("Divergent transitions:", result$diagnostics$num_divergent, "\n")
       cat("Max treedepth exceeded:", result$diagnostics$max_treedepth_exceeded, "\n")
+      cat("E-BFMI:", paste(round(result$diagnostics$ebfmi, 3), collapse = ", "), "\n")
       cat(strrep("=", 80), "\n\n")
 
       result
@@ -280,11 +284,11 @@ list(
   ## Save Stan model results to file for report access
   ## The report can load this instead of re-fitting
   tar_target(
-    model_ode_state_space_file,
+    model_ode_state_space_efficient_file,
     {
-      path <- here::here("models", "ode-state-space-fit.qs")
+      path <- here::here("models", "ode-state-space-efficient-fit.qs")
       dir.create(dirname(path), showWarnings = FALSE, recursive = TRUE)
-      qs::qsave(model_ode_state_space, path)
+      qs::qsave(model_ode_state_space_efficient, path)
       path
     },
     format = "file"
