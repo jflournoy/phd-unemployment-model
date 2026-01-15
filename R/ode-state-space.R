@@ -938,8 +938,16 @@ fit_ode_state_space_efficient <- function(data,
                     diagnostics$max_treedepth_exceeded))
   }
 
+  # Extract draws and summaries before CSV files are deleted
+  # This ensures the data persists even if temporary files are cleaned up
+  message("Extracting posterior draws and summaries...")
+  draws <- fit$draws(format = "df")
+  summary <- fit$summary()
+
   list(
     fit = fit,
+    draws = draws,         # Posterior draws (data.frame)
+    summary = summary,     # Parameter summaries
     stan_data = stan_data,
     diagnostics = diagnostics,
     timing = list(
