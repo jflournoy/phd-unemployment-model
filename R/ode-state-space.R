@@ -766,7 +766,12 @@ make_init_at_prior <- function(stan_data) {
     list(
       # Spline coefficients (centered at 0, the prior mean)
       spline_coef_raw = matrix(0, nrow = K_spline, ncol = N_edu),
-      sigma_spline = 0.8,  # DATA-INFORMED: posterior ~0.8
+
+      # Hierarchical spline smoothness (non-centered)
+      # DATA-INFORMED: posterior sigma_spline ~0.8 → log(0.8) ≈ -0.22
+      mu_log_sigma_spline = -0.22,       # Prior: normal(-0.22, 0.4)
+      sigma_log_sigma_spline = 0.5,      # Prior: exponential(2), mean = 0.5
+      sigma_spline_raw = rep(0, N_edu),  # Non-centered: start at population mean
 
       # Hierarchical equilibrium unemployment (non-centered)
       mu_logit_u_eq = -3.3,         # Prior: normal(-3.3, 0.3) → ~3.5%

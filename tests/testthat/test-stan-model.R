@@ -558,3 +558,130 @@ test_that("hierarchical seasonal priors are properly specified", {
   expect_true(any(grepl("sigma_seasonal.*~.*exponential", stan_code)),
               info = "Prior on sigma_seasonal not found")
 })
+
+# ============================================================================
+# Section 7: Hierarchical Spline Smoothness Tests (TDD)
+# ============================================================================
+
+test_that("model has hierarchical spline smoothness parameters", {
+  skip_if_no_cmdstan()
+  skip_on_cran()
+  skip_if(Sys.getenv("SKIP_SLOW_TESTS") == "TRUE", "Skipping slow test")
+
+  # Load real data for fitting
+  data_path <- here::here("data", "education-spectrum-counts.rds")
+  if (!file.exists(data_path)) {
+    skip("Education counts data not available")
+  }
+
+  counts_data <- readRDS(data_path)
+  counts_data <- as.data.table(counts_data)
+
+  # Use efficient model
+  model_path <- here::here("stan", "unemployment-ode-state-space-efficient.stan")
+  if (!file.exists(model_path)) {
+    skip("Efficient Stan model file not found")
+  }
+
+  # Prepare Stan data
+  subset_edu <- c("phd", "masters", "bachelors")
+  counts_subset <- counts_data[
+    education %in% subset_edu & year >= 2015 & year <= 2019
+  ]
+
+  stan_data <- phdunemployment::prepare_stan_data(
+    counts_subset,
+    education_order = subset_edu
+  )
+
+  # Compile model
+  model <- cmdstanr::cmdstan_model(model_path)
+
+  # Fit with minimal iterations
+  fit <- model$sample(
+    data = stan_data,
+    chains = 2,
+    parallel_chains = 2,
+    iter_sampling = 400,
+    iter_warmup = 400,
+    adapt_delta = 0.95,
+    refresh = 0,
+    show_messages = FALSE
+  )
+
+  # ====== TDD ASSERTIONS ======
+  # These will FAIL until hierarchical spline smoothness is implemented
+
+  # 1. Model should have mu_log_sigma_spline parameter (population mean)
+  all_vars <- fit$metadata()$model_params
+  expect_true("mu_log_sigma_spline" %in% all_vars,
+              info = "mu_log_sigma_spline parameter not found in model")
+
+  # 2. Model should have sigma_log_sigma_spline parameter (between-education SD)
+  expect_true("sigma_log_sigma_spline" %in% all_vars,
+              info = "sigma_log_sigma_spline parameter not found in model")
+
+  # 3. sigma_spline should now be a vector (education-specific)
+  sigma_spline_summary <- fit$summary("sigma_spline")
+  expect_equal(nrow(sigma_spline_summary), 3,
+               info = "sigma_spline should have N_edu elements (one per education level)")
+
+  # 4. Check that hierarchical parameters have sensible posteriors
+  mu_log_sigma_spline_summary <- fit$summary("mu_log_sigma_spline")
+  expect_equal(nrow(mu_log_sigma_spline_summary), 1,
+               info = "mu_log_sigma_spline should be scalar")
+
+  sigma_log_sigma_spline_summary <- fit$summary("sigma_log_sigma_spline")
+  expect_equal(nrow(sigma_log_sigma_spline_summary), 1,
+               info = "sigma_log_sigma_spline should be scalar")
+
+  # 5. Check that sigma_log_sigma_spline is positive
+  expect_true(sigma_log_sigma_spline_summary$q5 > 0,
+              info = "sigma_log_sigma_spline should be strictly positive")
+
+  # 6. Check that education-specific sigma_spline values are positive and reasonable
+  expect_true(all(sigma_spline_summary$q5 > 0),
+              info = "All sigma_spline values should be positive")
+
+  # Data-informed: sigma_spline typically ~0.8, check they're in reasonable range
+  expect_true(all(sigma_spline_summary$mean > 0.2 & sigma_spline_summary$mean < 2.0),
+              info = "sigma_spline values should be in reasonable range [0.2, 2.0]")
+})
+
+test_that("hierarchical spline smoothness priors are properly specified", {
+  skip_if_no_cmdstan()
+
+  # Test that hierarchical spline smoothness priors are in the Stan code
+  model_path <- here::here("stan", "unemployment-ode-state-space-efficient.stan")
+  if (!file.exists(model_path)) {
+    skip("Efficient Stan model file not found")
+  }
+
+  stan_code <- readLines(model_path)
+
+  # Check for hierarchical spline smoothness parameters in parameters block
+  expect_true(any(grepl("real\\s+mu_log_sigma_spline", stan_code)),
+              info = "mu_log_sigma_spline declaration not found")
+
+  expect_true(any(grepl("real<lower=0>\\s+sigma_log_sigma_spline", stan_code)),
+              info = "sigma_log_sigma_spline declaration not found")
+
+  # Check for non-centered parameterization
+  expect_true(any(grepl("sigma_spline_raw", stan_code)),
+              info = "sigma_spline_raw (non-centered) not found")
+
+  # Check that sigma_spline is now a vector in transformed parameters
+  expect_true(any(grepl("vector.*sigma_spline", stan_code)),
+              info = "sigma_spline should be declared as vector in transformed parameters")
+
+  # Check for proper priors in model block
+  expect_true(any(grepl("mu_log_sigma_spline.*~.*normal", stan_code)),
+              info = "Prior on mu_log_sigma_spline not found")
+
+  expect_true(any(grepl("sigma_log_sigma_spline.*~.*exponential", stan_code)),
+              info = "Prior on sigma_log_sigma_spline not found")
+
+  # Check for non-centered transformation in transformed parameters
+  expect_true(any(grepl("mu_log_sigma_spline.*\\+.*sigma_log_sigma_spline.*\\*", stan_code)),
+              info = "Non-centered transformation for sigma_spline not found")
+})

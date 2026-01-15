@@ -130,7 +130,12 @@ parameters {
   // === SPLINE COEFFICIENTS FOR DEVIATIONS ===
   // K_spline coefficients per education level (much smaller than T-1 innovations!)
   matrix[K_spline, N_edu] spline_coef_raw;  // Standard normal raw coefficients
-  real<lower=0> sigma_spline;               // Scale of spline deviations
+
+  // === HIERARCHICAL SPLINE SMOOTHNESS (NON-CENTERED) ===
+  // Pool spline smoothness across education levels
+  real mu_log_sigma_spline;                 // Population mean on log scale
+  real<lower=0> sigma_log_sigma_spline;     // Between-education SD
+  vector[N_edu] sigma_spline_raw;           // Non-centered deviations
 
   // === NON-CENTERED HIERARCHICAL PARAMETERS ===
   //
@@ -227,6 +232,13 @@ transformed parameters {
     shock_2020_effect[i] = exp(log_shock_2020_effect[i]);
   }
 
+  // Spline smoothness: transform with hierarchical pooling
+  vector<lower=0>[N_edu] sigma_spline;
+  for (i in 1:N_edu) {
+    // Non-centered hierarchical: exp(mu + sigma * raw)
+    sigma_spline[i] = exp(mu_log_sigma_spline + sigma_log_sigma_spline * sigma_spline_raw[i]);
+  }
+
   // Decay rates: transform from unbounded to [0.1, 5] with hierarchical pooling
   vector<lower=0.1, upper=5>[N_edu] decay_2008;
   vector<lower=0.1, upper=5>[N_edu] decay_2020;
@@ -246,7 +258,7 @@ transformed parameters {
   matrix[T, N_edu] spline_deviation;
 
   for (i in 1:N_edu) {
-    spline_coef[, i] = sigma_spline * spline_coef_raw[, i];
+    spline_coef[, i] = sigma_spline[i] * spline_coef_raw[, i];
     // Compute spline deviation and bound to prevent extreme values
     vector[T] raw_dev = B_spline * spline_coef[, i];
     for (t in 1:T) {
@@ -383,8 +395,13 @@ model {
   // Spline coefficients (non-centered)
   // Allow more flexibility with more basis functions
   to_vector(spline_coef_raw) ~ std_normal();
-  // DATA-INFORMED: posterior shows sigma_spline ≈ 0.8
-  sigma_spline ~ normal(0.8, 0.3);  // Center near posterior
+
+  // === HIERARCHICAL SPLINE SMOOTHNESS ===
+  // Pool spline smoothness across education levels
+  // DATA-INFORMED: posterior shows sigma_spline ≈ 0.8 → log(0.8) ≈ -0.22
+  mu_log_sigma_spline ~ normal(-0.22, 0.4);    // Center on exp(-0.22) ≈ 0.8
+  sigma_log_sigma_spline ~ exponential(2);     // Allow modest education variation
+  sigma_spline_raw ~ std_normal();             // Non-centered deviations
 
   // Overdispersion - DATA-INFORMED: posterior shows phi ≈ 5000-6000
   // log(5000-1) ≈ 8.5, so center there
