@@ -215,7 +215,7 @@ list(
     report_binomial_quasi,
     quiet = FALSE,
     path = "reports/quasi-binomial-validation/quasi-binomial-validation.qmd"
-  )
+  ),
 
   # ==========================================================================
   # Bayesian State Space Model (Stan via cmdstanr) - Efficient Hierarchical
