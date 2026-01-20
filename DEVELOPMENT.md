@@ -186,3 +186,59 @@ target += reduce_sum(partial_log_likelihood, 1, grainsize,
 - ✓ Rhat remains < 1.01 for all parameters
 - ✓ No divergences introduced
 
+---
+
+## Architectural Alternatives
+
+### Alternative: Nonlinear brms Model
+
+**Description**: Instead of a custom Stan ODE state space model, use brms' nonlinear formula interface to specify unemployment dynamics as a formula-based system.
+
+**Potential Approach**:
+```r
+# Conceptual brms specification
+brms::brm(
+  n_unemployed | trials(n_total) ~
+    # Nonlinear formula for unemployment rate
+    (u_eq + shock_2008 * exp(-decay_2008 * t_since_2008) +
+     shock_2020 * exp(-decay_2020 * t_since_2020) +
+     seasonal + spline_smooth)(education),
+  # Beta-binomial family for count data
+  family = beta_binomial(),
+  # Hierarchical structure via brms syntax
+  ...
+)
+```
+
+**Pros**:
+- Easier to understand and modify for non-Stan experts
+- Leverages brms' extensive infrastructure (priors, diagnostics, post-processing)
+- Familiar tidyverse-like syntax
+- Lower barrier to entry for new team members
+
+**Cons**:
+- Less efficient for complex dynamics (no ODE solver integration)
+- Harder to enforce structural constraints (e.g., ODE consistency)
+- Limited control over sampling algorithm compared to raw Stan
+- Would require approximating discrete shock dynamics in formula space
+- May struggle with identifiability of non-linear shock recovery curves
+- Loss of transparency in model internals
+
+**When to Consider**:
+- ✗ If performance is critical (we're already 51.5 min → targeting 20-25 min with threading)
+- ✓ If expanding team and onboarding is a bottleneck
+- ✓ If model is too complex for brms (paradoxically, simpler models may fit brms better)
+- ✗ If we need to publish methods paper (custom Stan shows more technical rigor)
+
+**Current Assessment**: The custom Stan approach is more appropriate because:
+1. ODE dynamics are fundamental to the model (not incidental)
+2. We're already optimizing performance (threading + functions)
+3. The model structure is well-documented and understood
+4. Beta-binomial likelihood is properly handled in Stan
+5. Shock dynamics with exponential decay are core scientific claims
+
+**Recommendation**: Keep the custom Stan approach and focus on threading optimization. Consider brms as a fallback if:
+- Stan model becomes unmaintainable
+- Team grows and needs higher-level abstraction
+- Need to rapidly test many model variants
+
