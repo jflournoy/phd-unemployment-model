@@ -242,3 +242,124 @@ brms::brm(
 - Team grows and needs higher-level abstraction
 - Need to rapidly test many model variants
 
+---
+
+### Hybrid Approach: Custom Stan Functions + brms Nonlinear Formulas
+
+**Description**: Implement the ODE dynamics as custom Stan functions (with threading), then expose them through brms' nonlinear formula interface.
+
+**Architecture**:
+```r
+# Step 1: Create custom Stan functions file with threading
+stanvars <- stanvar(
+  block = "functions",
+  scode = read_file("stan/unemployment-functions.stan")
+)
+
+# Step 2: Use brms nonlinear formula interface
+brms::brm(
+  n_unemployed | trials(n_total) ~
+    unemployment_rate(
+      u_eq[education],
+      adj_speed[education],
+      shock_2008_effect[education],
+      shock_2020_effect[education],
+      decay_2008[education],
+      decay_2020[education],
+      seasonal[education, month],
+      time_since_2008 = t - shock_2008_peak,
+      time_since_2020 = t - shock_2020_peak
+    ),
+  family = beta_binomial(),
+  prior = c(
+    prior(normal(-3.3, 0.3), class = "b", nlpar = "u_eq"),
+    # ... other priors
+  ),
+  stanvars = stanvars,
+  cores = 4,
+  threads = threading(2)  # Threads per chain
+)
+```
+
+**Stan Functions File** (`stan/unemployment-functions.stan`):
+```stan
+functions {
+  // Encapsulated ODE dynamics with reduce_sum parallelization
+  real unemployment_rate(
+    real u_eq,
+    real adj_speed,
+    real shock_2008_effect,
+    real shock_2020_effect,
+    real decay_2008,
+    real decay_2020,
+    real seasonal_effect,
+    real t_since_2008,
+    real t_since_2020
+  ) {
+    // ODE + shocks + seasonal
+    // ...implementation...
+  }
+
+  // Partial likelihood for reduce_sum (parallelized)
+  real partial_log_likelihood(
+    int start_idx, int end_idx,
+    data array[] int n_unemployed,
+    data array[] int n_total,
+    vector u,
+    real phi
+  ) {
+    // Subset of likelihood computation
+  }
+}
+```
+
+**Pros**:
+- ✓ Combines ODE efficiency with brms usability
+- ✓ Custom functions with threading optimization
+- ✓ brms handles prior specification, diagnostics, post-processing
+- ✓ Cleaner separation between model logic (functions) and specification (formula)
+- ✓ Easier to test functions independently
+- ✓ Scales well if team grows
+- ✓ brms' posterior processing tools work seamlessly
+
+**Cons**:
+- Intermediate complexity (more moving parts than standalone Stan)
+- Requires brms >= 2.15 for full stanvar support
+- Debugging can be trickier (brms-generated Stan code + custom functions)
+- Less direct control over exact Stan code generation
+- May need workarounds for advanced features (LOO-CV, custom generated quantities)
+
+**When This Makes Sense**:
+- ✓ ODE is complex and benefits from isolation (this project!)
+- ✓ brms infrastructure value is high (model comparison, priors, diagnostics)
+- ✓ Team will grow and brms syntax is helpful for onboarding
+- ✓ Want threading but also want formula-based specification
+- ✗ If debugging Stan is a primary activity
+
+**Implementation Path**:
+1. Extract ODE + reduce_sum logic into `stan/unemployment-functions.stan`
+2. Create wrapper R function that builds brms call with stanvars
+3. Test that outputs match current custom Stan model exactly
+4. Benchmark threading effectiveness
+5. Gradually migrate priors and inference to brms infrastructure
+
+**Current Assessment**: This hybrid approach is **actually quite attractive** because:
+1. **Best of both worlds**: ODE efficiency + brms usability
+2. **Cleaner code**: Functions block is isolated and testable
+3. **Threading integrated**: reduce_sum works within brms pipeline
+4. **Scalable**: Easier to onboard researchers unfamiliar with raw Stan
+5. **Future-proof**: Can gradually leverage more brms features
+
+**Recommendation**: Consider this hybrid approach as the primary path forward. Benefits over pure custom Stan:
+- Better maintainability through cleaner separation
+- Easier to test functions in isolation
+- brms infrastructure valuable for diagnostics and model comparison
+- Threading can be fully implemented in functions block
+
+Benefits over pure brms:
+- Keeps ODE solver efficiency and full control
+- Custom functions can be optimized independently
+- No compromise on model structure
+
+**Trade-off**: Slightly more setup complexity for significant gains in usability and maintainability.
+
