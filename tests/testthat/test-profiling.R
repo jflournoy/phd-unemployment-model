@@ -1,13 +1,22 @@
 test_that("profile_model_computation returns proper structure", {
   skip_if_not_installed("cmdstanr")
 
-  # Load test data
-  data(unemployment_test, package = "phd.unemployment")
-
-  stan_data <- prepare_stan_data(
-    unemployment_test,
-    education_order = c("PhD", "Professional", "Masters", "Bachelors",
-                       "Some College", "High School", "Less than HS")
+  # Create minimal test data
+  stan_data <- list(
+    T = 12,
+    N_edu = 3,
+    n_unemployed = array(c(10, 8, 12,  15, 10, 14,  12, 9, 11,
+                           8, 7, 10,    12, 8, 13,   9, 8, 10,
+                           11, 9, 12,   14, 10, 15,  13, 9, 11,
+                           9, 8, 11,    11, 9, 12,   10, 8, 10), c(12, 3)),
+    n_total = array(rep(1000, 36), c(12, 3)),
+    month = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+    year_frac = 2000 + c(0, 1/12, 2/12, 3/12, 4/12, 5/12, 6/12, 7/12, 8/12, 9/12, 10/12, 11/12),
+    shock_2008_onset = 2008.5,
+    shock_2008_peak = 2008.75,
+    shock_2020_onset = 2020.2,
+    shock_2020_peak = 2020.3,
+    K_spline = 4
   )
 
   # Create a minimal profile with very short iterations for speed
@@ -49,12 +58,22 @@ test_that("profile_model_computation returns proper structure", {
 test_that("profile_model_computation accuracy with known ratio", {
   skip_if_not_installed("cmdstanr")
 
-  data(unemployment_test, package = "phd.unemployment")
-
-  stan_data <- prepare_stan_data(
-    unemployment_test,
-    education_order = c("PhD", "Professional", "Masters", "Bachelors",
-                       "Some College", "High School", "Less than HS")
+  # Create minimal test data
+  stan_data <- list(
+    T = 12,
+    N_edu = 3,
+    n_unemployed = array(c(10, 8, 12,  15, 10, 14,  12, 9, 11,
+                           8, 7, 10,    12, 8, 13,   9, 8, 10,
+                           11, 9, 12,   14, 10, 15,  13, 9, 11,
+                           9, 8, 11,    11, 9, 12,   10, 8, 10), c(12, 3)),
+    n_total = array(rep(1000, 36), c(12, 3)),
+    month = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+    year_frac = 2000 + c(0, 1/12, 2/12, 3/12, 4/12, 5/12, 6/12, 7/12, 8/12, 9/12, 10/12, 11/12),
+    shock_2008_onset = 2008.5,
+    shock_2008_peak = 2008.75,
+    shock_2020_onset = 2020.2,
+    shock_2020_peak = 2020.3,
+    K_spline = 4
   )
 
   profile_result <- profile_model_computation(
@@ -82,12 +101,22 @@ test_that("profile_model_computation accuracy with known ratio", {
 test_that("get_profiling_summary returns readable output", {
   skip_if_not_installed("cmdstanr")
 
-  data(unemployment_test, package = "phd.unemployment")
-
-  stan_data <- prepare_stan_data(
-    unemployment_test,
-    education_order = c("PhD", "Professional", "Masters", "Bachelors",
-                       "Some College", "High School", "Less than HS")
+  # Create minimal test data
+  stan_data <- list(
+    T = 12,
+    N_edu = 3,
+    n_unemployed = array(c(10, 8, 12,  15, 10, 14,  12, 9, 11,
+                           8, 7, 10,    12, 8, 13,   9, 8, 10,
+                           11, 9, 12,   14, 10, 15,  13, 9, 11,
+                           9, 8, 11,    11, 9, 12,   10, 8, 10), c(12, 3)),
+    n_total = array(rep(1000, 36), c(12, 3)),
+    month = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+    year_frac = 2000 + c(0, 1/12, 2/12, 3/12, 4/12, 5/12, 6/12, 7/12, 8/12, 9/12, 10/12, 11/12),
+    shock_2008_onset = 2008.5,
+    shock_2008_peak = 2008.75,
+    shock_2020_onset = 2020.2,
+    shock_2020_peak = 2020.3,
+    K_spline = 4
   )
 
   profile_result <- profile_model_computation(
