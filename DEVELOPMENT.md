@@ -23,18 +23,27 @@
 
 ### 1. Stan Model Optimization with Threading and Functions ⚠️ (Priority: HIGH)
 - **Description**: Refactor the ODE state space Stan model to use Stan functions and multi-threaded likelihood evaluation for improved sampling efficiency
+- **Approach**: Pure Stan (not brms hybrid) to achieve full reduce_sum() performance benefits
 - **Scope**:
-  - Extract ODE solver logic into Stan functions (currently inline in model block)
+  - Extract ODE solver logic into Stan functions (currently inline in `transformed parameters` block)
   - Extract likelihood computation into reusable Stan functions
-  - Implement `reduce_sum()` for parallel likelihood evaluation across time points and education levels
+  - Implement `reduce_sum()` for parallel likelihood evaluation across time points and education levels in model block
   - Optimize hierarchical parameter transformations with functions
+  - Enable threading via cmdstan `threads` parameter
 - **Benefits**:
   - Faster model sampling through parallelized likelihood computation
-  - Improved code maintainability and readability
+  - Improved code maintainability through functions block isolation
+  - Better testability (functions can be tested independently)
   - Foundation for scaling to larger datasets and models
-  - Potential 2-4x speedup on multi-core systems
+  - **Target: 2-4x speedup** (51.5 minutes → 20-25 minutes on 8-core system)
 - **Estimated Effort**: High (8-12 hours, requires careful testing)
 - **Dependencies**: Completion of hierarchical variance analysis
+
+**Why Pure Stan (Not brms Hybrid)**:
+- brms's nonlinear formula interface can't override the model block
+- brms's `threads` parameter only provides algorithmic threading (~50% speedup)
+- Pure Stan with reduce_sum() + threads gives full performance gains (2-4x speedup)
+- Functions block still provides code quality benefits even in pure Stan approach
 
 **Proposed Architecture**:
 ```stan
@@ -325,9 +334,26 @@ functions {
 **Cons**:
 - Intermediate complexity (more moving parts than standalone Stan)
 - Requires brms >= 2.15 for full stanvar support
+- **CRITICAL**: brms's nonlinear formula interface doesn't give direct access to modify the model block
+  - brms generates likelihood computation, you can't easily override it with reduce_sum()
+  - Can't nest reduce_sum() calls (reduce_sum inside custom function + brms's reduce_sum = inefficient/problematic)
+  - brms's `threads` parameter enables algorithmic threading but not data-level reduce_sum() parallelization
 - Debugging can be trickier (brms-generated Stan code + custom functions)
 - Less direct control over exact Stan code generation
 - May need workarounds for advanced features (LOO-CV, custom generated quantities)
+
+**Threading Limitation Explained**:
+```
+With brms + custom functions:
+├─ threads parameter → Algorithmic threading (gradient computation parallelized by CmdStan)
+└─ ✗ reduce_sum() → Can't easily use because brms generates model block, you can't override
+
+With pure Stan:
+├─ threads parameter → Algorithmic threading
+└─ ✓ reduce_sum() → Full control over data-level parallelization + likelihood computation
+```
+
+This means brms + custom functions gets you ~50% of the threading benefit, while pure Stan with reduce_sum() gets you the full 2-4x speedup.
 
 **When This Makes Sense**:
 - ✓ ODE is complex and benefits from isolation (this project!)
@@ -350,16 +376,29 @@ functions {
 4. **Scalable**: Easier to onboard researchers unfamiliar with raw Stan
 5. **Future-proof**: Can gradually leverage more brms features
 
-**Recommendation**: Consider this hybrid approach as the primary path forward. Benefits over pure custom Stan:
-- Better maintainability through cleaner separation
-- Easier to test functions in isolation
-- brms infrastructure valuable for diagnostics and model comparison
-- Threading can be fully implemented in functions block
+**Recommendation**: **NOT suitable as primary path** due to threading limitations.
 
-Benefits over pure brms:
-- Keeps ODE solver efficiency and full control
-- Custom functions can be optimized independently
-- No compromise on model structure
+**Why This Doesn't Work for Our Performance Goals**:
+- Goal: 2-4x speedup via reduce_sum() parallelization
+- brms + threads: Gets ~50% speedup (algorithmic threading only, ~20-25% improvement)
+- brms + threads + custom functions: Gets ~50% speedup (can't override model block for reduce_sum())
+- Pure Stan + reduce_sum(): Gets full 2-4x speedup (50% reduction from 51.5 → 20-25 min)
 
-**Trade-off**: Slightly more setup complexity for significant gains in usability and maintainability.
+**When Hybrid Approach WOULD Make Sense**:
+- ✓ If performance wasn't critical (already fast enough with algorithmic threading)
+- ✓ If team needs brms infrastructure more than 50% speedup
+- ✓ If willing to accept performance trade-off for maintainability
+- ✗ NOT for our use case where explicit performance goal is 50% runtime reduction
+
+**Revised Recommendation**:
+Keep the **pure Stan approach with threading and functions** (original plan) because:
+1. Full control over reduce_sum() in model block
+2. Achieves target 2-4x speedup
+3. Functions block still provides code isolation and testability
+4. Model block directly accessible for optimization
+
+If team needs brms infrastructure later, can:
+- Extract fitted model and use brms for post-processing
+- Or reconsider hybrid approach after achieving performance targets
+- Or use brms for downstream analysis while keeping Stan for model fitting
 
