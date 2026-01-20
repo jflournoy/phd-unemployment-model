@@ -21,9 +21,22 @@
 
 ## Next Steps (Backlog)
 
-### 1. Stan Model Optimization with Threading and Functions ⚠️ (Priority: HIGH)
-- **Description**: Refactor the ODE state space Stan model to use Stan functions and multi-threaded likelihood evaluation for improved sampling efficiency
-- **Approach**: Pure Stan (not brms hybrid) to achieve full reduce_sum() performance benefits
+### 0. Model Profiling Infrastructure ✅ (COMPLETED - Use as Decision Tool!)
+- **Status**: DONE - Merged 4 TDD commits (ac021cd)
+- **What it does**: Measures ODE vs likelihood computation time to inform architecture choice
+- **How to use**: `profile <- profile_model_computation(stan_data); cat(get_profiling_summary(profile))`
+- **Deliverables**:
+  - `R/profiling.R` - Profiling functions with graceful fallbacks
+  - `tests/testthat/test-profiling.R` - 21 comprehensive tests (all passing)
+  - `docs/PROFILING_GUIDE.md` - User guide with examples and interpretation
+- **Test coverage**: 21 tests, 0 failures, 0 warnings ✓
+- **Key insight**: Profiling results tell you which optimization strategy to use!
+  - If ODE > 70% of runtime → Use pure Stan approach (next step)
+  - If likelihood > 50% of runtime → Consider hybrid brms approach
+
+### 1. Stan Model Optimization with Threading and Functions ⚠️ (Priority: HIGH - Data-Driven by Profiling)
+- **Description**: Refactor the ODE state space Stan model based on profiling results - use profiling output to decide between pure Stan vs brms hybrid
+- **Approach**: Data-driven by profiling infrastructure (completed above)
 - **Scope**:
   - Extract ODE solver logic into Stan functions (currently inline in `transformed parameters` block)
   - Extract likelihood computation into reusable Stan functions
