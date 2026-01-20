@@ -333,27 +333,34 @@ functions {
 
 **Cons**:
 - Intermediate complexity (more moving parts than standalone Stan)
-- Requires brms >= 2.15 for full stanvar support
-- **CRITICAL**: brms's nonlinear formula interface doesn't give direct access to modify the model block
-  - brms generates likelihood computation, you can't easily override it with reduce_sum()
-  - Can't nest reduce_sum() calls (reduce_sum inside custom function + brms's reduce_sum = inefficient/problematic)
-  - brms's `threads` parameter enables algorithmic threading but not data-level reduce_sum() parallelization
+- Requires brms >= 2.14.0 for reduce_sum threading support (cmdstanr backend)
+- **With nonlinear models, threading only parallelizes likelihood computation, NOT the predictor computation**
+  - If ODE computation (predictor) dominates runtime, threading benefit is limited
+  - Pure Stan can parallelize both predictor and likelihood
 - Debugging can be trickier (brms-generated Stan code + custom functions)
 - Less direct control over exact Stan code generation
 - May need workarounds for advanced features (LOO-CV, custom generated quantities)
 
-**Threading Limitation Explained**:
+**Threading Capability Clarified**:
 ```
-With brms + custom functions:
-├─ threads parameter → Algorithmic threading (gradient computation parallelized by CmdStan)
-└─ ✗ reduce_sum() → Can't easily use because brms generates model block, you can't override
+With brms + custom functions (via threads = threading()):
+├─ threads parameter → Generates reduce_sum() for likelihood (DATA-level parallelization! ✓)
+├─ Parallelizes: Likelihood evaluation (beta-binomial loop)
+└─ Does NOT parallelize: ODE computation for unemployment_rate() predictor
 
-With pure Stan:
-├─ threads parameter → Algorithmic threading
-└─ ✓ reduce_sum() → Full control over data-level parallelization + likelihood computation
+With pure Stan + reduce_sum():
+├─ threads parameter → Algorithmic threading + reduce_sum()
+├─ Parallelizes: Both likelihood AND user-designed predictor computation
+└─ Full flexibility to parallelize ODE computation if it's the bottleneck
 ```
 
-This means brms + custom functions gets you ~50% of the threading benefit, while pure Stan with reduce_sum() gets you the full 2-4x speedup.
+**Performance Implication**:
+- If ODE computation is ~80% of runtime and likelihood is ~20%:
+  - brms threading: ~50% speedup (parallelizes 20% of work)
+  - Pure Stan reduce_sum: up to ~4x speedup (can parallelize the ODE)
+- If ODE computation is ~50% and likelihood is ~50%:
+  - brms threading: ~2x speedup (parallelizes 50% of work)
+  - Pure Stan reduce_sum: similar or better (depends on implementation)
 
 **When This Makes Sense**:
 - ✓ ODE is complex and benefits from isolation (this project!)
@@ -376,29 +383,41 @@ This means brms + custom functions gets you ~50% of the threading benefit, while
 4. **Scalable**: Easier to onboard researchers unfamiliar with raw Stan
 5. **Future-proof**: Can gradually leverage more brms features
 
-**Recommendation**: **NOT suitable as primary path** due to threading limitations.
+**Recommendation**: Depends on where the computational bottleneck is located.
 
-**Why This Doesn't Work for Our Performance Goals**:
-- Goal: 2-4x speedup via reduce_sum() parallelization
-- brms + threads: Gets ~50% speedup (algorithmic threading only, ~20-25% improvement)
-- brms + threads + custom functions: Gets ~50% speedup (can't override model block for reduce_sum())
-- Pure Stan + reduce_sum(): Gets full 2-4x speedup (50% reduction from 51.5 → 20-25 min)
+**Key Question**: Is the bottleneck the **ODE computation** or the **likelihood evaluation**?
 
-**When Hybrid Approach WOULD Make Sense**:
-- ✓ If performance wasn't critical (already fast enough with algorithmic threading)
-- ✓ If team needs brms infrastructure more than 50% speedup
-- ✓ If willing to accept performance trade-off for maintainability
-- ✗ NOT for our use case where explicit performance goal is 50% runtime reduction
+- **If ODE computation dominates** (likely):
+  - brms + threads: Limited speedup (~30-50%)
+  - Pure Stan + reduce_sum(): Full speedup (can parallelize ODE)
+  - → **Use pure Stan approach**
 
-**Revised Recommendation**:
-Keep the **pure Stan approach with threading and functions** (original plan) because:
-1. Full control over reduce_sum() in model block
-2. Achieves target 2-4x speedup
-3. Functions block still provides code isolation and testability
-4. Model block directly accessible for optimization
+- **If likelihood evaluation dominates** (less likely given 2170 observations):
+  - brms + threads: ~2-4x speedup (reduces 51.5 min → 25-50 min)
+  - Pure Stan + reduce_sum(): Similar or better
+  - → **Hybrid approach becomes attractive** (easier code + good performance)
 
-If team needs brms infrastructure later, can:
-- Extract fitted model and use brms for post-processing
-- Or reconsider hybrid approach after achieving performance targets
-- Or use brms for downstream analysis while keeping Stan for model fitting
+**Decision Path**:
+1. **FIRST**: Profile current model to identify bottleneck
+   - Time ODE computation separately
+   - Time likelihood evaluation separately
+   - Determine % of total runtime for each
+
+2. **IF ODE > 70% of runtime**:
+   - Use **pure Stan + reduce_sum()** for full control
+   - Extract ODE into functions for modularity
+   - Target: 2-4x speedup
+
+3. **IF likelihood > 50% of runtime**:
+   - Use **hybrid approach** (brms + custom functions)
+   - brms's reduce_sum() parallelizes likelihood
+   - Easier to maintain and extend
+   - Target: 2x speedup on likelihood portion
+
+**Recommendation Before Profiling**:
+Given the model structure (many time points, education levels, spline basis functions), the **ODE computation likely dominates**. Therefore:
+- **Use pure Stan approach** as the primary path
+- After achieving speedup, can reconsider hybrid approach if team needs brms features
+
+**Proposal**: Profile the current model first to make final decision.
 
