@@ -29,11 +29,11 @@ test_that("profile_model_computation returns proper structure", {
   )
 
   # Check structure
-  expect_is(profile_result, "list")
+  expect_type(profile_result, "list")
   expect_named(profile_result, c("timing_breakdown", "raw_timings", "summary"))
 
   # Check timing_breakdown
-  expect_is(profile_result$timing_breakdown, "data.table")
+  expect_s3_class(profile_result$timing_breakdown, "data.table")
   expect_named(profile_result$timing_breakdown,
                c("component", "time_secs", "pct_total"))
   expect_true(all(c("ode_computation", "likelihood_evaluation", "other") %in%
@@ -44,13 +44,13 @@ test_that("profile_model_computation returns proper structure", {
   expect_true(abs(total_pct - 100) < 1)
 
   # Check raw_timings structure
-  expect_is(profile_result$raw_timings, "list")
+  expect_type(profile_result$raw_timings, "list")
   expect_true("total_time" %in% names(profile_result$raw_timings))
   expect_true("ode_time" %in% names(profile_result$raw_timings))
   expect_true("likelihood_time" %in% names(profile_result$raw_timings))
 
   # Check summary has key statistics
-  expect_is(profile_result$summary, "character")
+  expect_type(profile_result$summary, "character")
   expect_true(any(grepl("ODE", profile_result$summary)))
   expect_true(any(grepl("Likelihood", profile_result$summary)))
 })
@@ -130,7 +130,7 @@ test_that("get_profiling_summary returns readable output", {
   summary_text <- get_profiling_summary(profile_result)
 
   # Check that summary is readable
-  expect_is(summary_text, "character")
+  expect_type(summary_text, "character")
   expect_true(nchar(summary_text) > 100)
   expect_true(any(grepl("bottleneck", summary_text, ignore.case = TRUE)))
   expect_true(any(grepl("%", summary_text)))
