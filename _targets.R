@@ -16,7 +16,7 @@ library(tarchetypes)  # For tar_quarto() and other helpers
 # Set target options
 tar_option_set(
   packages = c("phdunemployment", "data.table", "mgcv", "ggplot2",
-               "cmdstanr", "qs"),  # Added for Stan model caching
+               "cmdstanr", "qs", "qs2"),  # Added for Stan model caching
   format = "rds",  # Default format for R objects
   error = "continue",  # Continue if one target fails
   memory = "transient",  # Free memory after each target
@@ -117,6 +117,16 @@ list(
   tar_target(
     model_education_binomial,
     {
+      # Verify critical packages are installed before starting computation
+      required_packages <- c("phdunemployment", "data.table", "mgcv", "ggplot2")
+      missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
+      if (length(missing_packages) > 0) {
+        stop("Missing required packages for education-binomial GAM: ",
+             paste(missing_packages, collapse = ", "), "\n",
+             "Install with: install.packages(c(",
+             paste0('"', missing_packages, '"', collapse = ", "), "))")
+      }
+
       cat("\n", strrep("=", 80), "\n")
       cat("STARTING MODEL FITTING: Adaptive Education-Binomial GAM\n")
       cat("Timestamp:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
@@ -166,6 +176,16 @@ list(
   tar_target(
     model_factor_smooth_multi,
     {
+      # Verify critical packages are installed before starting computation
+      required_packages <- c("phdunemployment", "data.table", "mgcv", "ggplot2")
+      missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
+      if (length(missing_packages) > 0) {
+        stop("Missing required packages for factor smooth model: ",
+             paste(missing_packages, collapse = ", "), "\n",
+             "Install with: install.packages(c(",
+             paste0('"', missing_packages, '"', collapse = ", "), "))")
+      }
+
       fit_factor_smooth_to_cps_data(
         data = multi_education,
         education_levels = c("phd", "masters", "bachelors"),
@@ -182,6 +202,16 @@ list(
   tar_target(
     nested_models_comparison,
     {
+      # Verify critical packages are installed before starting computation
+      required_packages <- c("phdunemployment", "data.table", "mgcv", "ggplot2")
+      missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
+      if (length(missing_packages) > 0) {
+        stop("Missing required packages for nested model comparison: ",
+             paste(missing_packages, collapse = ", "), "\n",
+             "Install with: install.packages(c(",
+             paste0('"', missing_packages, '"', collapse = ", "), "))")
+      }
+
       fit_nested_models_to_cps_data(
         data = multi_education,
         education_levels = c("phd", "masters", "bachelors"),
@@ -196,6 +226,16 @@ list(
   tar_target(
     comprehensive_analysis,
     {
+      # Verify critical packages are installed before starting computation
+      required_packages <- c("phdunemployment", "data.table", "mgcv", "ggplot2")
+      missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
+      if (length(missing_packages) > 0) {
+        stop("Missing required packages for comprehensive analysis: ",
+             paste(missing_packages, collapse = ", "), "\n",
+             "Install with: install.packages(c(",
+             paste0('"', missing_packages, '"', collapse = ", "), "))")
+      }
+
       analyze_cps_unemployment_by_education(
         data = multi_education,
         education_levels = c("phd", "masters", "bachelors"),
@@ -228,6 +268,22 @@ list(
   tar_target(
     stan_model_compiled,
     {
+      # Verify required packages for Stan model compilation
+      required_packages <- c("cmdstanr", "qs", "qs2")
+      missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
+      if (length(missing_packages) > 0) {
+        stop("Missing required packages for Stan compilation: ",
+             paste(missing_packages, collapse = ", "), "\n",
+             "Install with: install.packages(c(",
+             paste0('"', missing_packages, '"', collapse = ", "), "))")
+      }
+
+      # Check CmdStan installation
+      if (is.na(cmdstanr::cmdstan_version(error_on_NA = FALSE))) {
+        stop("CmdStan not installed. Required for Stan model compilation.\n",
+             "Install with: cmdstanr::install_cmdstan()")
+      }
+
       stan_file <- here::here("stan", "unemployment-ode-state-space-efficient.stan")
       cmdstanr::cmdstan_model(stan_file, compile = TRUE)
     },
@@ -241,6 +297,17 @@ list(
   tar_target(
     model_ode_state_space_efficient,
     {
+      # Verify critical packages are installed before starting long computation
+      required_packages <- c("phdunemployment", "data.table", "mgcv", "ggplot2",
+                             "cmdstanr", "qs", "qs2", "targets", "tarchetypes")
+      missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
+      if (length(missing_packages) > 0) {
+        stop("Missing required packages for efficient model: ",
+             paste(missing_packages, collapse = ", "), "\n",
+             "Install with: install.packages(c(",
+             paste0('"', missing_packages, '"', collapse = ", "), "))")
+      }
+
       cat("\n", strrep("=", 80), "\n")
       cat("STARTING STAN MODEL FITTING: Efficient ODE State Space (Hierarchical)\n")
       cat("Timestamp:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
@@ -289,6 +356,127 @@ list(
       path <- here::here("models", "ode-state-space-efficient-fit.qs")
       dir.create(dirname(path), showWarnings = FALSE, recursive = TRUE)
       qs::qsave(model_ode_state_space_efficient, path)
+      path
+    },
+    format = "file"
+  ),
+
+  # ==========================================================================
+  # Education-Level Parallel Model (OPTIONAL - uses reduce_sum)
+  # ==========================================================================
+  #
+  # PARALLELIZATION STRATEGY:
+  # - Parallelizes across EDUCATION LEVELS (N_edu = 7), not time points
+  # - Each thread computes the complete trajectory + likelihood for one education level
+  # - Time evolution is sequential within each education level (required by ODE)
+  # - Education levels are independent (no cross-education dependencies in ODE)
+  #
+  # EXPECTED SPEEDUP:
+  # - With 7 education levels and 4 threads: ~1.5-1.7x speedup
+  # - ODE+Likelihood (~90% of runtime) now parallelized across education levels
+  #
+  # THREADING CONFIGURATION:
+  # - Use threads_per_chain = 2-4 depending on N_edu
+  # - Keep parallel_chains * threads_per_chain <= available_cores
+  # - grainsize = 1 for fine-grained parallelization (N_edu is small)
+  #
+  # WHEN TO USE:
+  # - Use edu-parallel model when runtime matters (development, iteration)
+  # - Use serial model (efficient) for final production runs (simpler, same results)
+
+  ## Compile education-parallel Stan model with threading support
+  tar_target(
+    stan_model_compiled_edu_parallel,
+    {
+      # Verify required packages for threaded Stan model compilation
+      required_packages <- c("cmdstanr", "qs", "qs2")
+      missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
+      if (length(missing_packages) > 0) {
+        stop("Missing required packages for threaded Stan compilation: ",
+             paste(missing_packages, collapse = ", "), "\n",
+             "Install with: install.packages(c(",
+             paste0('"', missing_packages, '"', collapse = ", "), "))")
+      }
+
+      # Check CmdStan installation
+      if (is.na(cmdstanr::cmdstan_version(error_on_NA = FALSE))) {
+        stop("CmdStan not installed. Required for threaded Stan model compilation.\n",
+             "Install with: cmdstanr::install_cmdstan()")
+      }
+
+      stan_file <- here::here("stan", "unemployment-ode-state-space-edu-parallel.stan")
+      cmdstanr::cmdstan_model(
+        stan_file,
+        cpp_options = list(stan_threads = TRUE),
+        compile = TRUE
+      )
+    },
+    format = "qs"
+  ),
+
+  ## Fit Education-Parallel ODE State Space Model
+  ## Uses reduce_sum() to parallelize across education levels
+  ## Expected speedup: 1.5-1.7x with 4 threads
+  tar_target(
+    model_ode_state_space_edu_parallel,
+    {
+      # Verify critical packages are installed before starting long computation
+      required_packages <- c("phdunemployment", "data.table", "mgcv", "ggplot2",
+                             "cmdstanr", "qs", "qs2", "targets", "tarchetypes")
+      missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
+      if (length(missing_packages) > 0) {
+        stop("Missing required packages for edu-parallel model: ",
+             paste(missing_packages, collapse = ", "), "\n",
+             "Install with: install.packages(c(",
+             paste0('"', missing_packages, '"', collapse = ", "), "))")
+      }
+
+      cat("\n", strrep("=", 80), "\n")
+      cat("STARTING EDU-PARALLEL STAN MODEL FITTING\n")
+      cat("Timestamp:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
+      cat("Data rows:", nrow(education_counts), "\n")
+      cat("Chains: 4, Parallel chains: 2, Threads per chain: 7, Iterations: 3000 (1500 warmup + 1500 sampling)\n")
+      cat("Threading: reduce_sum() across education levels, 7 threads per chain\n")
+      cat(strrep("=", 80), "\n\n")
+
+      start_time <- Sys.time()
+
+      result <- fit_ode_state_space_edu_parallel(
+        education_counts,
+        chains = 4,
+        iter_sampling = 1500,
+        iter_warmup = 1500,
+        adapt_delta = 0.99,
+        max_treedepth = 15,
+        parallel_chains = 2,
+        threads_per_chain = 7,
+        grainsize = 1L,
+        refresh = 500
+      )
+
+      end_time <- Sys.time()
+      elapsed <- as.numeric(difftime(end_time, start_time, units = "mins"))
+
+      cat("\n", strrep("=", 80), "\n")
+      cat("EDU-PARALLEL STAN MODEL FITTING COMPLETED\n")
+      cat("Total runtime:", round(elapsed, 1), "minutes\n")
+      cat("Divergent transitions:", result$diagnostics$num_divergent, "\n")
+      cat("Max treedepth exceeded:", result$diagnostics$max_treedepth_exceeded, "\n")
+      cat("E-BFMI:", paste(round(result$diagnostics$ebfmi, 3), collapse = ", "), "\n")
+      cat(strrep("=", 80), "\n\n")
+
+      result
+    },
+    format = "qs"
+  ),
+
+  ## Save edu-parallel model results to file
+  tar_target(
+    model_ode_state_space_edu_parallel_file,
+    {
+      path <- here::here("models", "ode-state-space-edu-parallel-fit.qs")
+      dir.create(dirname(path), showWarnings = FALSE, recursive = TRUE)
+      qs::qsave(model_ode_state_space_edu_parallel, path)
       path
     },
     format = "file"
