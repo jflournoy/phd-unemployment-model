@@ -1,5 +1,23 @@
 # CLAUDE.md - Project AI Guidelines
 
+## State Tracking
+
+**Use two complementary systems for tracking work:**
+
+1. **TodoWrite tool** (primary) - Use for task management visible to the user
+   - Break work into discrete, actionable items
+   - Mark tasks in_progress/completed as you work
+   - Good for: task lists, progress tracking, user visibility
+
+2. **`.claude-current-status` file** (supplementary) - Higher-resolution notes
+   - Timestamps, context, decisions, file references
+   - Details that don't fit in todo items
+   - Session continuity across conversations
+   - Good for: debugging context, decision rationale, file locations
+
+**Workflow:** Start tasks with TodoWrite, always add detailed notes to `.claude-current-status`. When you add notes, re-assess and clean up old notes.
+
+
 ## Project Overview
 
 This project models PhD unemployment rates relative to sensible baselines (general unemployment, other graduate degrees) using:
