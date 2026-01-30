@@ -1,0 +1,208 @@
+# Claude Current Status - Session Notes
+
+## Session Start
+- **Timestamp**: 2026-01-26 18:16:32
+- **Context**: User indicated I was "in the middle of running the full test suite"
+- **Environment**: Verified Docker container via `npm run env:check` - all good
+- **Git Status**: Multiple untracked files including test scripts and documentation
+
+## Previous Work Assessment
+- No `.claude-current-status` file found from previous session
+- `run_all_tests.R` script exists for running full test suite
+- Rplots.pdf in tests/testthat/ suggests recent test execution (timestamp 17:58)
+- No R processes currently running `run_all_tests.R`
+- Test files show recent modifications (Jan 20-22)
+
+## Current Plan
+1. Run full test suite via `npm run test:r` (calls `devtools::test()`)
+2. Address any test failures per project's zero-tolerance policy
+3. Ensure all tests pass before proceeding
+
+## Notes
+- Project uses TDD methodology; tests must pass before commits
+- R test suite includes model validation, data processing, and report tests
+- CLAUDE.md emphasizes zero errors policy for tests
+- Will need to check for warnings as well as errors
+
+## Test Execution Attempt (2026-01-26 18:17)
+- Attempted `npm run test:r` but failed due to missing R packages
+- Required packages: "qs" (>= 0.25.0), "quarto" (>= 1.2.0), "targets" (>= 1.4.0), "tarchetypes" (>= 0.7.0)
+- Installation attempt failed: missing dependencies (cli, R6) and qs not available for R version
+- Installed base dependencies (cli, R6, rlang, glue, fs, withr, remotes) to user library
+- Successfully installed qs 0.27.3 (loaded successfully)
+- Installed additional dependencies: later, generics, backports, base64url, magrittr, ps, processx, callr, data.table, pillar, yaml, evaluate, stringi, rmarkdown, knitr, stringr, rstudioapi, pkgconfig, tibble, prettyunits, tidyselect
+- ✅ quarto installed successfully
+- Now installing targets and tarchetypes (final)
+
+## File References
+- `run_all_tests.R`: Main test runner script
+- `tests/testthat/`: Test files location
+- `package.json`: Contains `test:r` script
+
+## Package Installation Update (2026-01-26)
+- User reported needing to install `secretbase` separately before `targets` and `tarchetypes`
+- This suggests additional dependency resolution was required
+- Installation of targets/tarchetypes may now be complete
+
+## Package Installation Completed (2026-01-26 18:20)
+- Successfully installed `targets` (1.11.4) and `tarchetypes` (0.13.2) to user library
+- Fixed `attr` export error by installing fresh copies to user library (system library had older version)
+- Both packages now load successfully with `.libPaths` set to user library first
+- Ready to run test suite
+
+## Test Suite Execution (2026-01-26 19:35)
+- Ran full test suite via `Rscript run_all_tests.R`
+- All tests passed ✅ (zero errors)
+- Multiple Stan model warnings observed (divergences, E-BFMI low) but expected for test models
+- Package loading successful with user library path
+- Test suite completed in 1228.4 seconds (~20.5 minutes)
+
+## npm test:r Fix (2026-01-26)
+- Fixed `npm run test:r` and `npm run r:test` library path issues
+- Created wrapper script `scripts/r-test.R` that sets `.libPaths()` to user library first
+- Updated package.json to use wrapper script instead of inline Rscript command
+- Verified wrapper script loads packages correctly and runs tests without library errors
+- Both commands now work identically to `run_all_tests.R` but without extra output
+
+## Comprehensive R Commands Fix (2026-01-26)
+- Created general wrapper script `scripts/r-wrapper.R` that sets `.libPaths()` for any R code
+- Updated all Rscript commands in package.json to use the wrapper:
+  - `r:install`: `devtools::install()`
+  - `r:document`: `devtools::document()`
+  - `r:load`: `devtools::load_all()`
+  - `targets`: `targets::tar_make()`
+  - `targets:outdated`: `targets::tar_outdated()`
+  - `targets:visnetwork`: `targets::tar_visnetwork()`
+  - `test:r:coverage`: `covr::package_coverage()`
+- Fixed `r:check` by setting `R_LIBS_USER` environment variable for `R CMD check`
+- All commands tested and now load packages from user library without `attr` export errors
+- Package management now consistent across all development workflows
+
+## Next Steps Assessment (2026-01-26 23:52)
+
+### Current Project Status
+- **Recent achievements**: Education-level parallelization completed with 2.38x speedup, all tests passing, package installation fixed
+- **Untracked files**: Multiple new scripts, test files, documentation, and Stan models need to be committed
+- **Critical issues**: Model audit (2025-12-20) identifies shock effects penalized to near-zero and seasonal effects under-captured
+- **Development roadmap**: DEVELOPMENT.md outlines priorities, some completed (profiling infrastructure, hierarchical variance analysis)
+
+### Key Priorities Identified
+
+1. **Address Model Audit Issues** (Critical)
+   - Shock effects penalized to linear (EDF ≈ 1)
+   - Seasonal effects under-captured, especially for PhD
+   - Marginal effects extraction broken for bam() with discrete=TRUE
+   - Solutions proposed in model audit: tensor product smooths, separate time trends, or unpenalized shock smooths
+
+2. **Commit Untracked Work** (High)
+   - Multiple scripts, tests, documentation, and Stan models created
+   - Git status shows 20+ untracked files including critical work like THREADING_INVESTIGATION.md
+   - Should use atomic commits following project standards
+
+3. **Continue Development Roadmap** (Medium)
+   - Decay rate deep-dive analysis (why 2020 decay rate shows highest education-specific variation)
+   - Shock response comparison visualizations (2008 vs 2020 across education levels)
+   - Model validation & sensitivity analysis (prior predictive checks, LOO-CV)
+   - Publication-ready write-up
+
+### Recommended Immediate Actions
+
+1. **Run diagnostic scripts** to confirm current state of shock effects (`scripts/diagnose-shock-smooths.R`)
+2. **Implement model fixes** based on audit recommendations (likely tensor product approach)
+3. **Commit untracked work** using atomic commits with `/commit` skill
+4. **Update DEVELOPMENT.md** to reflect completed work (edu-parallel implementation)
+5. **Proceed with next roadmap items** starting with decay rate analysis
+
+### Technical Debt Notes
+- Large model files (2.5GB in `models/`) may need management
+- Multiple Stan model variants could be consolidated
+- Shock effect modeling needs restructuring per audit
+
+## Session Resume (2026-01-30)
+- **Timestamp**: 2026-01-30 (current date)
+- **Context**: User asked "where were we and what's next?"
+- **Environment**: Verified Docker container via `npm run env:check` - all good
+- **Git Status**:
+  - Modified: package.json (wrapper script changes)
+  - Untracked: 20+ files including scripts, tests, documentation, and Stan models
+  - Recent commits: Education parallelization, package validation, gitignore updates
+- **Test Status**: All tests passing as of 2026-01-26 (test suite completed successfully)
+- **Package Management**: Fixed via wrapper scripts (r-wrapper.R, r-test.R)
+
+## Current Assessment
+Based on previous session notes and current state:
+
+### Completed Since Last Session
+1. ✅ Test suite execution (all tests pass)
+2. ✅ Package installation fixes (user library wrapper scripts)
+3. ✅ npm test:r and r:test commands fixed
+4. ✅ Comprehensive R command wrapper system implemented
+
+### Outstanding Critical Issues
+1. **Model Audit Issues** (from 2025-12-20):
+   - Shock effects penalized to linear (EDF ≈ 1)
+   - Seasonal effects under-captured for PhD
+   - Marginal effects extraction broken for bam() with discrete=TRUE
+2. **Uncommitted Work**: 20+ untracked files representing significant development
+3. **Development Roadmap**: Next items pending (decay rate analysis, shock visualizations)
+
+### Current State Analysis
+- **Stan model optimizations**: Threaded and edu-parallel models created but not integrated into main pipeline
+- **Documentation**: THREADING_INVESTIGATION.md and model audit report need to be committed
+- **Scripts**: Diagnostic and plotting scripts exist but may need updates for audit fixes
+
+## Recommended Next Actions (Prioritized)
+1. **Run shock diagnostics**: Execute `scripts/diagnose-shock-smooths.R` to confirm current shock effect state
+2. **Address model audit issues**: Implement tensor product approach (Solution D from audit) for shock effects
+3. **Commit untracked work**: Use atomic commits with `/commit` skill to preserve completed work
+4. **Update DEVELOPMENT.md**: Mark edu-parallel implementation as completed
+5. **Proceed with decay rate analysis**: Next item in development roadmap
+
+## Decision Points
+- Should we fix model audit issues before committing untracked work?
+  - Recommendation: Yes - audit issues are critical to model validity
+  - Commit untracked work first? Could create separate branch for audit fixes
+- Which audit solution to implement?
+  - Recommendation: Solution D (tensor product for shock × time interaction)
+  - Cleanly separates baseline from shock effects, addresses variance competition
+
+## Updated Assessment (2026-01-30)
+**User Direction**: State-space model is good and solves GAM model issues. Can abandon binomial GAM audit fixes.
+
+### State-Space Model Current Status
+1. **Edu-parallel model completed** (2.38x speedup: 22 min → 9 min)
+   - `stan/unemployment-ode-state-space-edu-parallel.stan` (works)
+   - `stan/unemployment-ode-state-space-threaded.stan` (non-functional due to Stan type constraints)
+   - Integrated into targets pipeline (`stan_model_compiled_edu_parallel`, `model_ode_state_space_edu_parallel`)
+   - Comprehensive test suite (`tests/testthat/test-stan-edu-parallel.R`)
+   - Documentation: `docs/THREADING_INVESTIGATION.md`
+
+2. **Profiling infrastructure completed** (Item 0)
+3. **Hierarchical variance analysis completed** (mentioned in previous notes)
+4. **Stan model optimization** (Item 1) partially completed:
+   - ✅ Parallelization with reduce_sum (edu-level)
+   - ✅ Functions block with partial_edu_trajectory
+   - 🔄 ODE solver logic still inline (could be extracted)
+   - 🔄 Likelihood computation could be further modularized
+
+### DEVELOPMENT.md Roadmap Status
+1. **Stan Model Optimization with Threading and Functions** - Mostly done (edu-parallel works)
+2. **Decay Rate Deep-Dive Analysis** - Not started (HIGH priority)
+3. **Shock Response Comparison Visualizations** - Not started (MEDIUM priority)
+4. **Model Validation & Sensitivity Analysis** - Not started (MEDIUM priority)
+5. **Publication-Ready Write-Up** - Not started (MEDIUM priority)
+
+### Uncommitted Work (Critical)
+20+ untracked files including:
+- Stan models (edu-parallel, threaded, profiling, fast variants)
+- Test files (edu-parallel, reduce_sum, threaded model, profiling)
+- Documentation (`THREADING_INVESTIGATION.md`, `model-audit-2025-12-20.md`)
+- Scripts (diagnose-shock-smooths.R, plot-marginal-effects.R, run-model-profiling.R)
+- R functions (`R/report-validation.R`)
+
+## Recommended Next Steps
+1. **Commit untracked work** using atomic commits with `/commit` skill
+2. **Update DEVELOPMENT.md** to reflect completed edu-parallel implementation
+3. **Proceed with decay rate deep-dive analysis** (Item 2)
+4. **Consider additional state-space model improvements** (extract ODE solver logic, improve numerical stability)
+5. **Abandon binomial GAM audit fixes** as state-space model solves those issues
