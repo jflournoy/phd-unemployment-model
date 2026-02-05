@@ -17,6 +17,21 @@
 
 **Workflow:** Start tasks with TodoWrite, always add detailed notes to `.claude-current-status`. When you add notes, re-assess and clean up old notes.
 
+**New Status Management Commands:**
+- `/continue` - Efficiently resume work by extracting recent session context
+- `/condense [N]` - Archive old content, keep last N lines (default: 200)
+- `scripts/status-helper.sh` - Auto-cleanup helper for updates
+
+**Auto-Cleanup Pattern:** When updating `.claude-current-status`, check if file exceeds 300 lines and consider running `/condense`.
+
+**CRITICAL: Always Append to .claude-current-status**
+- **ALWAYS use `>>` (append) when adding new content** - New sessions, updates, and notes must be appended to the end of the file
+- **NEVER use `>` (overwrite) or prepend** - Prepending causes recent work to be archived by `/condense`, losing context
+- **Correct pattern**: `echo "## Session Start - $(date)" >> .claude-current-status`
+- **Incorrect pattern**: `cat new_content.md .claude-current-status > temp && mv temp .claude-current-status` (prepends)
+- **Verification**: Ensure newest timestamps are at the bottom of the file, oldest at the top
+- **If `/continue` misses recent work**: Check `.claude-archive/` for recently archived content
+
 
 ## Project Overview
 
