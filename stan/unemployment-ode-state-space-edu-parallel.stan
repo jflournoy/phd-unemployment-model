@@ -259,12 +259,12 @@ parameters {
 
   // === NON-CENTERED HIERARCHICAL PARAMETERS ===
   // Equilibrium unemployment rates
-  real mu_logit_u_eq;
+  real mu_logit_u_eq;  // Use tight prior instead of hard bounds
   real<lower=0> sigma_logit_u_eq;
   vector[N_edu] u_eq_raw;
 
   // Adjustment speeds (s+f)
-  real mu_log_adj_speed;
+  real mu_log_adj_speed;  // Use tight prior instead of hard bounds
   real<lower=0> sigma_log_adj_speed;
   vector[N_edu] adj_speed_raw;
 
@@ -317,12 +317,14 @@ transformed parameters {
     adj_speed[i] = exp(log_adj_speed[i]);
   }
 
-  // Derived flow rates
+  // Derived flow rates with numerical safeguards
   vector<lower=0>[N_edu] separation_rate;
   vector<lower=0>[N_edu] finding_rate;
   for (i in 1:N_edu) {
-    separation_rate[i] = u_eq[i] * adj_speed[i];
-    finding_rate[i] = (1 - u_eq[i]) * adj_speed[i];
+    // Ensure u_eq is in valid range to prevent numerical issues
+    real u_eq_safe = fmin(fmax(u_eq[i], 1e-6), 1 - 1e-6);
+    separation_rate[i] = u_eq_safe * adj_speed[i];
+    finding_rate[i] = (1 - u_eq_safe) * adj_speed[i];
   }
 
   // Shock parameters
@@ -373,14 +375,14 @@ transformed parameters {
 model {
   // === PRIORS ===
 
-  // Hierarchical equilibrium unemployment rates
-  mu_logit_u_eq ~ normal(-3.3, 0.3);
-  sigma_logit_u_eq ~ exponential(2);
+  // Hierarchical equilibrium unemployment rates - tighter priors to prevent extreme values
+  mu_logit_u_eq ~ normal(-3.3, 0.15);  // Tighter prior (was 0.3)
+  sigma_logit_u_eq ~ exponential(4);   // Tighter prior (was 2) - smaller variance across education levels
   u_eq_raw ~ std_normal();
 
-  // Hierarchical adjustment speeds
-  mu_log_adj_speed ~ normal(2.3, 0.5);
-  sigma_log_adj_speed ~ exponential(1);
+  // Hierarchical adjustment speeds - tighter priors to prevent extreme values
+  mu_log_adj_speed ~ normal(2.3, 0.25);  // Tighter prior (was 0.5)
+  sigma_log_adj_speed ~ exponential(2);  // Tighter prior (was 1) - smaller variance across education levels
   adj_speed_raw ~ std_normal();
 
   // Hierarchical shock parameters
