@@ -57,6 +57,16 @@ options(mc.cores = parallel::detectCores())
 # Null-coalescing operator (like %||% from purrr/rlang)
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
+# Helper function to load latest LOO-CV results
+load_latest_loo_results <- function(results_dir = here("models", "loo-cv-results")) {
+  files <- list.files(results_dir, pattern = "\\.rds$", full.names = TRUE)
+  if (length(files) == 0) stop("No LOO-CV result files found")
+  info <- file.info(files)
+  latest <- files[which.max(info$mtime)]
+  cat("Loading LOO-CV results from:", latest, "\n")
+  readRDS(latest)
+}
+
 # ggplot theme
 theme_set(theme_minimal(base_size = 14))
 ```
@@ -1383,13 +1393,66 @@ ggplot(ppc_sample, aes(x = year_frac)) +
 
 ## Model Fit Assessment (LOO-CV)
 
-```{r loo}
-# Compute LOO for model fit assessment
-loo_ss <- compute_loo(result)
-print(loo_ss)
+We compare two variants of the hierarchical ODE state space model using leave-one-out cross-validation (LOO-CV):
+
+1. **Education-parallel model**: Hierarchical structure with education-specific parameters but no systematic trends across education rank.
+2. **Education-trend model**: Extends the hierarchical model with linear trends across education rank for key parameters (equilibrium unemployment, adjustment speed, shock magnitudes, recovery rates, spline smoothness).
+
+```{r loo-comparison}
+# Load latest LOO-CV results
+loo_results <- load_latest_loo_results()
+
+# Display comparison
+cat("### LOO-CV Comparison Table\n")
+print(loo_results$summary)
+
+cat("\n### Model Comparison (loo::loo_compare)\n")
+print(loo_results$comparison)
+
+# Extract key metrics
+edu_parallel_elpd <- loo_results$summary$elpd_loo[1]
+edu_parallel_se <- loo_results$summary$se_elpd_loo[1]
+education_trend_elpd <- loo_results$summary$elpd_loo[2]
+education_trend_se <- loo_results$summary$se_elpd_loo[2]
+elpd_diff <- loo_results$comparison[2, "elpd_diff"]
+se_diff <- loo_results$comparison[2, "se_diff"]
 ```
 
-The LOO (leave-one-out cross-validation) estimate provides an assessment of out-of-sample predictive accuracy. Lower ELPD (expected log pointwise predictive density) indicates worse fit, so we want to maximize ELPD or minimize -2*ELPD.
+**Results**: The education-parallel model has expected log predictive density (ELPD) of `r round(edu_parallel_elpd, 1)` (SE = `r round(edu_parallel_se, 1)`), while the education-trend model has ELPD of `r round(education_trend_elpd, 1)` (SE = `r round(education_trend_se, 1)`). The difference in ELPD is `r round(elpd_diff, 1)` ± `r round(se_diff, 1)` (`r round(abs(elpd_diff)/se_diff, 2)` standard errors).
+
+**Interpretation**: The ELPD difference is not statistically significant (|difference| < 2×SE), indicating that adding education trends does not meaningfully improve predictive performance. The data do not support systematic linear trends across education rank for most labor market parameters, suggesting that education-specific heterogeneity is adequately captured by the hierarchical structure without imposing monotonic trends.
+
+## Education Trend Model Parameter Estimates
+
+To understand whether education systematically predicts labor market dynamics, we examine the trend parameters (β) from the education-trend model. Positive β indicates that higher education rank is associated with higher parameter values (on the transformed scale).
+
+```{r education-trend-parameters}
+# Extract beta parameters from education-trend model
+fit <- loo_results$education_trend_result$fit
+# Get all variable names
+all_vars <- fit$metadata()$stan_variables
+beta_vars <- grep("^beta_", all_vars, value = TRUE)
+if (length(beta_vars) == 0) {
+  stop("No beta parameters found in the model.")
+}
+beta_summary <- fit$summary(variables = beta_vars)
+
+# Create readable names
+beta_summary$parameter <- gsub("^beta_", "", beta_summary$variable)
+beta_summary$parameter <- gsub("_", " ", beta_summary$parameter)
+beta_summary$parameter <- paste0(toupper(substring(beta_summary$parameter, 1, 1)), substring(beta_summary$parameter, 2))
+
+cat("### Education Trend Parameters (β)\n")
+cat("Positive values indicate higher education rank predicts higher parameter values.\n\n")
+print(beta_summary[, c("parameter", "mean", "sd", "q5", "q95")])
+```
+
+**Key findings**:
+
+- Most β parameters are not significantly different from zero (90% credible intervals include zero), except for equilibrium unemployment (β = `r round(beta_summary$mean[beta_summary$parameter == "Logit u eq"], 3)`, 90% CI [`r round(beta_summary$q5[beta_summary$parameter == "Logit u eq"], 3)`, `r round(beta_summary$q95[beta_summary$parameter == "Logit u eq"], 3)`] excludes zero).
+- The negative trend for equilibrium unemployment indicates that higher education levels have systematically lower natural unemployment rates.
+- The largest absolute trend is for `r beta_summary$parameter[which.max(abs(beta_summary$mean))]` (β = `r round(beta_summary$mean[which.max(abs(beta_summary$mean))], 3)`).
+- The LOO-CV comparison indicates that adding education trends does not improve overall predictive accuracy (ELPD difference = `r round(elpd_diff, 2)` ± `r round(se_diff, 2)`, not statistically significant), suggesting that the hierarchical structure already captures education-specific heterogeneity adequately.
 
 ## Summary
 
