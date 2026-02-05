@@ -59,6 +59,13 @@ list(
     }
   ),
 
+  ## Education order for trend modeling (least to most educated)
+  tar_target(
+    education_order,
+    c("less_than_hs", "high_school", "some_college",
+      "bachelors", "masters", "professional", "phd")
+  ),
+
   tar_target(
     education_counts_file,
     {
@@ -480,5 +487,210 @@ list(
       path
     },
     format = "file"
+  ),
+
+  # ==========================================================================
+  # Education-Trend Model (OPTIONAL - extends edu-parallel with trends)
+  # ==========================================================================
+  #
+  # SCIENTIFIC QUESTIONS:
+  # 1. Does equilibrium unemployment decrease with education?
+  # 2. Do more educated workers recover faster from shocks (decay rates)?
+  # 3. Are more educated workers less sensitive to economic shocks?
+  # 4. Do adjustment speeds vary systematically with education?
+  #
+  # MODEL STRUCTURE:
+  # Current: parameter[i] = mu + sigma * raw[i] (independent across education)
+  # New:     parameter[i] = mu + beta * edu_rank_scaled[i] + sigma * raw[i]
+  # Where edu_rank_scaled[i] = (i - 1) / (N_edu - 1) [0 to 1 scaling]
+  #
+  # PARAMETERS WITH EDUCATION TRENDS:
+  # 1. logit_u_eq (equilibrium unemployment)
+  # 2. log_adj_speed (adjustment speed)
+  # 3. log_shock_2008_effect (2008 shock magnitude)
+  # 4. log_shock_2020_effect (2020 shock magnitude)
+  # 5. decay_2008 (2008 recovery rate)
+  # 6. decay_2020 (2020 recovery rate)
+  # 7. log_sigma_spline (spline smoothness)
+  #
+  # THREADING CONFIGURATION:
+  # Same as edu-parallel model: reduce_sum() across education levels
+  # Uses same threading settings for fair comparison
+
+  ## Compile education-trend Stan model with threading support
+  tar_target(
+    stan_model_compiled_education_trend,
+    {
+      # Verify required packages for threaded Stan model compilation
+      required_packages <- c("cmdstanr", "qs", "qs2")
+      missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
+      if (length(missing_packages) > 0) {
+        stop("Missing required packages for threaded Stan compilation: ",
+             paste(missing_packages, collapse = ", "), "\n",
+             "Install with: install.packages(c(",
+             paste0('"', missing_packages, '"', collapse = ", "), "))")
+      }
+
+      # Check CmdStan installation
+      if (is.na(cmdstanr::cmdstan_version(error_on_NA = FALSE))) {
+        stop("CmdStan not installed. Required for threaded Stan model compilation.\n",
+             "Install with: cmdstanr::install_cmdstan()")
+      }
+
+      stan_file <- here::here("stan", "unemployment-ode-state-space-education-trend.stan")
+      cmdstanr::cmdstan_model(
+        stan_file,
+        cpp_options = list(stan_threads = TRUE),
+        compile = TRUE
+      )
+    },
+    format = "qs"
+  ),
+
+  ## Fit Education-Trend ODE State Space Model
+  ## Extends edu-parallel model with linear trends in education rank
+  ## Uses same threading configuration for fair runtime comparison
+  tar_target(
+    model_ode_state_space_education_trend,
+    {
+      # Verify critical packages are installed before starting long computation
+      required_packages <- c("phdunemployment", "data.table", "mgcv", "ggplot2",
+                             "cmdstanr", "qs", "qs2", "targets", "tarchetypes")
+      missing_packages <- required_packages[!sapply(required_packages, requireNamespace, quietly = TRUE)]
+      if (length(missing_packages) > 0) {
+        stop("Missing required packages for education-trend model: ",
+             paste(missing_packages, collapse = ", "), "\n",
+             "Install with: install.packages(c(",
+             paste0('"', missing_packages, '"', collapse = ", "), "))")
+      }
+
+      cat("\n", strrep("=", 80), "\n")
+      cat("STARTING EDUCATION-TREND STAN MODEL FITTING\n")
+      cat("Timestamp:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
+      cat("Data rows:", nrow(education_counts), "\n")
+      cat("Chains: 4, Parallel chains: 2, Threads per chain: 7, Iterations: 3000 (1500 warmup + 1500 sampling)\n")
+      cat("Threading: reduce_sum() across education levels, 7 threads per chain\n")
+      cat("Education trends: u_eq, adj_speed, shock_2008/2020, decay_2008/2020, spline_smooth\n")
+      cat(strrep("=", 80), "\n\n")
+
+      start_time <- Sys.time()
+
+      result <- fit_ode_state_space_education_trend(
+        education_counts,
+        education_order = education_order,  # Use proper ordering from target
+        chains = 4,
+        iter_sampling = 1500,
+        iter_warmup = 1500,
+        adapt_delta = 0.99,
+        max_treedepth = 15,
+        parallel_chains = 2,
+        threads_per_chain = 7,
+        grainsize = 1L,
+        K_spline = 25L,
+        refresh = 500
+      )
+
+      end_time <- Sys.time()
+      elapsed <- as.numeric(difftime(end_time, start_time, units = "mins"))
+
+      cat("\n", strrep("=", 80), "\n")
+      cat("EDUCATION-TREND STAN MODEL FITTING COMPLETED\n")
+      cat("Total runtime:", round(elapsed, 1), "minutes\n")
+      cat("Divergent transitions:", result$diagnostics$num_divergent, "\n")
+      cat("Max treedepth exceeded:", result$diagnostics$max_treedepth_exceeded, "\n")
+      cat("E-BFMI:", paste(round(result$diagnostics$ebfmi, 3), collapse = ", "), "\n")
+      cat(strrep("=", 80), "\n\n")
+
+      result
+    },
+    format = "qs"
+  ),
+
+  ## Save education-trend model results to file
+  tar_target(
+    model_ode_state_space_education_trend_file,
+    {
+      path <- here::here("models", "ode-state-space-education-trend-fit.qs")
+      dir.create(dirname(path), showWarnings = FALSE, recursive = TRUE)
+      qs::qsave(model_ode_state_space_education_trend, path)
+      path
+    },
+    format = "file"
+  ),
+
+  # ==========================================================================
+  # Model Comparison: LOO-CV Analysis
+  # ==========================================================================
+  #
+  # Compare education-trend model vs edu-parallel model using LOO-CV
+  # Both models compute log_lik in generated quantities
+  # Use loo package for model comparison
+
+  ## Compute LOO-CV for edu-parallel model
+  tar_target(
+    loo_edu_parallel,
+    {
+      if (!requireNamespace("loo", quietly = TRUE)) {
+        stop("loo package required for LOO-CV analysis. Install with: install.packages('loo')")
+      }
+
+      message("Computing LOO-CV for edu-parallel model...")
+      compute_loo(model_ode_state_space_edu_parallel)
+    },
+    format = "qs"
+  ),
+
+  ## Compute LOO-CV for education-trend model
+  tar_target(
+    loo_education_trend,
+    {
+      if (!requireNamespace("loo", quietly = TRUE)) {
+        stop("loo package required for LOO-CV analysis. Install with: install.packages('loo')")
+      }
+
+      message("Computing LOO-CV for education-trend model...")
+      compute_loo(model_ode_state_space_education_trend)
+    },
+    format = "qs"
+  ),
+
+  ## Compare LOO-CV metrics between models
+  tar_target(
+    loo_comparison,
+    {
+      if (!requireNamespace("loo", quietly = TRUE)) {
+        stop("loo package required for LOO-CV analysis. Install with: install.packages('loo')")
+      }
+
+      message("Comparing LOO-CV metrics between edu-parallel and education-trend models...")
+
+      # Compare using loo_compare
+      comparison <- loo::loo_compare(loo_edu_parallel, loo_education_trend)
+
+      # Create summary data frame
+      summary_df <- data.frame(
+        model = c("edu_parallel", "education_trend"),
+        elpd_loo = c(loo_edu_parallel$estimates["elpd_loo", "Estimate"],
+                     loo_education_trend$estimates["elpd_loo", "Estimate"]),
+        se_elpd_loo = c(loo_edu_parallel$estimates["elpd_loo", "SE"],
+                        loo_education_trend$estimates["elpd_loo", "SE"]),
+        p_loo = c(loo_edu_parallel$estimates["p_loo", "Estimate"],
+                  loo_education_trend$estimates["p_loo", "Estimate"]),
+        se_p_loo = c(loo_edu_parallel$estimates["p_loo", "SE"],
+                     loo_education_trend$estimates["p_loo", "SE"]),
+        looic = c(loo_edu_parallel$estimates["looic", "Estimate"],
+                  loo_education_trend$estimates["looic", "Estimate"]),
+        se_looic = c(loo_edu_parallel$estimates["looic", "SE"],
+                     loo_education_trend$estimates["looic", "SE"])
+      )
+
+      list(
+        loo_compare = comparison,
+        summary = summary_df,
+        elpd_diff = comparison[2, "elpd_diff"],  # education_trend - edu_parallel
+        se_diff = comparison[2, "se_diff"]
+      )
+    },
+    format = "qs"
   )
 )

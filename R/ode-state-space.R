@@ -510,10 +510,14 @@ extract_ppc_data <- function(result) {
 #' @return loo object from the loo package
 #' @export
 compute_loo <- function(result) {
-  fit <- result$fit
-
-  # Extract log-likelihood
-  log_lik <- fit$draws(variables = "log_lik", format = "matrix")
+  # Use stored log-likelihood if available
+  if (!is.null(result$log_lik)) {
+    log_lik <- result$log_lik
+  } else {
+    fit <- result$fit
+    # Extract log-likelihood from fit object
+    log_lik <- fit$draws(variables = "log_lik", format = "matrix")
+  }
 
   # Compute LOO
   loo::loo(log_lik, cores = 4)
@@ -1236,6 +1240,135 @@ prepare_stan_data_edu_parallel <- function(data, grainsize = 1L) {
 }
 
 
+#' Prepare Stan data for education-trend model
+#'
+#' Transforms data for the education-trend Stan model that includes linear trends
+#' in education rank for key parameters. Based on prepare_stan_data_edu_parallel()
+#' but adds education order and spline knot configuration.
+#'
+#' @param data Data frame with columns: time_index, education, n_unemployed,
+#'   n_total, month, year_frac
+#' @param education_order Optional character vector specifying education level
+#'   order for trend modeling. If NULL, uses sorted unique education levels.
+#' @param grainsize Number of education levels per thread chunk (default 1)
+#' @param K_spline Number of spline basis functions (default 25)
+#'
+#' @return List suitable for Stan, with flattened observation arrays and
+#'   education order metadata
+#'
+#' @details
+#' The education-trend model expects:
+#' - edu_order: array of integers 1..N_edu representing education rank
+#' - n_knots: number of knots for B-splines (K_spline + 4)
+#' - All other data same as edu-parallel model
+#'
+#' Education rank is computed as integer position in education_order.
+#' If education_order is NULL, uses sorted unique education levels.
+#'
+#' @examples
+#' \dontrun{
+#' stan_data <- prepare_stan_data_education_trend(counts)
+#' # stan_data$edu_order is integer rank of each education level
+#' }
+#'
+#' @seealso [fit_ode_state_space_education_trend()]
+#' @export
+prepare_stan_data_education_trend <- function(data, education_order = NULL,
+                                              grainsize = 1L, K_spline = 25L) {
+  # Convert to data.table if needed
+  if (!data.table::is.data.table(data)) {
+    data <- data.table::as.data.table(data)
+  }
+
+  # Get unique education levels
+  if (!is.null(education_order)) {
+    education_levels <- education_order
+  } else {
+    education_levels <- sort(unique(data$education))
+  }
+  N_edu <- length(education_levels)
+
+  # Get unique time points
+  time_points <- sort(unique(data$time_index))
+  T_points <- length(time_points)
+  N_obs <- N_edu * T_points
+
+  # Create education level mapping
+  edu_map <- setNames(seq_along(education_levels), education_levels)
+
+  # Sort data by education level first, then time (for contiguous layout)
+  data <- data[order(education, time_index)]
+
+  # Add year_frac if missing (needed for Stan model)
+  if (!'year_frac' %in% names(data)) {
+    data[, year_frac := year + (month - 0.5)/12]
+  }
+
+  # Create flattened arrays
+  # Layout: for edu i and time t, index = (i-1)*T + t
+  n_unemployed_flat <- integer(N_obs)
+  n_total_flat <- integer(N_obs)
+
+  for (row_idx in seq_len(nrow(data))) {
+    edu <- data$education[row_idx]
+    t <- data$time_index[row_idx]
+    edu_idx <- edu_map[edu]
+
+    flat_idx <- (edu_idx - 1) * T_points + t
+    n_unemployed_flat[flat_idx] <- data$n_unemployed[row_idx]
+    n_total_flat[flat_idx] <- data$n_total[row_idx]
+  }
+
+  # Get time series data (same for all education levels)
+  time_data <- unique(data[, .(time_index, month, year_frac)])
+  time_data <- time_data[order(time_index)]
+
+  # Create edu_order array (integer rank 1..N_edu)
+  # This matches the order in education_levels
+  edu_order <- seq_len(N_edu)
+
+  # Build Stan data list
+  list(
+    # Dimensions
+    T = T_points,
+    N_edu = N_edu,
+    N_obs = N_obs,
+
+    # Flattened observations (1D - reduce_sum compatible!)
+    n_unemployed_flat = n_unemployed_flat,
+    n_total_flat = n_total_flat,
+
+    # Time series data
+    month = time_data$month,
+    year_frac = time_data$year_frac,
+
+    # Shock timing (from economic history)
+    shock_2008_onset = 2007.75,   # Late 2007
+    shock_2008_peak = 2009.75,    # Late 2009
+    shock_2020_onset = 2020.167,  # March 2020
+    shock_2020_peak = 2020.333,   # April 2020
+
+    # Spline configuration
+    K_spline = as.integer(K_spline),
+    n_knots = as.integer(K_spline + 4),  # For cubic B-splines
+
+    # Education order for trend modeling
+    edu_order = edu_order,
+
+    # Threading control
+    grainsize = as.integer(grainsize),
+
+    # Education indices for reduce_sum
+    edu_indices = seq_len(N_edu),
+
+    # Metadata (not passed to Stan, but useful for R)
+    education_levels = education_levels,
+    time_points = time_points,
+    education_order = education_levels  # Original order used
+  )
+}
+
+
 #' Fit ODE State Space Model with Education-Level Parallelization
 #'
 #' Fits the unemployment ODE state space model using within-chain multi-threading
@@ -1391,16 +1524,229 @@ fit_ode_state_space_edu_parallel <- function(data,
                     diagnostics$num_divergent))
   }
 
+  # Save output files to permanent directory
+  output_dir <- here::here("models", "stan-output",
+                           paste0("edu-parallel-", format(Sys.time(), "%Y%m%d-%H%M")))
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+  fit$save_output_files(dir = output_dir, basename = "edu-parallel")
+
+  # Extract log-likelihood for LOO-CV
+  log_lik_matrix <- fit$draws(variables = "log_lik", format = "matrix")
+
   list(
     fit = fit,
     stan_data = stan_data_full,  # Return full data with metadata
     diagnostics = diagnostics,
+    log_lik = log_lik_matrix,
     timing = list(
       elapsed_mins = elapsed,
       chains = chains,
       parallel_chains = parallel_chains,
       threads_per_chain = threads_per_chain,
       grainsize = grainsize
+    )
+  )
+}
+
+
+#' Fit ODE State Space Model with Education Trends
+#'
+#' Fits the unemployment ODE state space model with education-level trends
+#' using within-chain multi-threading. This model extends the edu-parallel
+#' model by adding linear trends in education rank for key parameters.
+#'
+#' @param data Data frame with unemployment counts by education level and time
+#' @param education_order Optional character vector specifying education level
+#'   order for trend modeling. If NULL, uses sorted unique education levels.
+#' @param chains Number of MCMC chains (default 4)
+#' @param iter_sampling Number of sampling iterations per chain (default 1000)
+#' @param iter_warmup Number of warmup iterations per chain (default 1000)
+#' @param adapt_delta Target acceptance rate (default 0.95)
+#' @param max_treedepth Maximum tree depth (default 12)
+#' @param parallel_chains Number of chains to run in parallel (default 4)
+#' @param threads_per_chain Number of threads per chain (default 2)
+#' @param grainsize Education levels per thread chunk (default 1)
+#' @param K_spline Number of spline basis functions (default 25)
+#' @param refresh How often to print progress (default 100)
+#'
+#' @return List with fit object, Stan data, diagnostics, and timing
+#'
+#' @details
+#' ## Education Trends
+#' The model includes linear trends in education rank for:
+#' - Equilibrium unemployment (logit_u_eq)
+#' - Adjustment speed (log_adj_speed)
+#' - 2008 shock effect (log_shock_2008)
+#' - 2020 shock effect (log_shock_2020)
+#' - 2008 decay rate (decay_2008)
+#' - 2020 decay rate (decay_2020)
+#' - Spline smoothness (log_sigma_spline)
+#'
+#' Education rank is scaled to [0, 1] where 0 = least educated,
+#' 1 = most educated (based on education_order).
+#'
+#' ## Threading Configuration
+#' Same as edu-parallel model: parallelizes across education levels
+#' using reduce_sum().
+#'
+#' @examples
+#' \dontrun{
+#' # Fit with education trends
+#' result <- fit_ode_state_space_education_trend(
+#'   counts,
+#'   education_order = c("hs", "some_college", "bachelors", "masters", "phd"),
+#'   chains = 4,
+#'   threads_per_chain = 2,
+#'   iter_sampling = 1500,
+#'   iter_warmup = 1500
+#' )
+#' }
+#'
+#' @seealso [fit_ode_state_space_edu_parallel()] for model without trends,
+#'   [prepare_stan_data_education_trend()] for data preparation
+#' @export
+fit_ode_state_space_education_trend <- function(data,
+                                                education_order = NULL,
+                                                chains = 4,
+                                                iter_sampling = 1000,
+                                                iter_warmup = 1000,
+                                                adapt_delta = 0.95,
+                                                max_treedepth = 12,
+                                                parallel_chains = 4,
+                                                threads_per_chain = 2,
+                                                grainsize = 1L,
+                                                K_spline = 25L,
+                                                refresh = 100) {
+
+  # Prepare flattened data for education-trend model
+  stan_data_full <- prepare_stan_data_education_trend(
+    data,
+    education_order = education_order,
+    grainsize = grainsize,
+    K_spline = K_spline
+  )
+
+  # Create Stan data (filter out R metadata fields)
+  # Note: education-trend model expects 2D arrays n_unemployed[T, N_edu] and n_total[T, N_edu]
+  # not flattened arrays like edu-parallel model
+
+  # Convert flattened arrays to 2D matrices
+  n_unemployed_mat <- matrix(stan_data_full$n_unemployed_flat,
+                             nrow = stan_data_full$T,
+                             ncol = stan_data_full$N_edu,
+                             byrow = FALSE)
+  n_total_mat <- matrix(stan_data_full$n_total_flat,
+                        nrow = stan_data_full$T,
+                        ncol = stan_data_full$N_edu,
+                        byrow = FALSE)
+
+  stan_data <- list(
+    T = stan_data_full$T,
+    N_edu = stan_data_full$N_edu,
+    n_unemployed = n_unemployed_mat,
+    n_total = n_total_mat,
+    month = stan_data_full$month,
+    year_frac = stan_data_full$year_frac,
+    shock_2008_onset = stan_data_full$shock_2008_onset,
+    shock_2008_peak = stan_data_full$shock_2008_peak,
+    shock_2020_onset = stan_data_full$shock_2020_onset,
+    shock_2020_peak = stan_data_full$shock_2020_peak,
+    K_spline = stan_data_full$K_spline,
+    n_knots = stan_data_full$n_knots,
+    grainsize = stan_data_full$grainsize,
+    edu_order = stan_data_full$edu_order
+  )
+
+  # Find Stan file
+  stan_file <- here::here("stan", "unemployment-ode-state-space-education-trend.stan")
+
+  if (!file.exists(stan_file)) {
+    stop("Education-trend Stan model file not found: ", stan_file)
+  }
+
+  # Compile model with threading support
+  message("Compiling education-trend Stan model...")
+  model <- cmdstanr::cmdstan_model(
+    stan_file,
+    cpp_options = list(stan_threads = TRUE)
+  )
+
+  # Report threading configuration
+  total_threads <- parallel_chains * threads_per_chain
+  available_cores <- parallel::detectCores()
+
+  message("Fitting education-trend ODE state space model...")
+  message(sprintf("  Time points: %d", stan_data$T))
+  message(sprintf("  Education levels: %d", stan_data$N_edu))
+  message(sprintf("  Education order: %s", paste(stan_data_full$education_order, collapse = ", ")))
+  message(sprintf("  Chains: %d, Iterations: %d warmup + %d sampling",
+                  chains, iter_warmup, iter_sampling))
+  message(sprintf("  Threading: %d chains × %d threads = %d total (cores: %d)",
+                  parallel_chains, threads_per_chain, total_threads, available_cores))
+  message(sprintf("  Grainsize: %d education level(s) per thread chunk", grainsize))
+  message(sprintf("  Spline basis: K = %d, knots = %d", K_spline, stan_data$n_knots))
+
+  if (total_threads > available_cores) {
+    warning(sprintf("Total threads (%d) exceeds available cores (%d). May cause slowdown.",
+                    total_threads, available_cores))
+  }
+
+  start_time <- Sys.time()
+
+  # Generate init function for education-trend model
+  init_fn <- make_init_at_prior_education_trend(stan_data)
+
+  fit <- model$sample(
+    data = stan_data,
+    init = init_fn,
+    chains = chains,
+    parallel_chains = parallel_chains,
+    threads_per_chain = threads_per_chain,
+    iter_sampling = iter_sampling,
+    iter_warmup = iter_warmup,
+    adapt_delta = adapt_delta,
+    max_treedepth = max_treedepth,
+    refresh = refresh
+  )
+
+  end_time <- Sys.time()
+  elapsed <- as.numeric(difftime(end_time, start_time, units = "mins"))
+
+  # Get diagnostics
+  diag_summary <- fit$diagnostic_summary()
+  diagnostics <- list(
+    num_divergent = sum(diag_summary$num_divergent),
+    max_treedepth_exceeded = sum(diag_summary$num_max_treedepth),
+    ebfmi = diag_summary$ebfmi
+  )
+
+  message(sprintf("Model fitting complete (%.1f minutes).", elapsed))
+  if (diagnostics$num_divergent > 0) {
+    warning(sprintf("%d divergent transitions detected!",
+                    diagnostics$num_divergent))
+  }
+
+  # Save output files to permanent directory
+  output_dir <- here::here("models", "stan-output",
+                           paste0("education-trend-", format(Sys.time(), "%Y%m%d-%H%M")))
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+  fit$save_output_files(dir = output_dir, basename = "education-trend")
+
+  # Extract log-likelihood for LOO-CV
+  log_lik_matrix <- fit$draws(variables = "log_lik", format = "matrix")
+
+  list(
+    fit = fit,
+    stan_data = stan_data_full,  # Return full data with metadata
+    diagnostics = diagnostics,
+    log_lik = log_lik_matrix,
+    timing = list(
+      elapsed_mins = elapsed,
+      chains = chains,
+      parallel_chains = parallel_chains,
+      threads_per_chain = threads_per_chain,
+      grainsize = grainsize,
+      K_spline = K_spline
     )
   )
 }
@@ -1468,6 +1814,298 @@ make_init_at_prior_edu_parallel <- function(stan_data) {
       log_phi_minus_1 = rnorm(1, 8.5, 0.1)
     )
   }
+}
+
+#' Generate initial values at prior centers for education-trend model
+#'
+#' Creates a function that generates initial values for the education-trend
+#' Stan model. Includes weakly informative priors centered at zero for
+#' the beta_* trend parameters.
+#'
+#' @param stan_data Stan data list from prepare_stan_data_education_trend()
+#' @return Function that generates initial values for all chains
+#' @keywords internal
+make_init_at_prior_education_trend <- function(stan_data) {
+  function() {
+    N_edu <- stan_data$N_edu
+    K_spline <- stan_data$K_spline
+
+    list(
+      # Spline coefficients
+      spline_coef_raw = matrix(rnorm(K_spline * N_edu, 0, 0.1),
+                               nrow = K_spline, ncol = N_edu),
+
+      # Hierarchical spline smoothness with education trend
+      mu_log_sigma_spline = rnorm(1, -0.22, 0.1),
+      beta_log_sigma_spline = rnorm(1, 0, 0.1),  # Education trend slope
+      sigma_log_sigma_spline = abs(rnorm(1, 0.5, 0.1)),
+      sigma_spline_raw = rnorm(N_edu, 0, 0.1),
+
+      # Hierarchical equilibrium unemployment with education trend
+      mu_logit_u_eq = rnorm(1, -3.3, 0.1),
+      beta_logit_u_eq = rnorm(1, 0, 0.1),  # Education trend slope
+      sigma_logit_u_eq = abs(rnorm(1, 0.5, 0.1)),
+      u_eq_raw = rnorm(N_edu, 0, 0.1),
+
+      # Hierarchical adjustment speeds with education trend
+      mu_log_adj_speed = rnorm(1, 2.3, 0.1),
+      beta_log_adj_speed = rnorm(1, 0, 0.1),  # Education trend slope
+      sigma_log_adj_speed = abs(rnorm(1, 0.5, 0.1)),
+      adj_speed_raw = rnorm(N_edu, 0, 0.1),
+
+      # Hierarchical shock parameters with education trends
+      mu_log_shock_2008 = rnorm(1, -2, 0.1),
+      beta_log_shock_2008 = rnorm(1, 0, 0.1),  # Education trend slope
+      sigma_log_shock_2008 = abs(rnorm(1, 0.5, 0.1)),
+      shock_2008_raw = rnorm(N_edu, 0, 0.1),
+
+      mu_log_shock_2020 = rnorm(1, -1.5, 0.1),
+      beta_log_shock_2020 = rnorm(1, 0, 0.1),  # Education trend slope
+      sigma_log_shock_2020 = abs(rnorm(1, 0.5, 0.1)),
+      shock_2020_raw = rnorm(N_edu, 0, 0.1),
+
+      # Hierarchical decay rates with education trends
+      mu_decay_2008 = rnorm(1, 0, 0.1),
+      beta_decay_2008 = rnorm(1, 0, 0.1),  # Education trend slope
+      sigma_decay_2008 = abs(rnorm(1, 0.5, 0.1)),
+      decay_2008_raw = rnorm(N_edu, 0, 0.1),
+
+      mu_decay_2020 = rnorm(1, 0, 0.1),
+      beta_decay_2020 = rnorm(1, 0, 0.1),  # Education trend slope
+      sigma_decay_2020 = abs(rnorm(1, 0.5, 0.1)),
+      decay_2020_raw = rnorm(N_edu, 0, 0.1),
+
+      # Hierarchical seasonal effects (no trend - hard to impose on 12×N_edu matrix)
+      mu_seasonal = rnorm(11, 0, 0.01),
+      sigma_seasonal = abs(rnorm(1, 0.1, 0.01)),
+      seasonal_u_raw = matrix(rnorm(11 * N_edu, 0, 0.1),
+                              nrow = 11, ncol = N_edu),
+
+      # Initial states (could add trend but initial condition less interesting)
+      logit_u_init = rnorm(N_edu, -3.0, 0.1),
+
+      # Dispersion
+      log_phi_minus_1 = rnorm(1, 8.5, 0.1)
+    )
+  }
+}
+
+#' Initialization function for ordered categorical education trend model
+#'
+#' Generates random initial values for the ordered categorical Stan model.
+#' Ensures ordered vectors are sorted to satisfy Stan's ordered constraint.
+#'
+#' @param stan_data Stan data list from prepare_stan_data_education_trend()
+#' @return A function that returns a list of initial values
+#' @keywords internal
+make_init_at_prior_ordered_categorical <- function(stan_data) {
+  function() {
+    N_edu <- stan_data$N_edu
+    K_spline <- stan_data$K_spline
+
+    # Generate sorted normal vectors for ordered parameters
+    # Use small variance to keep values near zero
+    theta_log_sigma_spline_raw <- sort(rnorm(N_edu, 0, 0.1))
+    theta_logit_u_eq_raw <- sort(rnorm(N_edu, 0, 0.1))
+    theta_log_adj_speed_raw <- sort(rnorm(N_edu, 0, 0.1))
+    theta_log_shock_2008_raw <- sort(rnorm(N_edu, 0, 0.1))
+    theta_log_shock_2020_raw <- sort(rnorm(N_edu, 0, 0.1))
+    theta_decay_2008_raw <- sort(rnorm(N_edu, 0, 0.1))
+    theta_decay_2020_raw <- sort(rnorm(N_edu, 0, 0.1))
+
+    list(
+      # Spline coefficients
+      spline_coef_raw = matrix(rnorm(K_spline * N_edu, 0, 0.1),
+                               nrow = K_spline, ncol = N_edu),
+
+      # Hierarchical spline smoothness with ordered categorical trend
+      mu_log_sigma_spline = rnorm(1, -0.22, 0.1),
+      sigma_log_sigma_spline = rnorm(1, 0, 0.1),  # Can be positive or negative
+      theta_log_sigma_spline_raw = theta_log_sigma_spline_raw,
+
+      # Hierarchical equilibrium unemployment with ordered categorical trend
+      mu_logit_u_eq = rnorm(1, -3.3, 0.1),
+      sigma_logit_u_eq = rnorm(1, 0, 0.1),  # Can be positive or negative
+      theta_logit_u_eq_raw = theta_logit_u_eq_raw,
+
+      # Hierarchical adjustment speeds with ordered categorical trend
+      mu_log_adj_speed = rnorm(1, 2.3, 0.1),
+      sigma_log_adj_speed = rnorm(1, 0, 0.1),  # Can be positive or negative
+      theta_log_adj_speed_raw = theta_log_adj_speed_raw,
+
+      # Hierarchical shock parameters with ordered categorical trends
+      mu_log_shock_2008 = rnorm(1, -2, 0.1),
+      sigma_log_shock_2008 = rnorm(1, 0, 0.1),  # Can be positive or negative
+      theta_log_shock_2008_raw = theta_log_shock_2008_raw,
+
+      mu_log_shock_2020 = rnorm(1, -1.5, 0.1),
+      sigma_log_shock_2020 = rnorm(1, 0, 0.1),  # Can be positive or negative
+      theta_log_shock_2020_raw = theta_log_shock_2020_raw,
+
+      # Hierarchical decay rates with ordered categorical trends
+      mu_decay_2008 = rnorm(1, 0, 0.1),
+      sigma_decay_2008 = rnorm(1, 0, 0.1),  # Can be positive or negative
+      theta_decay_2008_raw = theta_decay_2008_raw,
+
+      mu_decay_2020 = rnorm(1, 0, 0.1),
+      sigma_decay_2020 = rnorm(1, 0, 0.1),  # Can be positive or negative
+      theta_decay_2020_raw = theta_decay_2020_raw,
+
+      # Hierarchical seasonal effects (no trend - hard to impose on 12×N_edu matrix)
+      mu_seasonal = rnorm(11, 0, 0.01),
+      sigma_seasonal = abs(rnorm(1, 0.1, 0.01)),
+      seasonal_u_raw = matrix(rnorm(11 * N_edu, 0, 0.1),
+                              nrow = 11, ncol = N_edu),
+
+      # Initial states (could add trend but initial condition less interesting)
+      logit_u_init = rnorm(N_edu, -3.0, 0.1),
+
+      # Dispersion
+      log_phi_minus_1 = rnorm(1, 8.5, 0.1)
+    )
+  }
+}
+
+#' Fit ODE State Space Model with Ordered Categorical Education Trends
+#'
+#' Fits the full Bayesian ODE-based state space model for unemployment
+#' dynamics across education levels using Stan with ordered categorical trends.
+#'
+#' @param data Count data with n_unemployed, n_employed, time_index,
+#'   month, year, and education columns.
+#' @param education_order Optional character vector specifying education
+#'   level order. If NULL, uses factor levels or alphabetical.
+#' @param chains Number of MCMC chains (default: 4).
+#' @param iter_sampling Number of sampling iterations per chain (default: 1000).
+#' @param iter_warmup Number of warmup iterations per chain (default: 1000).
+#' @param adapt_delta Target acceptance probability (default: 0.95).
+#' @param max_treedepth Maximum tree depth (default: 12).
+#' @param parallel_chains Number of chains to run in parallel (default: 4).
+#' @param threads_per_chain Number of threads per chain (default: 2).
+#' @param grainsize Education levels per thread chunk (default: 1).
+#' @param K_spline Number of spline basis functions (default: 25).
+#' @param refresh How often to print progress (default: 100).
+#'
+#' @return A `CmdStanMCMC` object from cmdstanr.
+#' @export
+fit_ode_state_space_ordered_categorical <- function(data,
+                                                    education_order = NULL,
+                                                    chains = 4,
+                                                    iter_sampling = 1000,
+                                                    iter_warmup = 1000,
+                                                    adapt_delta = 0.95,
+                                                    max_treedepth = 12,
+                                                    parallel_chains = 4,
+                                                    threads_per_chain = 2,
+                                                    grainsize = 1L,
+                                                    K_spline = 25L,
+                                                    refresh = 100) {
+
+  # Prepare flattened data for ordered categorical model (same as education-trend)
+  stan_data_full <- prepare_stan_data_education_trend(
+    data,
+    education_order = education_order,
+    grainsize = grainsize,
+    K_spline = K_spline
+  )
+
+  # Convert flattened arrays to 2D matrices
+  n_unemployed_mat <- matrix(stan_data_full$n_unemployed_flat,
+                             nrow = stan_data_full$T,
+                             ncol = stan_data_full$N_edu,
+                             byrow = FALSE)
+  n_total_mat <- matrix(stan_data_full$n_total_flat,
+                        nrow = stan_data_full$T,
+                        ncol = stan_data_full$N_edu,
+                        byrow = FALSE)
+
+  stan_data <- list(
+    T = stan_data_full$T,
+    N_edu = stan_data_full$N_edu,
+    n_unemployed = n_unemployed_mat,
+    n_total = n_total_mat,
+    month = stan_data_full$month,
+    year_frac = stan_data_full$year_frac,
+    shock_2008_onset = stan_data_full$shock_2008_onset,
+    shock_2008_peak = stan_data_full$shock_2008_peak,
+    shock_2020_onset = stan_data_full$shock_2020_onset,
+    shock_2020_peak = stan_data_full$shock_2020_peak,
+    K_spline = stan_data_full$K_spline,
+    n_knots = stan_data_full$n_knots,
+    grainsize = stan_data_full$grainsize,
+    edu_order = stan_data_full$edu_order
+  )
+
+  # Find Stan file
+  stan_file <- here::here("stan", "unemployment-ode-state-space-ordered-categorical.stan")
+
+  if (!file.exists(stan_file)) {
+    stop("Ordered categorical Stan model file not found: ", stan_file)
+  }
+
+  # Compile model with threading support
+  message("Compiling ordered categorical Stan model...")
+  model <- cmdstanr::cmdstan_model(
+    stan_file,
+    cpp_options = list(stan_threads = TRUE)
+  )
+
+  # Report threading configuration
+  total_threads <- parallel_chains * threads_per_chain
+  available_cores <- parallel::detectCores()
+
+  message("Fitting ordered categorical ODE state space model...")
+  message(sprintf("  Time points: %d", stan_data$T))
+  message(sprintf("  Education levels: %d", stan_data$N_edu))
+  message(sprintf("  Education order: %s", paste(stan_data_full$education_order, collapse = ", ")))
+  message(sprintf("  Chains: %d, Iterations: %d warmup + %d sampling",
+                  chains, iter_warmup, iter_sampling))
+  message(sprintf("  Threading: %d chains × %d threads = %d total (cores: %d)",
+                  parallel_chains, threads_per_chain, total_threads, available_cores))
+  message(sprintf("  Grainsize: %d education level(s) per thread chunk", grainsize))
+  message(sprintf("  Spline basis: K = %d, knots = %d", K_spline, stan_data$n_knots))
+
+  if (total_threads > available_cores) {
+    warning(sprintf("Total threads (%d) exceeds available cores (%d). May cause slowdown.",
+                    total_threads, available_cores))
+  }
+
+  start_time <- Sys.time()
+
+  # Generate init function for ordered categorical model
+  init_fn <- make_init_at_prior_ordered_categorical(stan_data)
+
+  fit <- model$sample(
+    data = stan_data,
+    init = init_fn,
+    chains = chains,
+    parallel_chains = parallel_chains,
+    threads_per_chain = threads_per_chain,
+    iter_sampling = iter_sampling,
+    iter_warmup = iter_warmup,
+    adapt_delta = adapt_delta,
+    max_treedepth = max_treedepth,
+    refresh = refresh
+  )
+
+  end_time <- Sys.time()
+  elapsed <- as.numeric(difftime(end_time, start_time, units = "mins"))
+
+  # Get diagnostics
+  diag_summary <- fit$diagnostic_summary()
+  diagnostics <- list(
+    num_divergent = sum(diag_summary$num_divergent),
+    max_treedepth_exceeded = sum(diag_summary$num_max_treedepth),
+    ebfmi = diag_summary$ebfmi
+  )
+
+  message(sprintf("Model fitting complete (%.1f minutes).", elapsed))
+  if (diagnostics$num_divergent > 0) {
+    warning(sprintf("%d divergent transitions detected!",
+                    diagnostics$num_divergent))
+  }
+
+  return(fit)
 }
 
 #' Compare Serial and Parallel Stan Models
