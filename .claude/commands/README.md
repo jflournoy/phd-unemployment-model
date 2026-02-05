@@ -4,8 +4,10 @@
 
 Commands are organized by frequency of use and purpose:
 
-### All Commands (16 total)
+### All Commands (19 total)
 - `commit` - Atomic commits with quality checks (1-3 files)
+- `condense` - Condense .claude-current-status by archiving old content
+- `continue` - Efficiently resume work by extracting recent session
 - `docs` - Documentation maintenance
 - `docs-explain` - Educational documentation walkthrough
 - `evaluate-report` - Evaluate statistical report quality (simulation & exploratory)
