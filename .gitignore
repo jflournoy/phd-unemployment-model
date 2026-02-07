@@ -165,3 +165,6 @@ output.csv
 
 # Compiled Stan models
 stan/unemployment-ode-state-space-*/
+
+# Stan output files
+models/stan-output/
