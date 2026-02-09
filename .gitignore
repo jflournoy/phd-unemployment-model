@@ -81,6 +81,7 @@ logs/
 archive/
 old/
 backup/
+.claude-archive/
 
 # Kiro directory
 .kiro
@@ -163,8 +164,8 @@ reports/figures/*.png
 output.csv
 *.rmarkdown
 
-# Compiled Stan models
-stan/unemployment-ode-state-space-*/
+# Compiled Stan models (binaries and build artifacts)
+stan/unemployment-ode-state-space-*
 
 # Stan output files
 models/stan-output/
