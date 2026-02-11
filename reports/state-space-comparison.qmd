@@ -630,18 +630,23 @@ knitr::include_graphics(here("reports", "figures", "education-specific-parameter
 
 ### Key Insights
 
-1. **Most Variable**: `r variance_summary[1, parameter]` (σ = `r sprintf("%.2f", variance_summary[1, sigma_mean])`)
+To meaningfully compare variability across parameters with different units, we use the **coefficient of variation** (CV = σ/|μ|), which measures relative variability:
+
+1. **Most Variable** (by CV): `r variance_summary[order(-edu_cv)][1, parameter]` (CV = `r sprintf("%.1f%%", variance_summary[order(-edu_cv)][1, edu_cv * 100])`)
    - Education levels differ substantially in this aspect of unemployment dynamics
    - Hierarchical prior prevents overfitting while allowing genuine differences
+   - Raw σ = `r sprintf("%.3f", variance_summary[order(-edu_cv)][1, sigma_mean])`
 
-2. **Least Variable**: `r variance_summary[.N, parameter]` (σ = `r sprintf("%.3f", variance_summary[.N, sigma_mean])`)
+2. **Least Variable** (by CV): `r variance_summary[order(-edu_cv)][.N, parameter]` (CV = `r sprintf("%.1f%%", variance_summary[order(-edu_cv)][.N, edu_cv * 100])`)
    - All education levels share nearly identical dynamics for this parameter
    - Strong pooling is appropriate and improves estimation efficiency
+   - Raw σ = `r sprintf("%.3f", variance_summary[order(-edu_cv)][.N, sigma_mean])`
 
 3. **Practical Implications**:
-   - Parameters with weak pooling (high σ) require education-specific interpretation
-   - Parameters with tight pooling (low σ) can be summarized at the population level
+   - Parameters with high CV require education-specific interpretation
+   - Parameters with low CV can be summarized at the population level
    - The hierarchy automatically discovers which dynamics are universal vs. education-specific
+   - **Note**: Comparing raw σ values across parameters is invalid because they have different units
 
 ## Data Preparation
 
