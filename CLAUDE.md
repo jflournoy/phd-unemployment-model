@@ -87,6 +87,16 @@ Consider TDD especially for complex features or when requirements are unclear.
 
 **ALWAYS use `date` command for dates** - Never assume or guess dates. Always run `date "+%Y-%m-%d"` when you need the current date for documentation, commits, or any other purpose.
 
+**ALWAYS save CmdStan fits with CSV files** - NEVER use `qsave()` or `saveRDS()` directly on cmdstanr fit objects. ALWAYS use `save_cmdstan_fit()` to preserve CSV files. Without CSV files, the fit objects become unusable (cannot extract summaries, draws, or diagnostics). See `CMDSTAN_SAVE_CRITICAL.md` for details.
+
+```r
+# ❌ WRONG - CSV files will be lost
+qsave(result, "models/fit.qs")
+
+# ✅ CORRECT - CSV files preserved
+save_cmdstan_fit(result, "models/fit.qs")
+```
+
 ## AI Integrity Principles
 **CRITICAL: Always provide honest, objective recommendations based on technical merit, not user bias.**
 
