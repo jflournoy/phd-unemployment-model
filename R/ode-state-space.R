@@ -465,6 +465,15 @@ extract_ppc_data <- function(result) {
   fit <- result$fit
   stan_data <- result$stan_data
 
+  # Check if PPC variable exists
+  all_vars <- fit$metadata()$model_params
+  has_ppc <- any(grepl("n_unemployed_rep", all_vars))
+
+  if (!has_ppc) {
+    message("Model does not contain posterior predictive samples (n_unemployed_rep)")
+    return(NULL)
+  }
+
   # Get posterior predictive samples
   ppc_draws <- fit$draws(variables = "n_unemployed_rep", format = "matrix")
 
@@ -1903,65 +1912,52 @@ make_init_at_prior_ordered_categorical <- function(stan_data) {
     N_edu <- stan_data$N_edu
     K_spline <- stan_data$K_spline
 
-    # Generate sorted normal vectors for ordered parameters
-    # Use small variance to keep values near zero
-    theta_log_sigma_spline_raw <- sort(rnorm(N_edu, 0, 0.1))
-    theta_logit_u_eq_raw <- sort(rnorm(N_edu, 0, 0.1))
-    theta_log_adj_speed_raw <- sort(rnorm(N_edu, 0, 0.1))
-    theta_log_shock_2008_raw <- sort(rnorm(N_edu, 0, 0.1))
-    theta_log_shock_2020_raw <- sort(rnorm(N_edu, 0, 0.1))
-    theta_decay_2008_raw <- sort(rnorm(N_edu, 0, 0.1))
-    theta_decay_2020_raw <- sort(rnorm(N_edu, 0, 0.1))
+    # Generate evenly spaced ordered vectors centered at 0
+    # This satisfies the ordering constraint while being centered at prior mean
+    theta_init <- seq(-1, 1, length.out = N_edu)
 
     list(
-      # Spline coefficients
-      spline_coef_raw = matrix(rnorm(K_spline * N_edu, 0, 0.1),
-                               nrow = K_spline, ncol = N_edu),
+    # Hierarchical means - initialize at exact prior means (no noise!)
+    mu_log_sigma_spline = -0.22,
+    mu_logit_u_eq = -3.3,
+    mu_log_adj_speed = 2.3,
+    mu_log_shock_2008 = -2.0,
+    mu_log_shock_2020 = -1.5,
+    mu_decay_2008 = 0,
+    mu_decay_2020 = 0,
 
-      # Hierarchical spline smoothness with ordered categorical trend
-      mu_log_sigma_spline = rnorm(1, -0.22, 0.1),
-      sigma_log_sigma_spline = rnorm(1, 0, 0.1),  # Can be positive or negative
-      theta_log_sigma_spline_raw = theta_log_sigma_spline_raw,
+    # Scale parameters - initialize at exact prior center (0)
+    # These can be positive or negative (allows trends in either direction)
+    sigma_log_sigma_spline = 0,
+    sigma_logit_u_eq = 0,
+    sigma_log_adj_speed = 0,
+    sigma_log_shock_2008 = 0,
+    sigma_log_shock_2020 = 0,
+    sigma_decay_2008 = 0,
+    sigma_decay_2020 = 0,
 
-      # Hierarchical equilibrium unemployment with ordered categorical trend
-      mu_logit_u_eq = rnorm(1, -3.3, 0.1),
-      sigma_logit_u_eq = rnorm(1, 0, 0.1),  # Can be positive or negative
-      theta_logit_u_eq_raw = theta_logit_u_eq_raw,
+    # Ordered categorical trends - evenly spaced sequence
+    theta_log_sigma_spline_raw = theta_init,
+    theta_logit_u_eq_raw = theta_init,
+    theta_log_adj_speed_raw = theta_init,
+    theta_log_shock_2008_raw = theta_init,
+    theta_log_shock_2020_raw = theta_init,
+    theta_decay_2008_raw = theta_init,
+    theta_decay_2020_raw = theta_init,
 
-      # Hierarchical adjustment speeds with ordered categorical trend
-      mu_log_adj_speed = rnorm(1, 2.3, 0.1),
-      sigma_log_adj_speed = rnorm(1, 0, 0.1),  # Can be positive or negative
-      theta_log_adj_speed_raw = theta_log_adj_speed_raw,
+    # Seasonal effects
+    mu_seasonal = rep(0, 11),
+    sigma_seasonal = 0.01,
+    seasonal_u_raw = matrix(0, nrow = 11, ncol = N_edu),
 
-      # Hierarchical shock parameters with ordered categorical trends
-      mu_log_shock_2008 = rnorm(1, -2, 0.1),
-      sigma_log_shock_2008 = rnorm(1, 0, 0.1),  # Can be positive or negative
-      theta_log_shock_2008_raw = theta_log_shock_2008_raw,
+    # Initial states
+    logit_u_init = rep(-3.0, N_edu),
 
-      mu_log_shock_2020 = rnorm(1, -1.5, 0.1),
-      sigma_log_shock_2020 = rnorm(1, 0, 0.1),  # Can be positive or negative
-      theta_log_shock_2020_raw = theta_log_shock_2020_raw,
+    # Spline coefficients
+    spline_coef_raw = matrix(0, nrow = K_spline, ncol = N_edu),
 
-      # Hierarchical decay rates with ordered categorical trends
-      mu_decay_2008 = rnorm(1, 0, 0.1),
-      sigma_decay_2008 = rnorm(1, 0, 0.1),  # Can be positive or negative
-      theta_decay_2008_raw = theta_decay_2008_raw,
-
-      mu_decay_2020 = rnorm(1, 0, 0.1),
-      sigma_decay_2020 = rnorm(1, 0, 0.1),  # Can be positive or negative
-      theta_decay_2020_raw = theta_decay_2020_raw,
-
-      # Hierarchical seasonal effects (no trend - hard to impose on 12×N_edu matrix)
-      mu_seasonal = rnorm(11, 0, 0.01),
-      sigma_seasonal = abs(rnorm(1, 0.1, 0.01)),
-      seasonal_u_raw = matrix(rnorm(11 * N_edu, 0, 0.1),
-                              nrow = 11, ncol = N_edu),
-
-      # Initial states (could add trend but initial condition less interesting)
-      logit_u_init = rnorm(N_edu, -3.0, 0.1),
-
-      # Dispersion
-      log_phi_minus_1 = rnorm(1, 8.5, 0.1)
+    # Overdispersion
+    log_phi_minus_1 = 8.5
     )
   }
 }
@@ -1993,8 +1989,8 @@ fit_ode_state_space_ordered_categorical <- function(data,
                                                     chains = 4,
                                                     iter_sampling = 1000,
                                                     iter_warmup = 1000,
-                                                    adapt_delta = 0.95,
-                                                    max_treedepth = 12,
+                                                    adapt_delta = 0.98,
+                                                    max_treedepth = 14,
                                                     parallel_chains = 4,
                                                     threads_per_chain = 2,
                                                     grainsize = 1L,
@@ -2316,5 +2312,294 @@ compare_loo_metrics <- function(serial_result, parallel_result) {
     se_diff = c(parallel_loo$estimates["elpd_loo", "SE"] + serial_loo$estimates["elpd_loo", "SE"],
                 parallel_loo$estimates["p_loo", "SE"] + serial_loo$estimates["p_loo", "SE"],
                 parallel_loo$estimates["looic", "SE"] + serial_loo$estimates["looic", "SE"])
+  )
+}
+
+# =============================================================================
+# Monotonic I-Spline Implementation
+# =============================================================================
+
+#' Generate I-Spline Basis for Education Levels
+#'
+#' Creates an integrated B-spline (I-spline) basis matrix for education levels.
+#' I-splines are monotonically increasing and sum to 1, making them ideal for
+#' modeling monotonic trends across ordered categories.
+#'
+#' @param n_levels Integer, number of education levels
+#' @param n_basis Integer, number of I-spline basis functions (default: 4)
+#' @param degree Integer, degree of the spline (default: 3 for cubic)
+#'
+#' @return Matrix of dimension [n_levels, n_basis] containing I-spline basis
+#'   values. Each column is a monotonically increasing basis function.
+#'
+#' @export
+#' @examples
+#' # Generate I-spline basis for 7 education levels with 4 basis functions
+#' basis <- generate_ispline_basis(7, n_basis = 4)
+#' plot(basis[, 1], type = "l", ylim = c(0, 1))
+#' for (i in 2:4) lines(basis[, i], col = i)
+generate_ispline_basis <- function(n_levels, n_basis = 4, degree = 3) {
+  if (!requireNamespace("splines2", quietly = TRUE)) {
+    stop("Package 'splines2' is required for I-spline basis generation.")
+  }
+
+  # Create evenly spaced x values for education levels (0 to 1)
+  x <- seq(0, 1, length.out = n_levels)
+
+  # Generate I-spline basis using splines2
+  # I-splines are integrated B-splines, monotonically increasing
+  # Note: intercept=TRUE gives better coverage and ensures partition of unity
+  basis <- splines2::iSpline(
+    x,
+    df = n_basis,
+    degree = degree,
+    intercept = TRUE  # Include intercept for complete basis
+  )
+
+  # Convert to matrix
+  basis <- as.matrix(basis)
+
+  # I-splines already have good properties:
+  # - Each column is monotonically increasing
+  # - Non-negative
+  # - Sum to approximately 1 (partition of unity)
+  # No additional normalization needed
+
+  return(basis)
+}
+
+#' Prepare Stan Data with Monotonic I-Spline Basis
+#'
+#' Prepares data for Stan model with monotonic I-spline education trends.
+#' Extends prepare_stan_data_education_trend() with I-spline basis matrix.
+#'
+#' @param data Data frame with unemployment counts by education level
+#' @param education_order Character vector specifying education level order
+#'   (from least to most educated)
+#' @param n_ispline_basis Integer, number of I-spline basis functions (default: 4)
+#' @param shock_2008_onset Numeric, year of 2008 shock onset (default: 2008.0)
+#' @param shock_2008_peak Numeric, year of 2008 shock peak (default: 2009.0)
+#' @param shock_2020_onset Numeric, year of 2020 shock onset (default: 2020.16)
+#' @param shock_2020_peak Numeric, year of 2020 shock peak (default: 2020.33)
+#'
+#' @return List containing Stan data including I_spline_edu basis matrix
+#'
+#' @export
+prepare_stan_data_monotonic_spline <- function(data,
+                                                education_order = NULL,
+                                                n_ispline_basis = 4,
+                                                shock_2008_onset = 2008.0,
+                                                shock_2008_peak = 2009.0,
+                                                shock_2020_onset = 2020.16,
+                                                shock_2020_peak = 2020.33) {
+  # Start with standard education-trend data preparation
+  stan_data <- prepare_stan_data_education_trend(
+    data = data,
+    education_order = education_order
+  )
+
+  # Generate I-spline basis for education levels
+  N_edu <- stan_data$N_edu
+  T_points <- stan_data$T
+  I_spline_edu <- generate_ispline_basis(N_edu, n_basis = n_ispline_basis)
+
+  # Add I-spline basis to Stan data
+  stan_data$I_spline_edu <- I_spline_edu
+  stan_data$K_ispline <- n_ispline_basis
+
+  # Stan model also needs 2D arrays for generated quantities
+  # Create from flattened data (layout: (edu-1)*T + t)
+  n_unemployed <- matrix(0L, nrow = T_points, ncol = N_edu)
+  n_total <- matrix(0L, nrow = T_points, ncol = N_edu)
+
+  for (edu_idx in 1:N_edu) {
+    for (t in 1:T_points) {
+      flat_idx <- (edu_idx - 1) * T_points + t
+      n_unemployed[t, edu_idx] <- stan_data$n_unemployed_flat[flat_idx]
+      n_total[t, edu_idx] <- stan_data$n_total_flat[flat_idx]
+    }
+  }
+
+  stan_data$n_unemployed <- n_unemployed
+  stan_data$n_total <- n_total
+
+  return(stan_data)
+}
+
+#' Fit ODE State Space Model with Monotonic I-Splines
+#'
+#' Fits unemployment dynamics model with monotonic I-spline education trends.
+#' Uses I-spline basis with positive coefficients to ensure smooth monotonic
+#' relationships between education level and labor market parameters.
+#'
+#' @param data Data frame with unemployment counts
+#' @param education_order Character vector of education levels (least to most)
+#' @param n_ispline_basis Integer, number of I-spline basis functions (default: 4)
+#' @param chains Integer, number of MCMC chains (default: 4)
+#' @param iter_sampling Integer, number of sampling iterations per chain (default: 1000)
+#' @param iter_warmup Integer, number of warmup iterations per chain (default: 1000)
+#' @param adapt_delta Numeric, target acceptance rate (default: 0.95)
+#' @param max_treedepth Integer, maximum tree depth (default: 12)
+#' @param parallel_chains Integer, number of chains to run in parallel (default: 4)
+#' @param threads_per_chain Integer, threads per chain for within-chain parallelization (default: 1)
+#' @param grainsize Integer, education levels per thread chunk (default: 1)
+#' @param refresh Integer, how often to print progress (default: 100)
+#' @param init_fun Function to generate initial values (default: make_init_at_prior_monotonic_spline)
+#'
+#' @return List with components:
+#'   \item{fit}{CmdStanMCMC object with posterior samples}
+#'   \item{data}{Stan data used for fitting}
+#'   \item{diagnostics}{Diagnostic summaries}
+#'   \item{log_lik}{Log-likelihood matrix for LOO-CV}
+#'
+#' @export
+fit_ode_state_space_monotonic_spline <- function(data,
+                                                  education_order = NULL,
+                                                  n_ispline_basis = 4,
+                                                  chains = 4,
+                                                  iter_sampling = 1000,
+                                                  iter_warmup = 1000,
+                                                  adapt_delta = 0.95,
+                                                  max_treedepth = 12,
+                                                  parallel_chains = 4,
+                                                  threads_per_chain = 1,
+                                                  grainsize = 1L,
+                                                  refresh = 100,
+                                                  init_fun = NULL) {
+  # Prepare data
+  stan_data <- prepare_stan_data_monotonic_spline(
+    data = data,
+    education_order = education_order,
+    n_ispline_basis = n_ispline_basis
+  )
+
+  # Compile model
+  stan_file <- system.file("stan/unemployment-ode-state-space-monotonic-spline.stan",
+                          package = "phdunemployment")
+
+  # Fallback to local path if not found in package
+  if (!file.exists(stan_file) || nchar(stan_file) == 0) {
+    stan_file <- "stan/unemployment-ode-state-space-monotonic-spline.stan"
+  }
+
+  if (!file.exists(stan_file)) {
+    stop("Stan model file not found: ", stan_file)
+  }
+
+  model <- cmdstanr::cmdstan_model(
+    stan_file,
+    cpp_options = list(stan_threads = TRUE)
+  )
+
+  # Generate initial values
+  if (is.null(init_fun)) {
+    init_fun <- function() make_init_at_prior_monotonic_spline(stan_data)
+  }
+
+  # Filter out non-Stan data (character metadata)
+  stan_data_for_fit <- stan_data[!sapply(stan_data, is.character)]
+
+  # Fit model
+  fit <- model$sample(
+    data = stan_data_for_fit,
+    chains = chains,
+    parallel_chains = parallel_chains,
+    threads_per_chain = threads_per_chain,
+    iter_warmup = iter_warmup,
+    iter_sampling = iter_sampling,
+    adapt_delta = adapt_delta,
+    max_treedepth = max_treedepth,
+    refresh = refresh,
+    init = init_fun
+  )
+
+  # Extract diagnostics
+  diagnostics <- list(
+    num_divergent = sum(fit$sampler_diagnostics()[, , "divergent__"]),
+    max_treedepth_exceeded = sum(fit$sampler_diagnostics()[, , "treedepth__"] >= max_treedepth),
+    ebfmi = fit$diagnostic_summary()$ebfmi
+  )
+
+  # Extract log_lik for LOO-CV
+  log_lik <- NULL
+  tryCatch({
+    log_lik <- fit$draws("log_lik", format = "matrix")
+  }, error = function(e) {
+    warning("Could not extract log_lik: ", e$message)
+  })
+
+  return(list(
+    fit = fit,
+    stan_data = stan_data,
+    diagnostics = diagnostics,
+    log_lik = log_lik
+  ))
+}
+
+#' Generate Initial Values for Monotonic I-Spline Model
+#'
+#' Creates initial values at prior means for monotonic I-spline model.
+#'
+#' @param stan_data List containing Stan data
+#'
+#' @return List of initial parameter values
+#'
+#' @export
+make_init_at_prior_monotonic_spline <- function(stan_data) {
+  N_edu <- stan_data$N_edu
+  K_spline <- stan_data$K_spline
+  K_ispline <- stan_data$K_ispline
+
+  list(
+    # Hierarchical means (EXACT prior means)
+    mu_logit_u_eq = -3.3,        # normal(-3.3, 0.15)
+    mu_log_adj_speed = 2.3,      # normal(2.3, 0.25)
+    mu_log_shock_2008 = -2.0,    # normal(-2.0, 0.5)
+    mu_log_shock_2020 = -1.5,    # normal(-1.5, 0.5)
+    mu_decay_2008 = 0,           # normal(0, 0.5)
+    mu_decay_2020 = 0,           # normal(0, 0.5)
+    mu_log_sigma_spline = -0.22, # normal(-0.22, 0.4)
+
+    # Hierarchical standard deviations (EXACT prior means: mean of exponential(λ) = 1/λ)
+    sigma_logit_u_eq = 1/4,            # exponential(4) → mean = 0.25
+    sigma_log_adj_speed = 1/2,         # exponential(2) → mean = 0.5
+    sigma_log_shock_2008 = 1,          # exponential(1) → mean = 1.0
+    sigma_log_shock_2020 = 1,          # exponential(1) → mean = 1.0
+    sigma_decay_2008 = 1,              # exponential(1) → mean = 1.0
+    sigma_decay_2020 = 1,              # exponential(1) → mean = 1.0
+    sigma_log_sigma_spline = 1/2,      # exponential(2) → mean = 0.5
+
+    # I-spline coefficients (conservative: spread prior mean across K basis functions)
+    # Sum to ~1 instead of K*1, representing modest monotonic trend
+    beta_ispline_logit_u_eq = rep(1 / K_ispline, K_ispline),
+    beta_ispline_log_adj_speed = rep(1 / K_ispline, K_ispline),
+    beta_ispline_log_shock_2008 = rep(1 / K_ispline, K_ispline),
+    beta_ispline_log_shock_2020 = rep(1 / K_ispline, K_ispline),
+    beta_ispline_decay_2008 = rep(1 / K_ispline, K_ispline),
+    beta_ispline_decay_2020 = rep(1 / K_ispline, K_ispline),
+    beta_ispline_log_sigma_spline = rep(1 / K_ispline, K_ispline),
+
+    # Non-centered parameters (std_normal → mean = 0)
+    raw_logit_u_eq = rep(0, N_edu),
+    raw_log_adj_speed = rep(0, N_edu),
+    raw_log_shock_2008 = rep(0, N_edu),
+    raw_log_shock_2020 = rep(0, N_edu),
+    raw_decay_2008 = rep(0, N_edu),
+    raw_decay_2020 = rep(0, N_edu),
+    raw_log_sigma_spline = rep(0, N_edu),
+
+    # Seasonal effects
+    mu_seasonal = rep(0, 11),        # normal(0, 0.1) → mean = 0
+    sigma_seasonal = 1/10,           # exponential(10) → mean = 0.1
+    seasonal_u_raw = matrix(0, nrow = 11, ncol = N_edu),  # std_normal → mean = 0
+
+    # Initial states
+    logit_u_init = rep(-3.0, N_edu),  # Reasonable starting unemployment rate
+
+    # Spline coefficients (std_normal → mean = 0)
+    spline_coef_raw = matrix(0, nrow = K_spline, ncol = N_edu),
+
+    # Overdispersion
+    log_phi_minus_1 = 8.5  # Based on typical beta-binomial overdispersion
   )
 }
