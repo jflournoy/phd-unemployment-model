@@ -73,7 +73,45 @@ load_latest_loo_results <- function(results_dir = here("models", "loo-cv-results
 
 # ggplot theme
 theme_set(theme_minimal(base_size = 14))
+
+# Load data and model for report
+# This is done early so we can show recent trends as the header visualization
+counts_data <- readRDS(here("data", "education-spectrum-counts.rds"))
+stan_data <- prepare_stan_data(counts_data)
+
+# Load fitted model
+targets_cache <- here("models", "ode-state-space-monotonic-spline-fit.qs")
+fallback_cache <- here("models", "ode_hierarchical_v2_fit.rds")
+fallback_meta <- here("models", "ode_hierarchical_v2_meta.rds")
+
+K_SPLINE <- 25  # Spline basis functions
+
+if (file.exists(targets_cache)) {
+  result <- safe_qread(targets_cache, error_action = "stop")
+} else if (file.exists(fallback_cache) && file.exists(fallback_meta)) {
+  fit <- readRDS(fallback_cache)
+  meta <- readRDS(fallback_meta)
+  result <- list(
+    fit = fit,
+    stan_data = meta$stan_data,
+    diagnostics = meta$diagnostics,
+    timing = meta$timing
+  )
+} else {
+  stop(
+    "No cached model results found. Required model file missing: ", targets_cache, "\n",
+    "Please run the serial model using the targets pipeline:\n",
+    "  targets::tar_make(model_ode_state_space_efficient)\n",
+    call. = FALSE
+  )
+}
 ```
+
+::: {.callout-warning}
+## WORK IN PROGRESS
+
+This report is currently under development. Not all statements, interpretations, and conclusions have been reviewed or validated by a human researcher. Please treat all content as preliminary analysis subject to revision.
+:::
 
 ## Overview
 
@@ -102,6 +140,65 @@ This report presents a hierarchical Bayesian state space model for unemployment 
 - Non-centered parameterization for sampling efficiency
 - Data-informed priors from exploratory model fits
 - Prior-centered initialization to avoid multimodality
+
+## Recent Trends: December 2023 - December 2025
+
+A close-up view of the most recent unemployment dynamics across education levels.
+
+```{r recent-trends-data}
+# Extract latent unemployment rates (needed for recent trends plot)
+latent_all <- extract_latent_rates(result, summary = TRUE)
+
+# Filter to December 2023 - December 2025
+# December 2023 = 2023 + 11/12 ≈ 2023.917
+# December 2025 = 2025 + 11/12 ≈ 2025.917
+recent_latent <- data.frame(
+  year_frac = latent_all$year_frac,
+  education = latent_all$education,
+  mean = latent_all$mean,
+  lower = latent_all$q5,
+  upper = latent_all$q95
+)
+
+# Add observed rates
+for (i in seq_along(stan_data$education_levels)) {
+  edu <- stan_data$education_levels[i]
+  idx <- recent_latent$education == edu
+  obs_rate <- stan_data$n_unemployed[, i] / stan_data$n_total[, i]
+  recent_latent$observed[idx] <- obs_rate
+}
+
+# Filter to recent period
+recent_latent <- recent_latent[recent_latent$year_frac >= 2023.917 &
+                                recent_latent$year_frac <= 2025.917, ]
+```
+
+```{r plot-recent-trends}
+#| fig-cap: "Recent unemployment trends by education level (Dec 2023 - Dec 2025)"
+#| fig-height: 8
+#| fig-width: 10
+
+ggplot(recent_latent, aes(x = year_frac)) +
+  geom_ribbon(aes(ymin = lower * 100, ymax = upper * 100, fill = education),
+              alpha = 0.3) +
+  geom_line(aes(y = mean * 100, color = education), linewidth = 1) +
+  geom_point(aes(y = observed * 100), alpha = 0.5, size = 1.5) +
+  facet_wrap(~education, scales = "free_y", ncol = 2) +
+  scale_x_continuous(breaks = seq(2024, 2025, 0.5),
+                    labels = function(x) {
+                      year <- floor(x)
+                      month <- round((x - year) * 12) + 1
+                      sprintf("%d-%02d", year, month)
+                    }) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+  labs(x = "Date",
+       y = "Unemployment Rate",
+       title = "Recent Unemployment Trends by Education Level",
+       subtitle = "Points: observed data; Lines: model smooth predictions; Bands: 90% credible intervals") +
+  theme(legend.position = "none",
+        strip.text = element_text(size = 11, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+```
 
 ## Model Structure: A Comprehensive Mathematical Walkthrough
 
@@ -651,12 +748,8 @@ To meaningfully compare variability across parameters with different units, we u
 ## Data Preparation
 
 ```{r load-data}
-# Load the education-level count data
-counts_data <- readRDS(here("data", "education-spectrum-counts.rds"))
-
-# Prepare for Stan
-stan_data <- prepare_stan_data(counts_data)
-
+# Data and model already loaded in setup chunk for report efficiency
+# Display data summary
 cat(sprintf("Time series length: %d months\n", stan_data$T))
 cat(sprintf("Education levels: %d\n", stan_data$N_edu))
 cat(sprintf("Education categories: %s\n",
@@ -670,42 +763,7 @@ cat(sprintf("Date range: %.2f to %.2f\n",
 We use the **efficient spline-based model** which reduces dimensionality from ~2100 to ~105 latent parameters, enabling proper MCMC sampling.
 
 ```{r fit-model}
-#| cache: false
-
-# Use the hierarchical shock model (v2 with data-informed priors)
-# Load from targets pipeline (if available) or use fallback to manual caching
-targets_cache <- here("models", "ode-state-space-monotonic-spline-fit.qs")
-fallback_cache <- here("models", "ode_hierarchical_v2_fit.rds")
-fallback_meta <- here("models", "ode_hierarchical_v2_meta.rds")
-
-K_SPLINE <- 25  # Spline basis functions
-
-# Try to load from targets first, then fallback to manual cache
-# Load model from targets pipeline (required) with fallback to RDS cache
-if (file.exists(targets_cache)) {
-  cat("Loading model from targets pipeline (qs format)...\n\n")
-  result <- safe_qread(targets_cache, error_action = "stop")
-} else if (file.exists(fallback_cache) && file.exists(fallback_meta)) {
-  cat("Loading cached hierarchical decay model (RDS format)...\n")
-  cat("WARNING: Using legacy RDS cache instead of targets pipeline QS format.\n")
-  cat("Recommend running: targets::tar_make(model_ode_state_space_efficient)\n\n")
-  fit <- readRDS(fallback_cache)
-  meta <- readRDS(fallback_meta)
-  result <- list(
-    fit = fit,
-    stan_data = meta$stan_data,
-    diagnostics = meta$diagnostics,
-    timing = meta$timing
-  )
-} else {
-  stop(
-    "No cached model results found. Required model file missing: ", targets_cache, "\n",
-    "Please run the serial model using the targets pipeline:\n",
-    "  targets::tar_make(model_ode_state_space_efficient)\n",
-    call. = FALSE
-  )
-}
-
+# Model already loaded in setup chunk for report efficiency
 # Display diagnostics
 cat("\n=== Convergence Diagnostics ===\n")
 cat(sprintf("Divergent transitions: %d\n", result$diagnostics$num_divergent))
@@ -1435,7 +1493,7 @@ se_diff <- loo_results$comparison[2, "se_diff"]
 
 **Results**: The education-parallel model has expected log predictive density (ELPD) of `r round(edu_parallel_elpd, 1)` (SE = `r round(edu_parallel_se, 1)`), while the education-trend model has ELPD of `r round(education_trend_elpd, 1)` (SE = `r round(education_trend_se, 1)`). The difference in ELPD is `r round(elpd_diff, 1)` ± `r round(se_diff, 1)` (`r round(abs(elpd_diff)/se_diff, 2)` standard errors).
 
-**Interpretation**: The ELPD difference is not statistically significant (|difference| < 2×SE), indicating that adding education trends does not meaningfully improve predictive performance. The data do not support systematic linear trends across education rank for most labor market parameters, suggesting that education-specific heterogeneity is adequately captured by the hierarchical structure without imposing monotonic trends.
+**Interpretation**: The ELPD difference is small relative to its uncertainty (|difference| < 2×SE), indicating that adding education trends does not meaningfully improve predictive performance. The data do not support systematic linear trends across education rank for most labor market parameters, suggesting that education-specific heterogeneity is adequately captured by the hierarchical structure without imposing monotonic trends.
 
 ## Education Trend Model Parameter Estimates
 
@@ -1464,10 +1522,10 @@ print(beta_summary[, c("parameter", "mean", "sd", "q5", "q95")])
 
 **Key findings**:
 
-- Most β parameters are not significantly different from zero (90% credible intervals include zero), except for equilibrium unemployment (β = `r round(beta_summary$mean[beta_summary$parameter == "Logit u eq"], 3)`, 90% CI [`r round(beta_summary$q5[beta_summary$parameter == "Logit u eq"], 3)`, `r round(beta_summary$q95[beta_summary$parameter == "Logit u eq"], 3)`] excludes zero).
+- Most β parameters have 90% credible intervals that include zero, except for equilibrium unemployment (β = `r round(beta_summary$mean[beta_summary$parameter == "Logit u eq"], 3)`, 90% CI [`r round(beta_summary$q5[beta_summary$parameter == "Logit u eq"], 3)`, `r round(beta_summary$q95[beta_summary$parameter == "Logit u eq"], 3)`] excludes zero).
 - The negative trend for equilibrium unemployment indicates that higher education levels have systematically lower natural unemployment rates.
 - The largest absolute trend is for `r beta_summary$parameter[which.max(abs(beta_summary$mean))]` (β = `r round(beta_summary$mean[which.max(abs(beta_summary$mean))], 3)`).
-- The LOO-CV comparison indicates that adding education trends does not improve overall predictive accuracy (ELPD difference = `r round(elpd_diff, 2)` ± `r round(se_diff, 2)`, not statistically significant), suggesting that the hierarchical structure already captures education-specific heterogeneity adequately.
+- The LOO-CV comparison indicates that adding education trends does not improve overall predictive accuracy (ELPD difference = `r round(elpd_diff, 2)` ± `r round(se_diff, 2)`, small relative to uncertainty), suggesting that the hierarchical structure already captures education-specific heterogeneity adequately.
 
 ## Monotonic I-Spline Model
 
@@ -1713,7 +1771,7 @@ if (exists("monotonic_result") && !is.null(monotonic_result) && !is.null(monoton
 
   cat("\n**Interpretation**: ")
   best_model <- comparison_df$Model[which.max(comparison_df$ELPD)]
-  cat("The", best_model, "model has the highest ELPD, but differences may not be statistically significant.\n")
+  cat("The", best_model, "model has the highest ELPD, but differences may be small relative to their uncertainty.\n")
 }
 ```
 
