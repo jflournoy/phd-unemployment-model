@@ -184,7 +184,7 @@ ggplot(recent_latent, aes(x = year_frac)) +
   geom_line(aes(y = mean * 100, color = education), linewidth = 1) +
   geom_point(aes(y = observed * 100), alpha = 0.5, size = 1.5) +
   facet_wrap(~education, scales = "free_y", ncol = 2) +
-  scale_x_continuous(breaks = seq(2024, 2025, 0.5),
+  scale_x_continuous(breaks = seq(2024, 2026, 0.5),
                     labels = function(x) {
                       year <- floor(x)
                       month <- round((x - year) * 12) + 1
