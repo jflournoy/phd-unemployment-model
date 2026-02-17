@@ -266,6 +266,21 @@ aggregate(EMPSTAT ~ YEAR + MONTH, data = cps_phd, FUN = mean)
 - **Session info required** - Include `sessionInfo()` at end of all reports
 - **Seed documentation** - Document random seeds for reproducible simulations
 - **Dependencies explicit** - Load all required packages in setup chunk
+- **Analytics tracking** - Add tracking scripts to published reports for usage monitoring
+
+### Analytics Tracking in Quarto Reports
+
+Add analytics tracking to HTML output by including a tracking script in the YAML front matter:
+
+```yaml
+format:
+  html:
+    include-in-header:
+      - text: |
+          <script async src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
+```
+
+This enables usage tracking and insights into report engagement without affecting document rendering or reproducibility.
 
 ### TDD Examples
 

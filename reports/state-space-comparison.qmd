@@ -11,6 +11,9 @@ format:
     embed-resources: true
     fig-width: 10
     fig-height: 6
+    include-in-header:
+      - text: |
+          <script async src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
 execute:
   warning: false
   message: false
