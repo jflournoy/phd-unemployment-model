@@ -1,7 +1,38 @@
 {
   "permissions": {
     "allow": [
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(ls ../verse-cmdstan/ 2>/dev/null || echo \"Directory not found\")",
+      "Read(//home/jflournoy/code/verse-cmdstan/**)",
+      "Bash(docker compose *)",
+      "Bash(ls -la ../verse-cmdstan/rsession.conf 2>/dev/null || touch ../verse-cmdstan/rsession.conf 2>/dev/null && echo \"Created empty rsession.conf\")",
+      "Bash(ls -la ../verse-cmdstan/init.sh 2>/dev/null || touch ../verse-cmdstan/init.sh && echo \"Created empty init.sh\")",
+      "Bash(docker exec *)",
+      "Bash(echo \"IPUMS_API_KEY='59cba10d8a5da536fc06b59da2910a08192d4c6697de860e31f7939c'\" >> ~/.Renviron && echo \"✅ Key added to ~/.Renviron\")",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(bash scripts/run-edu-parallel.sh)",
+      "Bash(ps -p 76528 -o pid,state,%cpu,etime --no-headers)",
+      "Bash(ps -p 76528 -o pid,state --no-headers)",
+      "Bash(ps -p 76615 -o pid,etime,%cpu,args --no-headers)"
+    ],
+    "additionalDirectories": [
+      "/home/jflournoy/code/verse-cmdstan/rsession.conf",
+      "/home/jflournoy/code/verse-cmdstan/init.sh",
+      "/home/rstudio"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Grep|Glob|Regex",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/vexp-guard.sh",
+            "timeout": 3000
+          }
+        ]
+      }
     ]
   }
 }

@@ -1,0 +1,46 @@
+{
+  "name": "verse-cmdstan",
+  "image": "jflournoy/verse-cmdstan:latest",
+  "remoteUser": "rstudio",
+  "containerEnv": {
+    "CMDSTAN": "/cmdstan/cmdstan-2.35.0",
+    "CMDSTANVER": "2.35.0",
+    "DISABLE_AUTH": "true"
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/home/rstudio/code/phd-unemployment-model,type=bind",
+  "workspaceFolder": "/home/rstudio/code/phd-unemployment-model",
+  "forwardPorts": [8787],
+  "portsAttributes": {
+    "8787": {
+      "label": "RStudio Server",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "reditorsupport.r",
+        "quarto.quarto",
+        "anthropic.claude-code",
+        "ms-python.python",
+        "mhutchie.git-graph",
+        "github.vscode-github-actions",
+        "bierner.markdown-mermaid",
+        "streetsidesoftware.code-spell-checker"
+      ],
+      "settings": {
+        "r.alwaysUseActiveTerminal": true,
+        "r.sessionWatcher": true,
+        "quarto.render.renderOnSave": false,
+        "files.associations": {
+          "*.qmd": "quarto"
+        },
+        "[r]": {
+          "editor.tabSize": 2,
+          "editor.insertSpaces": true
+        }
+      }
+    }
+  },
+  "postCreateCommand": "git config --global --add safe.directory /home/rstudio/code/phd-unemployment-model && npm install 2>/dev/null || true"
+}
