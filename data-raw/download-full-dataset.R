@@ -33,7 +33,7 @@ source(here("R", "ipums-download.R"))
 # Main execution
 main <- function() {
   cat("\n========================================\n")
-  cat("CPS Full Dataset Download (2000-2025)\n")
+  cat("CPS Full Dataset Download (2000-2026)\n")
   cat("========================================\n\n")
 
   # Check for API key
@@ -47,9 +47,9 @@ main <- function() {
     )
   }
 
-  # Generate sample list for 2000-2025
-  cat("Generating sample list for 2000-2025...\n")
-  samples <- generate_cps_samples(2000, 2025)
+  # Generate sample list for 2000-2026
+  cat("Generating sample list for 2000-2026...\n")
+  samples <- generate_cps_samples(2000, 2026)
   cat("Found", length(samples), "available monthly CPS samples\n\n")
 
   # Show first and last samples
@@ -135,7 +135,7 @@ main <- function() {
         use_api = TRUE,
         samples = samples,
         variables = c("YEAR", "MONTH", "EMPSTAT", "EDUC", "AGE", "SEX", "WTFINL"),
-        extract_description = "PhD unemployment analysis 2000-2025 full time series",
+        extract_description = "PhD unemployment analysis 2000-2026 full time series",
         api_key = api_key,
         collection = "cps"
       )
