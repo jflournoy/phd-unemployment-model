@@ -1749,3 +1749,30 @@ Successfully reorganized [reports/state-space-comparison.qmd](reports/state-spac
 7. Seasonal oscillations
 8. Model diagnostics
 
+
+## 2026-02-12 - Fixed Recent Trends X-Axis Date Range
+
+### Issue
+The Recent Trends plot x-axis stopped at Jan 2025 instead of extending through Dec 2025.
+
+### Root Cause
+The x-axis breaks used `seq(2024, 2025, 0.5)` which generated:
+- 2024.0 → Jan 2024
+- 2024.5 → Jul 2024  
+- 2025.0 → Jan 2025
+
+But data extends to Dec 2025 (~2025.917), so July 2025 tick was missing.
+
+### Fix
+Changed to `seq(2024, 2026, 0.5)` which now generates:
+- 2024-01 (Jan 2024)
+- 2024-07 (Jul 2024)
+- 2025-01 (Jan 2025)
+- 2025-07 (Jul 2025)
+- 2026-01 (Jan 2026)
+
+### Commit
+- **Commit**: 50d4aef
+- **Files**: reports/state-space-comparison.qmd, .html, docs/index.html
+- **Status**: Pushed to main
+
