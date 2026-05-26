@@ -284,8 +284,8 @@ This enables usage tracking and insights into report engagement without affectin
 
 ### TDD Examples
 
-- [🔴 test: add failing test for updateCommandCatalog isolation (TDD RED)](../../commit/00e7a22)
-- [🔴 test: add failing tests for tdd.js framework detection (TDD RED)](../../commit/2ce43d1)
-- [🔴 test: add failing tests for learn.js functions (TDD RED)](../../commit/8b90d58)
-- [🔴 test: add failing tests for formatBytes and estimateTokens (TDD RED)](../../commit/1fdac58)
-- [🔴 test: add failing tests for findBrokenLinks (TDD RED phase)](../../commit/8ec6319)
+- [🔴 test: add failing test for updateCommandCatalog isolation (TDD RED)](../../commit/c4b7a55)
+- [🔴 test: add failing tests for tdd.js framework detection (TDD RED)](../../commit/d2207c9)
+- [🔴 test: add failing tests for learn.js functions (TDD RED)](../../commit/d0a3c3e)
+- [🔴 test: add failing tests for formatBytes and estimateTokens (TDD RED)](../../commit/3622d6d)
+- [🔴 test: add failing tests for findBrokenLinks (TDD RED phase)](../../commit/e11264a)
