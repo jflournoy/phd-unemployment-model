@@ -56,13 +56,9 @@ save_cmdstan_fit <- function(fit_result,
   fit_result$csv_saved <- TRUE
   fit_result$save_time <- Sys.time()
 
-  # Save the result
+  # Save the result (use RDS since qs is not available on this system)
   message("Saving fit result to: ", output_file)
-  if (format == "qs") {
-    qs::qsave(fit_result, output_file, preset = "high")
-  } else {
-    saveRDS(fit_result, output_file, compress = "xz")
-  }
+  saveRDS(fit_result, file = output_file, compress = "xz")
 
   # Verify CSV files exist
   csv_files <- list.files(csv_dir, pattern = "\\.csv$", full.names = TRUE)
@@ -103,11 +99,7 @@ load_cmdstan_fit <- function(input_file, csv_dir = NULL) {
 
   # Load the result
   message("Loading fit from: ", input_file)
-  if (format == "qs") {
-    result <- qs::qread(input_file)
-  } else {
-    result <- readRDS(input_file)
-  }
+  result <- readRDS(input_file)
 
   # Check if CSV directory is stored
   if (is.null(csv_dir) && "csv_dir" %in% names(result)) {

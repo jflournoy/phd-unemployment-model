@@ -158,7 +158,8 @@ is_in_labor_force <- function(empstat) {
 #'
 #' @export
 get_education_codes <- function() {
-  c(2L, 73L, 81L, 111L, 123L, 124L, 125L)
+  c(2L, 10L, 20L, 30L, 40L, 50L, 60L, 71L, 73L,
+    81L, 91L, 92L, 111L, 123L, 124L, 125L)
 }
 
 #' Get Education Code to Label Mapping
@@ -168,14 +169,18 @@ get_education_codes <- function() {
 #' @return Named character vector (names = codes, values = labels)
 #'
 #' @details
-#' Maps IPUMS EDUC codes to our standardized education level labels:
-#' - 2 -> "less_than_hs"
+#' Maps IPUMS EDUC codes to our standardized education level labels.
+#' Based on the IPUMS CPS detailed education codes:
+#' - 2, 10, 20, 30, 40, 50, 60, 71 -> "less_than_hs"
 #' - 73 -> "high_school"
-#' - 81 -> "some_college"
+#' - 81, 91, 92 -> "some_college"
 #' - 111 -> "bachelors"
 #' - 123 -> "masters"
 #' - 124 -> "professional"
 #' - 125 -> "phd"
+#'
+#' Note: Code 1 (NIU - Not in Universe) is intentionally excluded
+#' as these are children not asked about education.
 #'
 #' @examples
 #' educ_map <- get_education_code_map()
@@ -185,8 +190,17 @@ get_education_codes <- function() {
 get_education_code_map <- function() {
   c(
     "2" = "less_than_hs",
+    "10" = "less_than_hs",
+    "20" = "less_than_hs",
+    "30" = "less_than_hs",
+    "40" = "less_than_hs",
+    "50" = "less_than_hs",
+    "60" = "less_than_hs",
+    "71" = "less_than_hs",
     "73" = "high_school",
     "81" = "some_college",
+    "91" = "some_college",
+    "92" = "some_college",
     "111" = "bachelors",
     "123" = "masters",
     "124" = "professional",
