@@ -36,29 +36,52 @@ library(tidyr)
 # Load project functions
 devtools::load_all()
 
-# Safe QS reading with error handling
+# Safe reading with error handling (supports .rds and .qs files)
 safe_qread <- function(file, error_action = c("stop", "warn", "silent")) {
   error_action <- match.arg(error_action)
-  tryCatch({
-    qs::qread(file)
-  }, error = function(e) {
-    msg <- paste0("Error reading QS file: ", file, "\n", e$message)
-    if (error_action == "stop") {
-      stop(msg, call. = FALSE)
-    } else if (error_action == "warn") {
-      warning(msg, call. = FALSE)
-      return(NULL)
-    } else {
-      return(NULL)
-    }
-  })
+  # Use readRDS for .rds files
+  if (grepl("\\.rds$", file)) {
+    tryCatch({
+      readRDS(file)
+    }, error = function(e) {
+      msg <- paste0("Error reading file: ", file, "\n", e$message)
+      if (error_action == "stop") stop(msg, call. = FALSE)
+      else if (error_action == "warn") { warning(msg, call. = FALSE); return(NULL) }
+      else return(NULL)
+    })
+  } else {
+    # For .qs files, try qs::qread if available, fallback to readRDS
+    tryCatch({
+      if (requireNamespace("qs", quietly = TRUE)) qs::qread(file) else readRDS(file)
+    }, error = function(e) {
+      # Fallback: try readRDS if qs failed
+      result <- tryCatch(readRDS(file), error = function(e2) NULL)
+      if (!is.null(result)) return(result)
+      msg <- paste0("Error reading file: ", file, "\n", e$message)
+      if (error_action == "stop") stop(msg, call. = FALSE)
+      else if (error_action == "warn") { warning(msg, call. = FALSE); return(NULL) }
+      else return(NULL)
+    })
+  }
 }
 
 # Validate required model results exist
-# Note: Using edu-parallel model which has full hierarchical structure
-validate_parallel_model_exists(
-  serial_file = here("models", "ode-state-space-monotonic-spline-fit.qs")
-)
+# Check for edu-parallel model (preferred) or monotonic spline model
+edu_par_file <- here("models", "ode-state-space-edu-parallel-fit.rds")
+ms_file <- here("models", "ode-state-space-monotonic-spline-fit.qs")
+ms_file_rds <- here("models", "ode-state-space-monotonic-spline-fit.rds")
+
+if (!file.exists(edu_par_file) && !file.exists(ms_file) && !file.exists(ms_file_rds)) {
+  stop(
+    "No fitted model found. Expected one of:\n",
+    "  ", edu_par_file, "\n",
+    "  ", ms_file, "\n",
+    "  ", ms_file_rds, "\n",
+    "Run the targets pipeline or fit the model manually.\n",
+    call. = FALSE
+  )
+}
+cat("Found model file for report rendering.\n")
 
 # Set Stan options
 options(mc.cores = parallel::detectCores())
@@ -85,30 +108,45 @@ counts_data <- readRDS(here("data", "education-spectrum-counts.rds"))
 stan_data <- prepare_stan_data(counts_data)
 
 # Load fitted model
-targets_cache <- here("models", "ode-state-space-monotonic-spline-fit.qs")
-fallback_cache <- here("models", "ode_hierarchical_v2_fit.rds")
-fallback_meta <- here("models", "ode_hierarchical_v2_meta.rds")
-
+# Try multiple possible model file locations (support both .qs and .rds)
 K_SPLINE <- 25  # Spline basis functions
 
-if (file.exists(targets_cache)) {
-  result <- safe_qread(targets_cache, error_action = "stop")
-} else if (file.exists(fallback_cache) && file.exists(fallback_meta)) {
-  fit <- readRDS(fallback_cache)
-  meta <- readRDS(fallback_meta)
-  result <- list(
-    fit = fit,
-    stan_data = meta$stan_data,
-    diagnostics = meta$diagnostics,
-    timing = meta$timing
-  )
-} else {
-  stop(
-    "No cached model results found. Required model file missing: ", targets_cache, "\n",
-    "Please run the serial model using the targets pipeline:\n",
-    "  targets::tar_make(model_ode_state_space_efficient)\n",
-    call. = FALSE
-  )
+result <- NULL
+possible_model_files <- c(
+  here("models", "ode-state-space-edu-parallel-fit.rds"),
+  here("models", "ode-state-space-monotonic-spline-fit.qs"),
+  here("models", "ode-state-space-monotonic-spline-fit.rds"),
+  here("models", "ode_hierarchical_v2_fit.rds")
+)
+
+for (f in possible_model_files) {
+  if (file.exists(f)) {
+    cat("Loading model from:", f, "\n")
+    result <- safe_qread(f, error_action = "warn")
+    if (!is.null(result)) break
+  }
+}
+
+if (is.null(result)) {
+  fallback_cache <- here("models", "ode_hierarchical_v2_fit.rds")
+  fallback_meta <- here("models", "ode_hierarchical_v2_meta.rds")
+  if (file.exists(fallback_cache) && file.exists(fallback_meta)) {
+    fit <- readRDS(fallback_cache)
+    meta <- readRDS(fallback_meta)
+    result <- list(
+      fit = fit,
+      stan_data = meta$stan_data,
+      diagnostics = meta$diagnostics,
+      timing = meta$timing
+    )
+  } else {
+    stop(
+      "No cached model results found. Looked in:\n",
+      paste("  -", possible_model_files, collapse = "\n"), "\n",
+      "Please run the targets pipeline or fit the model manually.\n",
+      call. = FALSE
+    )
+  }
 }
 ```
 
@@ -1554,6 +1592,17 @@ where:
 
 # Check if monotonic spline model results are available
 monotonic_spline_file <- here::here("models", "ode-state-space-monotonic-spline-fit.qs")
+monotonic_spline_file_rds <- here::here("models", "ode-state-space-monotonic-spline-fit.rds")
+# Also check if edu-parallel model (.rds) can substitute
+monotonic_alt_file <- here::here("models", "ode-state-space-edu-parallel-fit.rds")
+
+if (file.exists(monotonic_spline_file_rds)) {
+  monotonic_spline_file <- monotonic_spline_file_rds
+} else if (!file.exists(monotonic_spline_file) && file.exists(monotonic_alt_file)) {
+  # Use edu-parallel model as substitute
+  monotonic_spline_file <- monotonic_alt_file
+  cat("Using edu-parallel model for state-space analysis (monotonic spline model not available)\n")
+}
 
 # Run quick test if no saved results exist
 if (!file.exists(monotonic_spline_file)) {
