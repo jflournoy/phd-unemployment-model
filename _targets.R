@@ -442,8 +442,8 @@ list(
       cat("STARTING EDU-PARALLEL STAN MODEL FITTING\n")
       cat("Timestamp:", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n")
       cat("Data rows:", nrow(education_counts), "\n")
-      cat("Chains: 4, Parallel chains: 2, Threads per chain: 7, Iterations: 3000 (1500 warmup + 1500 sampling)\n")
-      cat("Threading: reduce_sum() across education levels, 7 threads per chain\n")
+      cat("Chains: 4, Parallel chains: 4, Threads per chain: 6, Iterations: 3000 (1500 warmup + 1500 sampling)\n")
+      cat("Threading: reduce_sum() across education levels, 6 threads per chain\n")
       cat(strrep("=", 80), "\n\n")
 
       start_time <- Sys.time()
@@ -455,8 +455,8 @@ list(
         iter_warmup = 1500,
         adapt_delta = 0.99,
         max_treedepth = 15,
-        parallel_chains = 2,
-        threads_per_chain = 7,
+        parallel_chains = 4,
+        threads_per_chain = 6,
         grainsize = 1L,
         refresh = 500
       )

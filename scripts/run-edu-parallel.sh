@@ -17,8 +17,8 @@ result <- fit_ode_state_space_edu_parallel(
   iter_warmup = 1500,
   adapt_delta = 0.99,
   max_treedepth = 15,
-  parallel_chains = 2,
-  threads_per_chain = 7,
+  parallel_chains = 4,
+  threads_per_chain = 6,
   grainsize = 1L,
   refresh = 500
 )

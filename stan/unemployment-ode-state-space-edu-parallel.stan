@@ -252,19 +252,17 @@ parameters {
   // === SPLINE COEFFICIENTS FOR DEVIATIONS ===
   matrix[K_spline, N_edu] spline_coef_raw;
 
-  // === HIERARCHICAL SPLINE SMOOTHNESS (NON-CENTERED) ===
-  real mu_log_sigma_spline;
-  real<lower=0> sigma_log_sigma_spline;
-  vector[N_edu] sigma_spline_raw;
+  // === SPLINE SMOOTHNESS (SHARED SCALAR — not hierarchical) ===
+  real<lower=0> sigma_spline;  // Single shared smoothness (was hierarchical with 7 groups)
 
   // === NON-CENTERED HIERARCHICAL PARAMETERS ===
   // Equilibrium unemployment rates
-  real mu_logit_u_eq;  // Use tight prior instead of hard bounds
+  real mu_logit_u_eq;
   real<lower=0> sigma_logit_u_eq;
   vector[N_edu] u_eq_raw;
 
   // Adjustment speeds (s+f)
-  real mu_log_adj_speed;  // Use tight prior instead of hard bounds
+  real mu_log_adj_speed;
   real<lower=0> sigma_log_adj_speed;
   vector[N_edu] adj_speed_raw;
 
@@ -335,12 +333,6 @@ transformed parameters {
     shock_2020_effect[i] = exp(mu_log_shock_2020 + sigma_log_shock_2020 * shock_2020_raw[i]);
   }
 
-  // Spline smoothness
-  vector<lower=0>[N_edu] sigma_spline;
-  for (i in 1:N_edu) {
-    sigma_spline[i] = exp(mu_log_sigma_spline + sigma_log_sigma_spline * sigma_spline_raw[i]);
-  }
-
   // Decay rates
   vector<lower=0.1, upper=5>[N_edu] decay_2008;
   vector<lower=0.1, upper=5>[N_edu] decay_2020;
@@ -357,7 +349,7 @@ transformed parameters {
   matrix[T, N_edu] spline_deviation;
 
   for (i in 1:N_edu) {
-    spline_coef[, i] = sigma_spline[i] * spline_coef_raw[, i];
+    spline_coef[, i] = sigma_spline * spline_coef_raw[, i];
     vector[T] raw_dev = B_spline * spline_coef[, i];
     for (t in 1:T) {
       spline_deviation[t, i] = fmax(-1.0, fmin(1.0, raw_dev[t]));
@@ -375,23 +367,23 @@ transformed parameters {
 model {
   // === PRIORS ===
 
-  // Hierarchical equilibrium unemployment rates - tighter priors to prevent extreme values
-  mu_logit_u_eq ~ normal(-3.3, 0.15);  // Tighter prior (was 0.3)
-  sigma_logit_u_eq ~ exponential(4);   // Tighter prior (was 2) - smaller variance across education levels
+  // Hierarchical equilibrium unemployment rates
+  mu_logit_u_eq ~ normal(-3.3, 0.15);
+  sigma_logit_u_eq ~ normal(0, 0.15);
   u_eq_raw ~ std_normal();
 
-  // Hierarchical adjustment speeds - tighter priors to prevent extreme values
-  mu_log_adj_speed ~ normal(2.3, 0.25);  // Tighter prior (was 0.5)
-  sigma_log_adj_speed ~ exponential(2);  // Tighter prior (was 1) - smaller variance across education levels
+  // Hierarchical adjustment speeds
+  mu_log_adj_speed ~ normal(2.3, 0.25);
+  sigma_log_adj_speed ~ normal(0, 0.25);
   adj_speed_raw ~ std_normal();
 
   // Hierarchical shock parameters
   mu_log_shock_2008 ~ normal(-2, 0.8);
-  sigma_log_shock_2008 ~ exponential(1);
+  sigma_log_shock_2008 ~ normal(0, 0.4);
   shock_2008_raw ~ std_normal();
 
   mu_log_shock_2020 ~ normal(-1.5, 0.8);
-  sigma_log_shock_2020 ~ exponential(1);
+  sigma_log_shock_2020 ~ normal(0, 0.4);
   shock_2020_raw ~ std_normal();
 
   // Hierarchical decay rates
@@ -415,10 +407,8 @@ model {
   // Spline coefficients
   to_vector(spline_coef_raw) ~ std_normal();
 
-  // Hierarchical spline smoothness
-  mu_log_sigma_spline ~ normal(-0.22, 0.4);
-  sigma_log_sigma_spline ~ exponential(2);
-  sigma_spline_raw ~ std_normal();
+  // Shared spline smoothness (scalar, not hierarchical)
+  sigma_spline ~ normal(0, 0.15);
 
   // Overdispersion
   log_phi_minus_1 ~ normal(8.5, 0.5);

@@ -1233,8 +1233,8 @@ prepare_stan_data_edu_parallel <- function(data, grainsize = 1L) {
     shock_2020_onset = 2020.167,  # March 2020
     shock_2020_peak = 2020.333,   # April 2020
 
-    # Spline configuration
-    K_spline = 25L,
+    # Spline configuration (reduced from 25→15→10 for better identifiability)
+    K_spline = 10L,
 
     # Threading control
     grainsize = as.integer(grainsize),
@@ -1439,10 +1439,10 @@ fit_ode_state_space_edu_parallel <- function(data,
                                               chains = 4,
                                               iter_sampling = 1000,
                                               iter_warmup = 1000,
-                                              adapt_delta = 0.95,
-                                              max_treedepth = 12,
+                                              adapt_delta = 0.99,
+                                              max_treedepth = 15,
                                               parallel_chains = 4,
-                                              threads_per_chain = 2,
+                                              threads_per_chain = 6,
                                               grainsize = 1L,
                                               refresh = 100) {
 
@@ -1500,8 +1500,9 @@ fit_ode_state_space_edu_parallel <- function(data,
 
   start_time <- Sys.time()
 
-  # Generate init function at prior centers (consistent with efficient model)
-  init_fn <- make_init_at_prior(stan_data)
+  # Generate init function at prior centers with random perturbations
+  # NOTE: must use edu-parallel specific init for correct parameter shapes
+  init_fn <- make_init_at_prior_edu_parallel(stan_data)
 
   fit <- model$sample(
     data = stan_data,
@@ -1776,29 +1777,27 @@ make_init_at_prior_edu_parallel <- function(stan_data) {
       spline_coef_raw = matrix(rnorm(K_spline * N_edu, 0, 0.1),
                                nrow = K_spline, ncol = N_edu),
 
-      # Hierarchical spline smoothness
-      mu_log_sigma_spline = rnorm(1, -0.22, 0.1),
-      sigma_log_sigma_spline = abs(rnorm(1, 0.5, 0.1)),
-      sigma_spline_raw = rnorm(N_edu, 0, 0.1),
+      # Shared spline smoothness (single scalar)
+      sigma_spline = abs(rnorm(1, 0.15, 0.05)),
 
       # Equilibrium unemployment
       mu_logit_u_eq = rnorm(1, -3.3, 0.1),
-      sigma_logit_u_eq = abs(rnorm(1, 0.5, 0.1)),
+      sigma_logit_u_eq = abs(rnorm(1, 0.15, 0.05)),
       u_eq_raw = rnorm(N_edu, 0, 0.1),
 
       # Adjustment speeds
       mu_log_adj_speed = rnorm(1, 2.3, 0.1),
-      sigma_log_adj_speed = abs(rnorm(1, 0.5, 0.1)),
+      sigma_log_adj_speed = abs(rnorm(1, 0.25, 0.05)),
       adj_speed_raw = rnorm(N_edu, 0, 0.1),
 
       # 2008 shock
       mu_log_shock_2008 = rnorm(1, -2, 0.1),
-      sigma_log_shock_2008 = abs(rnorm(1, 0.5, 0.1)),
+      sigma_log_shock_2008 = abs(rnorm(1, 0.4, 0.1)),
       shock_2008_raw = rnorm(N_edu, 0, 0.1),
 
       # 2020 shock
       mu_log_shock_2020 = rnorm(1, -1.5, 0.1),
-      sigma_log_shock_2020 = abs(rnorm(1, 0.5, 0.1)),
+      sigma_log_shock_2020 = abs(rnorm(1, 0.4, 0.1)),
       shock_2020_raw = rnorm(N_edu, 0, 0.1),
 
       # Decay rates
