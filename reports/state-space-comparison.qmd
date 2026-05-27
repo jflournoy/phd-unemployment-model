@@ -189,32 +189,32 @@ This report presents a hierarchical Bayesian state space model for unemployment 
 A close-up view of the most recent unemployment dynamics across education levels.
 
 ```{r recent-trends-data}
-# Extract latent unemployment rates (needed for recent trends plot)
-latent_all <- extract_latent_rates(result, summary = TRUE)
+# Extract de-seasonalized trend for recent trends plot
+trend_all <- extract_trend(result, summary = TRUE)
 
 # Filter to December 2023 - April 2026
 # Formula: year_frac = year + (month - 0.5) / 12
 # December 2023 = 2023 + 11.5/12 ≈ 2023.958
 # April 2026   = 2026 +  3.5/12 ≈ 2026.292
-recent_latent <- data.frame(
-  year_frac = latent_all$year_frac,
-  education = latent_all$education,
-  mean = latent_all$mean,
-  lower = latent_all$q5,
-  upper = latent_all$q95
+recent_trend <- data.frame(
+  year_frac = trend_all$year_frac,
+  education = trend_all$education,
+  mean = trend_all$mean,
+  lower = trend_all$q5,
+  upper = trend_all$q95
 )
 
 # Add observed rates
 for (i in seq_along(stan_data$education_levels)) {
   edu <- stan_data$education_levels[i]
-  idx <- recent_latent$education == edu
+  idx <- recent_trend$education == edu
   obs_rate <- stan_data$n_unemployed[, i] / stan_data$n_total[, i]
-  recent_latent$observed[idx] <- obs_rate
+  recent_trend$observed[idx] <- obs_rate
 }
 
 # Filter to recent period
-recent_latent <- recent_latent[recent_latent$year_frac >= 2023.958 &
-                                recent_latent$year_frac <= 2026.292, ]
+recent_trend <- recent_trend[recent_trend$year_frac >= 2023.958 &
+                                recent_trend$year_frac <= 2026.292, ]
 ```
 
 ```{r plot-recent-trends}
@@ -222,7 +222,7 @@ recent_latent <- recent_latent[recent_latent$year_frac >= 2023.958 &
 #| fig-height: 8
 #| fig-width: 10
 
-ggplot(recent_latent, aes(x = year_frac)) +
+ggplot(recent_trend, aes(x = year_frac)) +
   geom_ribbon(aes(ymin = lower * 100, ymax = upper * 100, fill = education),
               alpha = 0.3) +
   geom_line(aes(y = mean * 100, color = education), linewidth = 1) +
@@ -238,7 +238,7 @@ ggplot(recent_latent, aes(x = year_frac)) +
   labs(x = "Date",
        y = "Unemployment Rate",
        title = "Recent Unemployment Trends by Education Level",
-       subtitle = "Points: observed data; Lines: model smooth predictions; Bands: 90% credible intervals") +
+       subtitle = "Points: observed data; Lines: model de-seasonalized trend; Bands: 90% credible intervals") +
   theme(legend.position = "none",
         strip.text = element_text(size = 11, face = "bold"),
         axis.text.x = element_text(angle = 45, hjust = 1))
