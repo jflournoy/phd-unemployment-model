@@ -215,7 +215,7 @@ transformed data {
 
   // Pre-compute B-spline basis matrix
   real t_min = min(year_frac);
-  real t_max = max(year_frac);
+  real t_max = max(year_frac) + 1e-6;
   int n_internal_knots = K_spline - 4;
   int n_knots = K_spline + 4;
   array[n_knots] real knots;
