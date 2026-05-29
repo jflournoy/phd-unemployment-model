@@ -244,6 +244,34 @@ ggplot(recent_trend, aes(x = year_frac)) +
         axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+## Residual Diagnostics: What the Model Misses
+
+These plots show two views of what the model leaves unexplained.
+
+**Observation residual** (observed unemployment rate minus full model prediction):
+Positive values mean the model underpredicts unemployment (observed > model);
+negative values mean the model overpredicts (observed < model).
+The shaded bands show 90% credible intervals.
+
+```{r fig-residual-obs, fig.cap="Observation residuals: what the full model (including spline) leaves unexplained"}
+knitr::include_graphics("figures/residual-observation.png")
+```
+
+**Spline component** (`u_trend - u_ode_pure`): The part of the de-seasonalized trend
+that the B-spline contributes beyond the ODE dynamics. This is what the spline
+is "explaining" that the equilibrium + shock dynamics cannot.
+
+```{r fig-residual-spline, fig.cap="Spline component: what the B-spline adds beyond ODE dynamics"}
+knitr::include_graphics("figures/residual-spline-component.png")
+```
+
+> **Note:** The large positive spline jump for "less than high school" in Spring 2026
+> is a boundary artifact. The B-spline's finite basis support becomes unreliable near
+> the end of the time series. The observed rate for this group actually *fell* in
+> April 2026 (8.74% → 8.29%), but the spline bends up sharply (+2.5 pp) due to
+> reduced basis function overlap at the boundary. This does not affect the
+> economic parameters or other education groups meaningfully.
+
 ## Model Structure: A Comprehensive Mathematical Walkthrough
 
 This section provides a detailed explanation of the Stan model, including the economic theory, mathematical derivations, and implementation details.
