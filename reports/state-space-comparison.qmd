@@ -265,12 +265,10 @@ is "explaining" that the equilibrium + shock dynamics cannot.
 knitr::include_graphics("figures/residual-spline-component.png")
 ```
 
-> **Note:** The large positive spline jump for "less than high school" in Spring 2026
-> is a boundary artifact. The B-spline's finite basis support becomes unreliable near
-> the end of the time series. The observed rate for this group actually *fell* in
-> April 2026 (8.74% → 8.29%), but the spline bends up sharply (+2.5 pp) due to
-> reduced basis function overlap at the boundary. This does not affect the
-> economic parameters or other education groups meaningfully.
+> **Note:** A B-spline boundary bug in the initial fit caused all spline deviations
+> to be forced to zero at the final time point (April 2026), creating an artificial
+> jump in the spline component for "less than high school." This has been fixed in
+> the latest refit (`t_max` offset by 1e-6 to avoid exact boundary coincidence).
 
 ## Model Structure: A Comprehensive Mathematical Walkthrough
 
