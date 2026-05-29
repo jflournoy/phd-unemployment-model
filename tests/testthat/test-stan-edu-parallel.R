@@ -287,13 +287,13 @@ test_that("edu-parallel model compiles with threading", {
   }
 
   # Attempt compilation with threading enabled
-  expect_no_error({
-    model <- cmdstanr::cmdstan_model(
+  expect_no_error(
+    cmdstanr::cmdstan_model(
       model_path,
       cpp_options = list(stan_threads = TRUE),
       compile = TRUE
     )
-  }, info = "Model should compile with threading enabled")
+  )
 })
 
 # ============================================================================

@@ -86,7 +86,7 @@ functions {
     vector decay_2008,
     vector decay_2020,
     vector logit_u_init,
-    matrix spline_deviation,  // [T, N_edu] - matrix is compatible
+    matrix spline_deviation,  // [T, N_edu] - B-spline deviations
     matrix seasonal_u,        // [12, N_edu] - matrix is compatible
     real phi,
     int T
@@ -186,34 +186,6 @@ transformed data {
   array[T] real time_since_2008_peak;
   array[T] real time_since_2020_peak;
 
-  // Time range for spline knots
-  real t_min = min(year_frac);
-  real t_max = max(year_frac);
-
-  // Create knot sequence for B-splines
-  int n_internal_knots = K_spline - 4;
-  int n_knots = K_spline + 4;
-  array[n_knots] real knots;
-
-  // Boundary knots
-  for (i in 1:4) {
-    knots[i] = t_min;
-    knots[n_knots - 4 + i] = t_max;
-  }
-
-  // Internal knots
-  for (i in 1:n_internal_knots) {
-    knots[4 + i] = t_min + i * (t_max - t_min) / (n_internal_knots + 1);
-  }
-
-  // Pre-compute spline basis matrix
-  matrix[T, K_spline] B_spline;
-  for (t in 1:T) {
-    for (k in 1:K_spline) {
-      B_spline[t, k] = bspline_basis(year_frac[t], knots, k, 4);
-    }
-  }
-
   // Shock timing computation
   for (t in 1:T) {
     if (year_frac[t] < shock_2008_onset) {
@@ -241,6 +213,30 @@ transformed data {
     }
   }
 
+  // Pre-compute B-spline basis matrix
+  real t_min = min(year_frac);
+  real t_max = max(year_frac);
+  int n_internal_knots = K_spline - 4;
+  int n_knots = K_spline + 4;
+  array[n_knots] real knots;
+
+  // Boundary knots
+  for (i in 1:4) {
+    knots[i] = t_min;
+    knots[n_knots - 4 + i] = t_max;
+  }
+  // Internal knots
+  for (i in 1:n_internal_knots) {
+    knots[4 + i] = t_min + i * (t_max - t_min) / (n_internal_knots + 1);
+  }
+
+  matrix[T, K_spline] B_spline;
+  for (t in 1:T) {
+    for (k in 1:K_spline) {
+      B_spline[t, k] = bspline_basis(year_frac[t], knots, k, 4);
+    }
+  }
+
   // Education indices for reduce_sum (1 to N_edu)
   array[N_edu] int edu_indices;
   for (i in 1:N_edu) {
@@ -249,11 +245,11 @@ transformed data {
 }
 
 parameters {
-  // === SPLINE COEFFICIENTS FOR DEVIATIONS ===
+  // === SPLINE COEFFICIENTS ===
   matrix[K_spline, N_edu] spline_coef_raw;
 
-  // === SPLINE SMOOTHNESS (SHARED SCALAR — not hierarchical) ===
-  real<lower=0> sigma_spline;  // Single shared smoothness (was hierarchical with 7 groups)
+  // === HIERARCHICAL SPLINE SMOOTHNESS ===
+  vector<lower=0>[N_edu] sigma_spline;
 
   // === NON-CENTERED HIERARCHICAL PARAMETERS ===
   // Equilibrium unemployment rates
@@ -345,12 +341,9 @@ transformed parameters {
   real<lower=1> phi = 1 + exp(log_phi_minus_1);
 
   // === SPLINE DEVIATIONS ===
-  matrix[K_spline, N_edu] spline_coef;
   matrix[T, N_edu] spline_deviation;
-
   for (i in 1:N_edu) {
-    spline_coef[, i] = sigma_spline * spline_coef_raw[, i];
-    vector[T] raw_dev = B_spline * spline_coef[, i];
+    vector[T] raw_dev = B_spline * spline_coef_raw[, i];
     for (t in 1:T) {
       spline_deviation[t, i] = fmax(-1.0, fmin(1.0, raw_dev[t]));
     }
@@ -374,25 +367,25 @@ model {
 
   // Hierarchical adjustment speeds
   mu_log_adj_speed ~ normal(2.3, 0.25);
-  sigma_log_adj_speed ~ normal(0, 0.25);
+  sigma_log_adj_speed ~ normal(0, 0.1);
   adj_speed_raw ~ std_normal();
 
-  // Hierarchical shock parameters
+  // Hierarchical shock parameters (tight sigma → strong pooling)
   mu_log_shock_2008 ~ normal(-2, 0.8);
-  sigma_log_shock_2008 ~ normal(0, 0.4);
+  sigma_log_shock_2008 ~ normal(0, 0.1);
   shock_2008_raw ~ std_normal();
 
   mu_log_shock_2020 ~ normal(-1.5, 0.8);
-  sigma_log_shock_2020 ~ normal(0, 0.4);
+  sigma_log_shock_2020 ~ normal(0, 0.1);
   shock_2020_raw ~ std_normal();
 
-  // Hierarchical decay rates
+  // Hierarchical decay rates (tight sigma → strong pooling)
   mu_decay_2008 ~ normal(0, 0.5);
-  sigma_decay_2008 ~ exponential(1);
+  sigma_decay_2008 ~ exponential(5);
   decay_2008_raw ~ std_normal();
 
   mu_decay_2020 ~ normal(0, 0.5);
-  sigma_decay_2020 ~ exponential(1);
+  sigma_decay_2020 ~ exponential(5);
   decay_2020_raw ~ std_normal();
 
   // Hierarchical seasonal effects
@@ -404,11 +397,14 @@ model {
   // Initial states
   logit_u_init ~ normal(-3.0, 0.5);
 
-  // Spline coefficients
-  to_vector(spline_coef_raw) ~ std_normal();
-
-  // Shared spline smoothness (scalar, not hierarchical)
-  sigma_spline ~ normal(0, 0.15);
+  // Spline coefficients: RW prior (smooth = small sigma_spline)
+  for (i in 1:N_edu) {
+    spline_coef_raw[1, i] ~ normal(0, sigma_spline[i]);
+    for (k in 2:K_spline) {
+      spline_coef_raw[k, i] ~ normal(spline_coef_raw[k-1, i], sigma_spline[i]);
+    }
+  }
+  sigma_spline ~ normal(0, 0.05);  // Small innovation → smooth per edu
 
   // Overdispersion
   log_phi_minus_1 ~ normal(8.5, 0.5);

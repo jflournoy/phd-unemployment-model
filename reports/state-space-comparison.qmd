@@ -1397,8 +1397,8 @@ p3 <- mcmc_trace(draws, pars = "mu_log_shock_2020", np = np) +
 p4 <- mcmc_trace(draws, pars = "sigma_log_shock_2008", np = np) +
   labs(title = "Hierarchical SD: 2008 Shock (between-education variation)")
 
-p5 <- mcmc_trace(draws, pars = "sigma_log_sigma_spline", np = np) +
-  labs(title = "Hierarchical SD: Spline Smoothness (between-education variation)")
+p5 <- mcmc_trace(draws, pars = "sigma_seasonal", np = np) +
+  labs(title = "Hierarchical SD: Seasonal Effects (between-education variation)")
 
 library(patchwork)
 (p1 / p2 / p3 / p4 / p5)
@@ -1425,8 +1425,7 @@ key_params <- c(
   paste0("shock_2020_effect[", 1:stan_data$N_edu, "]"),
   paste0("decay_2008[", 1:stan_data$N_edu, "]"),
   paste0("decay_2020[", 1:stan_data$N_edu, "]"),
-  # Hierarchical spline smoothness
-  "mu_log_sigma_spline", "sigma_log_sigma_spline",
+  # Hierarchical spline smoothness (per-education)
   paste0("sigma_spline[", 1:stan_data$N_edu, "]"),
   # Global parameters
   "phi"

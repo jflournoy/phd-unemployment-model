@@ -1168,7 +1168,7 @@ fit_ode_state_space_threaded <- function(data,
 #'
 #' @seealso [fit_ode_state_space_edu_parallel()]
 #' @export
-prepare_stan_data_edu_parallel <- function(data, grainsize = 1L) {
+prepare_stan_data_edu_parallel <- function(data, grainsize = 1L, K_spline = 10L) {
   # Convert to data.table if needed
   if (!data.table::is.data.table(data)) {
     data <- data.table::as.data.table(data)
@@ -1233,8 +1233,8 @@ prepare_stan_data_edu_parallel <- function(data, grainsize = 1L) {
     shock_2020_onset = 2020.167,  # March 2020
     shock_2020_peak = 2020.333,   # April 2020
 
-    # Spline configuration (reduced from 25→15→10 for better identifiability)
-    K_spline = 10L,
+    # Spline configuration
+    K_spline = as.integer(K_spline),
 
     # Threading control
     grainsize = as.integer(grainsize),
@@ -1444,10 +1444,11 @@ fit_ode_state_space_edu_parallel <- function(data,
                                               parallel_chains = 4,
                                               threads_per_chain = 6,
                                               grainsize = 1L,
+                                              K_spline = 10L,
                                               refresh = 100) {
 
   # Prepare flattened data for edu-parallel model
-  stan_data_full <- prepare_stan_data_edu_parallel(data, grainsize = grainsize)
+  stan_data_full <- prepare_stan_data_edu_parallel(data, grainsize = grainsize, K_spline = K_spline)
 
   # Create Stan data (filter out R metadata fields)
   stan_data <- list(
@@ -1773,12 +1774,10 @@ make_init_at_prior_edu_parallel <- function(stan_data) {
     K_spline <- stan_data$K_spline
 
     list(
-      # Spline coefficients
-      spline_coef_raw = matrix(rnorm(K_spline * N_edu, 0, 0.1),
+      # Spline coefficients (small, near-zero for smooth start)
+      spline_coef_raw = matrix(rnorm(K_spline * N_edu, 0, 0.01),
                                nrow = K_spline, ncol = N_edu),
-
-      # Shared spline smoothness (single scalar)
-      sigma_spline = abs(rnorm(1, 0.15, 0.05)),
+      sigma_spline = abs(rnorm(N_edu, 0.03, 0.01)),
 
       # Equilibrium unemployment
       mu_logit_u_eq = rnorm(1, -3.3, 0.1),
@@ -1787,26 +1786,26 @@ make_init_at_prior_edu_parallel <- function(stan_data) {
 
       # Adjustment speeds
       mu_log_adj_speed = rnorm(1, 2.3, 0.1),
-      sigma_log_adj_speed = abs(rnorm(1, 0.25, 0.05)),
+      sigma_log_adj_speed = abs(rnorm(1, 0.1, 0.03)),
       adj_speed_raw = rnorm(N_edu, 0, 0.1),
 
       # 2008 shock
       mu_log_shock_2008 = rnorm(1, -2, 0.1),
-      sigma_log_shock_2008 = abs(rnorm(1, 0.4, 0.1)),
+      sigma_log_shock_2008 = abs(rnorm(1, 0.1, 0.03)),
       shock_2008_raw = rnorm(N_edu, 0, 0.1),
 
       # 2020 shock
       mu_log_shock_2020 = rnorm(1, -1.5, 0.1),
-      sigma_log_shock_2020 = abs(rnorm(1, 0.4, 0.1)),
+      sigma_log_shock_2020 = abs(rnorm(1, 0.1, 0.03)),
       shock_2020_raw = rnorm(N_edu, 0, 0.1),
 
       # Decay rates
       mu_decay_2008 = rnorm(1, 0, 0.1),
-      sigma_decay_2008 = abs(rnorm(1, 0.5, 0.1)),
+      sigma_decay_2008 = abs(rnorm(1, 0.2, 0.05)),
       decay_2008_raw = rnorm(N_edu, 0, 0.1),
 
       mu_decay_2020 = rnorm(1, 0, 0.1),
-      sigma_decay_2020 = abs(rnorm(1, 0.5, 0.1)),
+      sigma_decay_2020 = abs(rnorm(1, 0.2, 0.05)),
       decay_2020_raw = rnorm(N_edu, 0, 0.1),
 
       # Seasonal effects
