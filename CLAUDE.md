@@ -288,10 +288,19 @@ This enables usage tracking and insights into report engagement without affectin
 
 ### Deployment Workflow
 
-After rendering the report, copy it to `docs/index.html` for root URL serving:
+Use the deployment script after refitting:
 
 ```bash
-quartor render reports/state-space-comparison.qmd
+bash scripts/deploy-report.sh
+```
+
+This runs all steps: residual plots → render → copy to `docs/index.html`.
+
+Manual equivalent:
+
+```bash
+Rscript /tmp/residual_plots.R
+quarto render reports/state-space-comparison.qmd
 cp reports/state-space-comparison.html docs/index.html
 ```
 
