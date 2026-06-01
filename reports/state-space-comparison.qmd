@@ -16,7 +16,7 @@ format:
       - text: |
           <script async src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
 post-render:
-  - cp reports/state-space-comparison.html docs/index.html
+  - cp state-space-comparison.html ../docs/index.html
 execute:
   warning: false
   message: false
