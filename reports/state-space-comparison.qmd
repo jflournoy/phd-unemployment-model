@@ -1,6 +1,7 @@
 ---
 title: "Hierarchical ODE State Space Model for Unemployment Dynamics"
 subtitle: "A Bayesian Approach with Pooled Labor Market Parameters"
+date: today
 format:
   html:
     toc: true
