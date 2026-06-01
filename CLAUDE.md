@@ -282,6 +282,34 @@ format:
 
 This enables usage tracking and insights into report engagement without affecting document rendering or reproducibility.
 
+## GitHub Pages Deployment
+
+**GitHub Pages serves from `docs/` directory on `main` branch.**
+
+### Deployment Workflow
+
+After rendering the report, copy it to `docs/index.html` for root URL serving:
+
+```bash
+quartor render reports/state-space-comparison.qmd
+cp reports/state-space-comparison.html docs/index.html
+```
+
+- Root URL: `https://johnflournoy.science/phd-unemployment-model/`
+- The `docs/` directory is tracked in git — commit and push to deploy
+
+### Prerequisites Before Rendering
+
+1. **Residual plots**: Generate with `Rscript /tmp/residual_plots.R` before rendering the QMD (report includes the generated PNGs)
+2. **Model fit object**: Must exist at `models/ode-state-space-edu-parallel-fit.rds` with CSV files in `models/ode-state-space-edu-parallel-fit_csv/`
+3. **Render from project root**: Quarto must be run from the project root directory so relative paths resolve correctly
+
+### Known Constraints
+
+- **Stan model CSV files** (~268 MB each) exceed GitHub's 100 MB file limit — use `.gitkeep` to track directories without pushing large files
+- **No caching**: All Quarto chunks execute fresh on each render (`cache: false` is project default)
+- **B-spline boundary fix**: The Stan model uses `t_max = max(year_frac) + 1e-6` to prevent the B-spline basis from vanishing at the final time point. This must be preserved in any spline-related edits.
+
 ### TDD Examples
 
 - [🔴 test: add failing test for updateCommandCatalog isolation (TDD RED)](../../commit/c4b7a55)
