@@ -7,10 +7,10 @@
 #   - Run from project root directory
 #
 # This script:
-#   1. Generates residual diagnostic plots
-#   2. Renders the Quarto report
-#   3. Copies output to docs/index.html for GitHub Pages
-#   4. Verifies deployment
+#   1. Regenerates all report figures from current model fit
+#   2. Generates residual diagnostic plots
+#   3. Renders the Quarto report
+#   4. Copies output to docs/index.html for GitHub Pages
 
 set -e
 
@@ -40,21 +40,27 @@ if [ "$CSV_COUNT" -eq 0 ]; then
 fi
 echo "  CSV files: $CSV_COUNT"
 
-# Step 1: Generate residual diagnostic plots
+# Step 1: Regenerate all report figures from current fit
 echo ""
-echo "  [1/3] Generating residual diagnostic plots..."
+echo "  [1/4] Regenerating report figures from current fit..."
+Rscript scripts/update-report-figures.R 2>&1
+echo "  Done."
+
+# Step 2: Generate residual diagnostic plots
+echo ""
+echo "  [2/4] Generating residual diagnostic plots..."
 Rscript /tmp/residual_plots.R 2>&1 | tail -3
 echo "  Done."
 
-# Step 2: Render the Quarto report
+# Step 3: Render the Quarto report
 echo ""
-echo "  [2/3] Rendering Quarto report..."
+echo "  [3/4] Rendering Quarto report..."
 quarto render reports/state-space-comparison.qmd 2>&1 | tail -5
 echo "  Done."
 
-# Step 3: Deploy to docs/index.html
+# Step 4: Deploy to docs/index.html
 echo ""
-echo "  [3/3] Deploying to docs/index.html..."
+echo "  [4/4] Deploying to docs/index.html..."
 cp reports/state-space-comparison.html docs/index.html
 echo "  Copied: reports/state-space-comparison.html -> docs/index.html"
 
