@@ -1777,7 +1777,7 @@ make_init_at_prior_edu_parallel <- function(stan_data) {
       # Spline coefficients (small, near-zero for smooth start)
       spline_coef_raw = matrix(rnorm(K_spline * N_edu, 0, 0.01),
                                nrow = K_spline, ncol = N_edu),
-      sigma_spline = abs(rnorm(N_edu, 0.03, 0.01)),
+      sigma_spline = abs(rnorm(N_edu, 0.3, 0.1)),
 
       # Equilibrium unemployment
       mu_logit_u_eq = rnorm(1, -3.3, 0.1),

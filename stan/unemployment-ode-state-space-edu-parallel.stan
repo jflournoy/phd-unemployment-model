@@ -404,7 +404,7 @@ model {
       spline_coef_raw[k, i] ~ normal(spline_coef_raw[k-1, i], sigma_spline[i]);
     }
   }
-  sigma_spline ~ normal(0, 0.05);  // Small innovation → smooth per edu
+  sigma_spline ~ exponential(3);  // Mean 0.33, allows data-informed smoothness per edu
 
   // Overdispersion
   log_phi_minus_1 ~ normal(8.5, 0.5);
