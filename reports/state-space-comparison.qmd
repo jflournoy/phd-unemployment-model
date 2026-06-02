@@ -1055,69 +1055,58 @@ This visualization compares three trajectories:
 3. **Pure ODE** (red): Only structural ODE dynamics - no innovations, no seasonality (shows what separation/finding rates alone predict)
 
 ```{r model-decomposition}
-#| fig-cap: "Model decomposition showing structural dynamics vs observed trajectory"
+#| fig-cap: "Model decomposition: equilibrium, trend (ODE + shocks), and full trajectory"
 #| fig-height: 10
 
-# Extract pure ODE trajectory
-pure_ode <- extract_pure_ode(result, summary = TRUE)
+# Extract time-varying equilibrium
+eq_trajectory <- result$fit$summary(variables = "u_eq")
+eq_trajectory$time_index <- as.integer(gsub("u_eq\\[(\\d+),\\d+\\]", "\\1", eq_trajectory$variable))
+eq_trajectory$edu_index <- as.integer(gsub("u_eq\\[\\d+,(\\d+)\\]", "\\1", eq_trajectory$variable))
+eq_trajectory$year_frac <- result$stan_data$year_frac[eq_trajectory$time_index]
+eq_trajectory$education <- result$stan_data$education_levels[eq_trajectory$edu_index]
 
-# Debug: Check data dimensions
-cat("Full model data rows:", nrow(plot_data), "\n")
-cat("Trend data rows:", nrow(trend_data), "\n")
-cat("Pure ODE data rows:", nrow(pure_ode), "\n")
-
-# Create separate data frames with only needed columns
-pure_ode_df <- data.frame(
-  year_frac = pure_ode$year_frac,
-  education = pure_ode$education,
-  rate = pure_ode$mean,
-  type = "Pure ODE"
-)
-
-full_df <- data.frame(
-  year_frac = plot_data$year_frac,
-  education = plot_data$education,
-  rate = plot_data$mean,
-  type = "Full Model"
+# Create plot data
+eq_df <- data.frame(
+  year_frac = eq_trajectory$year_frac,
+  education = eq_trajectory$education,
+  rate = eq_trajectory$median,
+  type = "Equilibrium (u_eq[t])"
 )
 
 trend_df <- data.frame(
   year_frac = trend_data$year_frac,
   education = trend_data$education,
   rate = trend_data$mean,
-  type = "Trend (no seasonal)"
+  type = "Trend (equilibrium + shocks)"
 )
 
-# Combine all
-decomp_data <- rbind(pure_ode_df, trend_df, full_df)
+full_df <- data.frame(
+  year_frac = plot_data$year_frac,
+  education = plot_data$education,
+  rate = plot_data$mean,
+  type = "Full Model (+ seasonal)"
+)
 
-# Debug: Check combined data
-cat("Combined data rows:", nrow(decomp_data), "\n")
-cat("Types present:", unique(decomp_data$type), "\n")
-
+decomp_data <- rbind(eq_df, trend_df, full_df)
 decomp_data$type <- factor(decomp_data$type,
-                           levels = c("Pure ODE", "Trend (no seasonal)", "Full Model"))
+                           levels = c("Equilibrium (u_eq[t])", "Trend (equilibrium + shocks)", "Full Model (+ seasonal)"))
 
-# Subset to key education levels
 decomp_subset <- decomp_data[decomp_data$education %in% sample_edu, ]
-cat("Subset rows:", nrow(decomp_subset), "\n")
-cat("Types in subset:", unique(as.character(decomp_subset$type)), "\n")
 
-# Plot with explicit linewidths (no aesthetic mapping)
 ggplot(decomp_subset, aes(x = year_frac, y = rate * 100, color = type)) +
   geom_line(linewidth = 0.8) +
   geom_vline(xintercept = c(2008.75, 2020.25), linetype = "dashed",
              color = "gray40", alpha = 0.5) +
   facet_wrap(~education, scales = "free_y", ncol = 1) +
-  scale_color_manual(values = c("Pure ODE" = "#E74C3C",
-                                "Trend (no seasonal)" = "#F39C12",
-                                "Full Model" = "#3498DB")) +
+  scale_color_manual(values = c("Equilibrium (u_eq[t])" = "#27AE60",
+                                "Trend (equilibrium + shocks)" = "#F39C12",
+                                "Full Model (+ seasonal)" = "#3498DB")) +
   scale_x_continuous(breaks = seq(2000, 2025, 5)) +
   labs(x = "Year",
        y = "Unemployment Rate (%)",
        color = "Model Component",
        title = "Decomposition of Unemployment Dynamics",
-       subtitle = "Red = pure ODE; Orange = trend + innovations; Blue = full model with seasonality") +
+       subtitle = "Green = time-varying equilibrium; Orange = equilibrium + shocks; Blue = full with seasonality") +
   theme(legend.position = "bottom",
         strip.text = element_text(size = 12, face = "bold"))
 ```
