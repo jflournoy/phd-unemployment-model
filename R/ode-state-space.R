@@ -1774,29 +1774,24 @@ make_init_at_prior_edu_parallel <- function(stan_data) {
     K_spline <- stan_data$K_spline
 
     list(
-      # Spline coefficients (small, near-zero for smooth start)
-      spline_coef_raw = matrix(rnorm(K_spline * N_edu, 0, 0.01),
-                               nrow = K_spline, ncol = N_edu),
-      sigma_spline = abs(rnorm(N_edu, 0.3, 0.1)),
-
-      # Equilibrium unemployment
-      mu_logit_u_eq = rnorm(1, -3.3, 0.1),
-      sigma_logit_u_eq = abs(rnorm(1, 0.15, 0.05)),
-      u_eq_raw = rnorm(N_edu, 0, 0.1),
+      # Time-varying equilibrium: spline coefficients (RW prior, start near zero with small noise)
+      u_eq_coef_raw = matrix(rnorm(K_spline * N_edu, 0, 0.01),
+                             nrow = K_spline, ncol = N_edu),
+      sigma_u_eq_spline = abs(rnorm(N_edu, 0.3, 0.1)),  # Mean ~0.33 matches exponential(3)
 
       # Adjustment speeds
       mu_log_adj_speed = rnorm(1, 2.3, 0.1),
-      sigma_log_adj_speed = abs(rnorm(1, 0.1, 0.03)),
+      sigma_log_adj_speed = abs(rnorm(1, 0.05, 0.02)),
       adj_speed_raw = rnorm(N_edu, 0, 0.1),
 
       # 2008 shock
       mu_log_shock_2008 = rnorm(1, -2, 0.1),
-      sigma_log_shock_2008 = abs(rnorm(1, 0.1, 0.03)),
+      sigma_log_shock_2008 = abs(rnorm(1, 0.05, 0.02)),
       shock_2008_raw = rnorm(N_edu, 0, 0.1),
 
       # 2020 shock
       mu_log_shock_2020 = rnorm(1, -1.5, 0.1),
-      sigma_log_shock_2020 = abs(rnorm(1, 0.1, 0.03)),
+      sigma_log_shock_2020 = abs(rnorm(1, 0.05, 0.02)),
       shock_2020_raw = rnorm(N_edu, 0, 0.1),
 
       # Decay rates
