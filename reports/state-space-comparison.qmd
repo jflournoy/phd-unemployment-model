@@ -66,18 +66,15 @@ safe_qread <- function(file, error_action = c("stop", "warn", "silent")) {
 }
 
 # Validate required model results exist
-# Check for edu-parallel model (preferred) or monotonic spline model
-edu_par_file <- here("models", "ode-state-space-edu-parallel-fit.rds")
-ms_file <- here("models", "ode-state-space-monotonic-spline-fit.qs")
-ms_file_rds <- here("models", "ode-state-space-monotonic-spline-fit.rds")
+edu_par_file <- here("models", "ode-state-space-edu-parallel-fit-v4.rds")
+edu_par_fallback <- here("models", "ode-state-space-edu-parallel-fit.rds")
 
-if (!file.exists(edu_par_file) && !file.exists(ms_file) && !file.exists(ms_file_rds)) {
+if (!file.exists(edu_par_file) && !file.exists(edu_par_fallback)) {
   stop(
-    "No fitted model found. Expected one of:\n",
-    "  ", edu_par_file, "\n",
-    "  ", ms_file, "\n",
-    "  ", ms_file_rds, "\n",
-    "Run the targets pipeline or fit the model manually.\n",
+    "No fitted model found. Expected:\n",
+    "  ", edu_par_file, " (time-varying equilibrium v4)\n",
+    "  ", edu_par_fallback, " (fallback)\n",
+    "Run Rscript R/refit-edu-parallel.R to fit the model.\n",
     call. = FALSE
   )
 }
@@ -109,14 +106,13 @@ stan_data <- prepare_stan_data(counts_data)
 
 # Load fitted model
 # Try multiple possible model file locations (support both .qs and .rds)
-K_SPLINE <- 25  # Spline basis functions
+K_SPLINE <- 10  # Spline basis functions for time-varying equilibrium
 
 result <- NULL
 possible_model_files <- c(
+  here("models", "ode-state-space-edu-parallel-fit-v4.rds"),
   here("models", "ode-state-space-edu-parallel-fit.rds"),
-  here("models", "ode-state-space-monotonic-spline-fit.qs"),
-  here("models", "ode-state-space-monotonic-spline-fit.rds"),
-  here("models", "ode_hierarchical_v2_fit.rds")
+  here("models", "ode-state-space-monotonic-spline-fit.rds")
 )
 
 for (f in possible_model_files) {
@@ -158,25 +154,30 @@ This report is currently under development. Not all statements, interpretations,
 
 ## Overview
 
-This report presents a hierarchical Bayesian state space model for unemployment dynamics across education levels. The model explicitly represents labor market flows through an ordinary differential equation (ODE) framework, with hierarchical pooling to share information across education groups.
+This report presents a hierarchical Bayesian state space model for unemployment dynamics across education levels. The model uses a **time-varying equilibrium** — constructed from a B-spline basis — that the ODE pulls unemployment toward. Shocks are cleanly identified as temporary deviations from this structural baseline.
 
 ### Key Features
 
 **Economic Foundation**
-- Explicit labor market dynamics: $\frac{dU}{dt} = s(1-U) - fU$
-- Separation rate ($s$): probability of job loss per month
-- Finding rate ($f$): probability of job finding per month
-- Equilibrium unemployment: $u^* = \frac{s}{s+f}$
+- Explicit labor market dynamics: $\frac{du}{dt} = \text{adj} \cdot (u_{\text{eq}}(t) - u)$
+- Time-varying equilibrium $u_{\text{eq}}(t)$ captures structural changes in education-specific labor markets
+- Adjustment speed ($\text{adj}$) controls convergence rate toward equilibrium
+- Shocks add to separation rate, creating transitory deviations
 
 **Hierarchical Structure**
-- Population-level means with education-specific deviations
-- Pooling strengthens inference for small groups
-- Hierarchical parameters: equilibrium unemployment, adjustment speed, shock magnitudes, recovery rates, seasonal effects, spline smoothness
+- Population-level means with education-specific deviations (non-centered parameterization)
+- Pooling strengthens inference for small groups (e.g., PhD, professional degrees)
+- Hierarchical parameters: adjustment speed, shock magnitudes, recovery rates, seasonal effects
 
 **Shock Modeling**
-- Explicit shock effects on separation rates (2008, 2020)
-- Education-specific shock magnitudes with pooling
-- Decay parameters capture recovery dynamics
+- Explicit shock effects on separation rates (2008 financial crisis, 2020 COVID-19)
+- Education-specific shock magnitudes with strong hierarchical pooling
+- Decay parameters capture recovery dynamics (education-specific half-lives)
+
+**Spline-Based Equilibrium**
+- B-spline basis (K=10) constructs smooth time-varying $u_{\text{eq}}(t)$
+- Random walk prior on spline coefficients for adaptive smoothness
+- Replaces the previous constant-equilibrium + separate-spline architecture
 
 **Technical Innovations**
 - Spline basis for smooth residual variation (25 basis functions)
@@ -257,105 +258,84 @@ The shaded bands show 90% credible intervals.
 knitr::include_graphics("figures/residual-observation.png")
 ```
 
-**Spline component** (`u_trend - u_ode_pure`): The part of the de-seasonalized trend
-that the B-spline contributes beyond the ODE dynamics. This is what the spline
-is "explaining" that the equilibrium + shock dynamics cannot.
+**Equilibrium trajectory** (`u_eq[t]`): The time-varying structural unemployment rate
+toward which the ODE pulls. Constructed from a B-spline basis with a random walk prior
+for smoothness, this replaces the previous constant-equilibrium + separate-spline-deviation
+architecture.
 
 ```{r fig-residual-spline, fig.cap="Spline component: what the B-spline adds beyond ODE dynamics"}
 knitr::include_graphics("figures/residual-spline-component.png")
 ```
 
-> **Note:** A B-spline boundary bug in the initial fit caused all spline deviations
-> to be forced to zero at the final time point (April 2026), creating an artificial
-> jump in the spline component for "less than high school." This has been fixed in
-> the latest refit (`t_max` offset by 1e-6 to avoid exact boundary coincidence).
+> **Note:** In the current model (v4), there is no separate "spline component." The
+> B-spline constructs the time-varying equilibrium $u_{\text{eq}}(t)$ directly. The
+> residual plot above was generated from the previous model architecture and is kept
+> for reference. Updated figures will replace this in a future render.
 
-## Model Structure: A Comprehensive Mathematical Walkthrough
+## Model Structure: Time-Varying Equilibrium
 
-This section provides a detailed explanation of the Stan model, including the economic theory, mathematical derivations, and implementation details.
+This section explains the model architecture and the economic theory behind it.
 
 ### 1. Economic Foundation: Labor Market Flow Dynamics
 
-The model is built on the **stock-flow** framework from labor economics. At any point in time, the labor force is divided into two stocks: employed ($E$) and unemployed ($U$), with $E + U = L$ (total labor force). Workers flow between these states:
+#### 1.1 The ODE with Time-Varying Equilibrium
 
-```
-       separation (s)
-  E ─────────────────────→ U
-    ←────────────────────
-       finding (f)
-```
+The fundamental equation is:
 
-#### 1.1 The Continuous-Time ODE
+$$\frac{du}{dt} = s^{\text{eff}}(t) \cdot (1-u) - f(t) \cdot u$$
 
-The rate of change in unemployment follows the ordinary differential equation:
+where the flow rates derive from a **time-varying equilibrium** $u_{\text{eq}}(t)$:
 
-$$\frac{dU}{dt} = s \cdot E - f \cdot U = s \cdot (L - U) - f \cdot U$$
+$$s(t) = u_{\text{eq}}(t) \cdot \text{adj}$$
+$$f(t) = (1 - u_{\text{eq}}(t)) \cdot \text{adj}$$
 
-Dividing by $L$ to get rates (lowercase $u = U/L$):
+The adjustment speed $\text{adj} = s + f$ controls how fast $u$ converges toward $u_{\text{eq}}(t)$. The ODE simplifies to:
 
-$$\frac{du}{dt} = s \cdot (1-u) - f \cdot u$$
+$$\frac{du}{dt} = \text{adj} \cdot (u_{\text{eq}}(t) - u)$$
 
-**Term-by-term interpretation:**
+**Key insight:** $u_{\text{eq}}(t)$ absorbs slow structural changes in labor markets (de-industrialization, education polarization, etc.), while shocks create transitory deviations. There is no separate "spline deviation" fighting with the equilibrium for identifiability.
 
-- $s \cdot (1-u)$: **Inflow to unemployment** — employed workers (fraction $1-u$) lose jobs at rate $s$
-- $f \cdot u$: **Outflow from unemployment** — unemployed workers (fraction $u$) find jobs at rate $f$
-- Net change = inflow − outflow
+#### 1.2 Time-Varying Equilibrium via B-Splines
 
-#### 1.2 Equilibrium Analysis
+$u_{\text{eq}}(t)$ is constructed from a cubic B-spline basis:
 
-At equilibrium, $\frac{du}{dt} = 0$, so:
+$$\text{logit}(u_{\text{eq},i}(t)) = \sum_{k=1}^{K} \beta_{k,i} \cdot B_k(t)$$
 
-$$s \cdot (1-u^*) = f \cdot u^*$$
+where $B_k(t)$ are B-spline basis functions ($K=10$), and $\beta_{k,i}$ are education-specific coefficients with a **random walk prior** for smoothness:
 
-Solving for $u^*$:
+$$\beta_{1,i} \sim \text{Normal}(-3, 1)$$
+$$\beta_{k,i} \sim \text{Normal}(\beta_{k-1,i}, \sigma^{\text{spline}}_i) \quad \text{for } k = 2, ..., K$$
+$$\sigma^{\text{spline}}_i \sim \text{Exponential}(3)$$
 
-$$s - s \cdot u^* = f \cdot u^*$$
-$$s = u^* \cdot (s + f)$$
-$$\boxed{u^* = \frac{s}{s + f}}$$
+This prior penalizes rapid changes in the equilibrium trajectory, producing smooth curves that capture decade-scale structural trends without overfitting.
 
-**Economic implications:**
-
-- If $s = 0.02$ (2% monthly separation) and $f = 0.30$ (30% monthly finding): $u^* = 0.02/(0.02+0.30) = 6.25\%$
-- **Higher education** → Lower $s$, higher $f$ → Lower equilibrium unemployment
-- **Shocks** temporarily increase $s$ → Push $u$ above equilibrium
-
-#### 1.3 Dynamics: Speed of Adjustment
-
-The ODE can be rewritten as:
-
-$$\frac{du}{dt} = s - (s + f) \cdot u = (s + f) \cdot \left(\frac{s}{s+f} - u\right) = (s + f) \cdot (u^* - u)$$
-
-This shows that $u$ moves toward $u^*$ at rate $(s + f)$. The **half-life** of adjustment is:
-
-$$t_{1/2} = \frac{\ln(2)}{s + f}$$
-
-With $s + f \approx 0.32$ per month, the half-life is about 2 months — unemployment adjusts quickly to equilibrium.
-
-### 2. Extending the Basic Model
-
-The real world is more complex. We extend the model with:
+### 2. Extending the Model
 
 #### 2.1 Education Heterogeneity
 
-Different education levels have different labor market characteristics:
+Each of the 7 education levels has its own:
+- B-spline coefficients $\beta_{k,i}$ → time-varying equilibrium $u_{\text{eq},i}(t)$
+- Adjustment speed $\text{adj}_i$ (hierarchical)
+- Shock effects and decay rates (hierarchical)
+- Seasonal pattern (hierarchical)
 
-$$\frac{du_i}{dt} = s_i \cdot (1-u_i) - f_i \cdot u_i$$
+All use **non-centered hierarchical priors** for efficient sampling:
 
-where $i$ indexes education level. We use **hierarchical priors**:
-
-$$s_i \sim \text{Normal}(\mu_s, \sigma_s) \quad \text{with } \mu_s \sim \text{Normal}(0.02, 0.01)$$
-
-This allows education levels to share information while having distinct rates.
+$$\text{adj}_i = \exp(\mu_{\text{adj}} + \sigma_{\text{adj}} \cdot z_i^{\text{adj}}) \quad \text{with } z_i^{\text{adj}} \sim \text{Normal}(0,1)$$
 
 #### 2.2 Economic Shocks
 
-During recessions, separation rates spike. We model this as:
+During recessions, separation rates spike above the time-varying baseline:
 
-$$s_i^{\text{eff}}(t) = s_i + I_{2008}(t) \cdot \delta_{2008,i} + I_{2020}(t) \cdot \delta_{2020,i}$$
+$$s_i^{\text{eff}}(t) = s_i(t) + I_{2008}(t) \cdot \delta_{2008,i} + I_{2020}(t) \cdot \delta_{2020,i}$$
 
-where $I(t)$ is a **shock impulse function** and $\delta_i$ is the education-specific shock effect.
+where $s_i(t) = u_{\text{eq},i}(t) \cdot \text{adj}_i$ is the baseline separation rate, $I(t)$ is the **shock impulse function**, and $\delta_i$ are education-specific shock magnitudes with **strong hierarchical pooling**:
 
-**Impulse function design** (for 2008):
+$$\delta_{2008,i} = \exp(\mu_{2008} + \sigma_{2008} \cdot z_i^{2008}), \quad \sigma_{2008} \sim \text{Exponential}(20)$$
+
+The tight prior on $\sigma$ (mean 0.05) reflects the economic prior that macro shocks affect all education groups similarly.
+
+**Impulse function** (for 2008, analogous for 2020):
 
 $$I_{2008}(t) = \begin{cases}
 0 & t < t_{\text{onset}} \\
@@ -363,245 +343,173 @@ $$I_{2008}(t) = \begin{cases}
 e^{-\lambda_i (t - t_{\text{peak}})} & t > t_{\text{peak}}
 \end{cases}$$
 
-- **Before onset** ($t < 2007.75$): No effect
-- **Rise phase** ($2007.75 \leq t \leq 2009.5$): Linear rise as crisis develops
-- **Decay phase** ($t > 2009.5$): Exponential recovery with **education-specific** decay rate $\lambda_i$
-
-The half-life of recovery is $t_{1/2} = \ln(2)/\lambda_i$. Different education levels may recover at different speeds.
+The half-life of recovery is $t_{1/2} = \ln(2)/\lambda_i$, with decay rates also hierarchically pooled.
 
 #### 2.3 Seasonal Effects
 
-The model includes a **direct seasonal effect on unemployment** (on the logit scale):
+Monthly seasonal effects are added directly on the logit scale after the ODE step:
 
-$$\text{logit}(u_{t,i}) = \text{logit}(u_{t-1,i}) + \Delta u_{t,i} + \gamma^u_{m(t),i} + \epsilon_{t,i}$$
+$$\text{logit}(u_{t,i}) = \text{logit}(u_{t-1,i}) + \Delta u_{t,i} + \gamma_{m(t),i}$$
 
-This captures observed seasonal patterns such as academic calendar effects for PhDs, summer employment fluctuations, and annual hiring cycles. Prior: $\gamma^u_{m,i} \sim \text{Normal}(0, 0.05)$ with a sum-to-zero constraint.
+with a hierarchical sum-to-zero structure:
 
-**Design choice**: We use a direct effect on unemployment rather than modulating the finding rate because the two approaches are not separately identifiable from the data. The direct approach is simpler and more flexible.
+$$\gamma_{1:11,i} = \mu_{\text{seas}} + \sigma_{\text{seas}} \cdot z_i^{\text{seas}}, \quad \gamma_{12,i} = -\sum_{m=1}^{11} \gamma_{m,i}$$
 
 #### 2.4 State Space Formulation
 
-We observe **counts** (binomial samples from the latent unemployment rate), not the true rate. The model has two layers:
+We observe **counts** (binomial samples from the latent unemployment rate), not the true rate.
 
-**Process model** (latent state evolution):
-$$\text{logit}(u_{t,i}) = \text{logit}(u_{t-1,i}) + \Delta u_{t,i} + \epsilon_{t,i}$$
+**Process model** (discrete-time evolution):
+$$\text{logit}(u_{t,i}) = \text{logit}(u_{t-1,i}) + \Delta u_{t,i} + \gamma_{m(t),i}$$
 
-where:
-- $\Delta u_{t,i}$ is the ODE-predicted change
-- $\epsilon_{t,i} \sim \text{Normal}(0, \sigma_{\text{state}})$ is the **innovation** (captures unexplained dynamics)
+where $\Delta u_{t,i} = \text{adj}_i \cdot (u_{\text{eq},i}(t) - u_{t-1,i}) + \text{shocks}$ is the ODE-predicted change. No separate innovation term — the time-varying equilibrium plus shocks capture all systematic dynamics.
 
-**Observation model** (data likelihood):
+**Observation model**:
 $$n_{\text{unemployed},t,i} \sim \text{Beta-Binomial}(n_{\text{total},t,i}, u_{t,i} \cdot \phi, (1-u_{t,i}) \cdot \phi)$$
 
-The **beta-binomial** distribution allows for overdispersion (more variance than binomial) through parameter $\phi$.
+The beta-binomial allows overdispersion through $\phi$.
 
-### 3. Stan Implementation: Block by Block
+### 3. Stan Implementation
 
-The Stan model implements this in several blocks:
+The full model is in [`stan/unemployment-ode-state-space-edu-parallel.stan`](stan/unemployment-ode-state-space-edu-parallel.stan).
 
-#### 3.1 Functions Block
-
-```stan
-functions {
-  real shock_impulse(real t, real onset, real peak, real decay_rate) {
-    if (t < onset) return 0;
-    else if (t <= peak) return (t - onset) / (peak - onset);
-    else return exp(-decay_rate * (t - peak));
-  }
-}
-```
-
-This defines the impulse response function $I(t)$ for shocks.
-
-#### 3.2 Data Block
-
-```stan
-data {
-  int<lower=1> T;                           // Time points (months)
-  int<lower=1> N_edu;                       // Education levels
-  array[T, N_edu] int<lower=0> n_unemployed; // Counts
-  array[T, N_edu] int<lower=0> n_total;      // Denominators
-  array[T] int<lower=1, upper=12> month;     // For seasonality
-  array[T] real<lower=0> year_frac;          // Continuous time
-  // Shock timing...
-}
-```
-
-#### 3.3 Transformed Data Block
-
-Pre-computes shock rise phases and time-since-peak for efficiency:
-
-```stan
-transformed data {
-  array[T] real shock_2008_rise;
-  array[T] real time_since_2008_peak;
-  // ... (computed from onset/peak timing)
-}
-```
-
-#### 3.4 Parameters Block
+#### 3.1 Key Parameters
 
 ```stan
 parameters {
-  // Latent states
-  vector[N_edu] logit_u_init;              // Initial unemployment
-  array[T-1] vector[N_edu] logit_u_innov;  // Innovations
+  // Time-varying equilibrium (B-spline coefficients)
+  matrix[K_spline, N_edu] u_eq_coef_raw;        // Spline coefs per edu
+  vector<lower=0>[N_edu] sigma_u_eq_spline;      // Smoothness per edu
 
-  // Separation rates (hierarchical)
-  real<lower=0> mu_separation;
-  real<lower=0> sigma_separation;
-  vector<lower=0, upper=0.2>[N_edu] separation_rate;
+  // Adjustment speeds (hierarchical, non-centered)
+  real mu_log_adj_speed;
+  real<lower=0> sigma_log_adj_speed;
+  vector[N_edu] adj_speed_raw;
 
-  // Finding rates (hierarchical)
-  real<lower=0> mu_finding;
-  real<lower=0> sigma_finding;
-  vector<lower=0, upper=1>[N_edu] finding_rate;
+  // Shock effects (hierarchical, non-centered, strong pooling)
+  real mu_log_shock_2008;
+  real<lower=0> sigma_log_shock_2008;
+  vector[N_edu] shock_2008_raw;
+  // ... same for 2020
 
-  // Shock effects (education-specific)
-  vector<lower=0>[N_edu] shock_2008_effect;
-  vector<lower=0>[N_edu] shock_2020_effect;
-  vector<lower=0.1, upper=5>[N_edu] decay_2008;  // Education-specific decay
-  vector<lower=0.1, upper=5>[N_edu] decay_2020;
+  // Decay rates (hierarchical, non-centered)
+  real mu_decay_2008;
+  real<lower=0> sigma_decay_2008;
+  vector[N_edu] decay_2008_raw;
+  // ... same for 2020
 
-  // Seasonal effects (11 free, 12th constrained)
-  matrix[11, N_edu] seasonal_raw;
+  // Seasonal effects (hierarchical, non-centered)
+  vector[11] mu_seasonal;
+  real<lower=0> sigma_seasonal;
+  matrix[11, N_edu] seasonal_u_raw;
 
-  // Noise parameters
-  real<lower=0> sigma_state;
-  real<lower=1> phi;
+  // Initial states and dispersion
+  vector[N_edu] logit_u_init;
+  real log_phi_minus_1;
 }
 ```
 
-#### 3.5 Transformed Parameters Block
+#### 3.2 Transformed Parameters
 
-This is where the ODE dynamics are computed:
+The time-varying equilibrium is constructed from the B-spline basis:
 
 ```stan
 transformed parameters {
-  array[T] vector<lower=0, upper=1>[N_edu] u;
-  matrix[12, N_edu] seasonal;
-  array[T] vector[N_edu] logit_u;
-  array[T] vector[N_edu] shock_2008_intensity;
-  array[T] vector[N_edu] shock_2020_intensity;
-
-  // Build sum-to-zero seasonal constraint
+  matrix[T, N_edu] logit_u_eq;
+  matrix[T, N_edu] u_eq;
   for (i in 1:N_edu) {
-    seasonal[1:11, i] = seasonal_raw[, i];
-    seasonal[12, i] = -sum(seasonal_raw[, i]);
+    logit_u_eq[, i] = B_spline * u_eq_coef_raw[, i];
+    u_eq[, i] = inv_logit(logit_u_eq[, i]);
   }
 
-  // Compute education-specific shock intensities
-  for (t in 1:T) {
-    for (i in 1:N_edu) {
-      shock_2008_intensity[t][i] = shock_2008_rise[t] *
-        exp(-decay_2008[i] * time_since_2008_peak[t]);
-      shock_2020_intensity[t][i] = shock_2020_rise[t] *
-        exp(-decay_2020[i] * time_since_2020_peak[t]);
-    }
-  }
+  // Adjustment speeds
+  adj_speed[i] = exp(mu_log_adj_speed + sigma_log_adj_speed * adj_speed_raw[i]);
 
-  // Initialize
-  logit_u[1] = logit_u_init;
-  u[1] = inv_logit(logit_u[1]);
+  // Shock effects
+  shock_2008_effect[i] = exp(mu_log_shock_2008 + sigma_log_shock_2008 * shock_2008_raw[i]);
 
-  // State evolution
-  for (t in 2:T) {
-    for (i in 1:N_edu) {
-      // Effective separation rate
-      real s_eff = separation_rate[i]
-                   + shock_2008_intensity[t][i] * shock_2008_effect[i]
-                   + shock_2020_intensity[t][i] * shock_2020_effect[i];
-
-      // Effective finding rate with seasonal
-      real f_eff = finding_rate[i] * (1 + seasonal[month[t], i]);
-
-      // Discretized ODE
-      real du_dt = s_eff * (1 - u[t-1][i]) - f_eff * u[t-1][i];
-
-      // Evolution with innovation
-      logit_u[t][i] = logit_u[t-1][i] + du_dt + logit_u_innov[t-1][i];
-    }
-    u[t] = inv_logit(logit_u[t]);
-  }
+  // Seasonal effects with sum-to-zero
+  seasonal_u[1:11, i] = mu_seasonal + sigma_seasonal * seasonal_u_raw[, i];
+  seasonal_u[12, i] = -sum(seasonal_u[1:11, i]);
 }
 ```
 
-#### 3.6 Model Block (Priors and Likelihood)
+#### 3.3 ODE Computation (Inside reduce_sum)
+
+The ODE is evaluated at each time step using the time-varying equilibrium:
 
 ```stan
-model {
-  // === PRIORS ===
+// Inside the partial function, per time step:
+real u_eq_t = inv_logit(logit_u_eq[t, edu]);
+real u_eq_safe = fmin(fmax(u_eq_t, 1e-6), 1 - 1e-6);
 
-  // Separation rates (1-3% per month from literature)
-  mu_separation ~ normal(0.02, 0.01);
-  sigma_separation ~ exponential(50);
-  separation_rate ~ normal(mu_separation, sigma_separation);
+// Flow rates from time-varying equilibrium
+real s_base = u_eq_safe * adj_speed[edu];
+real f_base = (1 - u_eq_safe) * adj_speed[edu];
 
-  // Finding rates (20-40% per month)
-  mu_finding ~ normal(0.30, 0.10);
-  sigma_finding ~ exponential(5);
-  finding_rate ~ normal(mu_finding, sigma_finding);
+// Add shock contributions
+real s_eff = s_base
+             + shock_2008_intensity * shock_2008_effect[edu]
+             + shock_2020_intensity * shock_2020_effect[edu];
 
-  // Shock effects (positive by constraint)
-  shock_2008_effect ~ normal(0.02, 0.01);
-  shock_2020_effect ~ normal(0.03, 0.015);
+// ODE: du/dt = s_eff*(1-u) - f_base*u
+real du_dt = s_eff * (1 - u_curr) - f_base * u_curr;
 
-  // Decay rates (education-specific)
-  decay_2008 ~ normal(0.5, 0.3);
-  decay_2020 ~ normal(1.0, 0.5);
-
-  // Seasonal effects (substantial amplitude allowed)
-  to_vector(seasonal_raw) ~ normal(0, 0.15);
-
-  // State innovations
-  sigma_state ~ exponential(20);
-  for (t in 1:(T-1)) {
-    logit_u_innov[t] ~ normal(0, sigma_state);
-  }
-
-  // Overdispersion
-  phi ~ exponential(0.05);
-
-  // === LIKELIHOOD ===
-
-  for (t in 1:T) {
-    for (i in 1:N_edu) {
-      if (n_total[t, i] > 0) {
-        real u_safe = fmin(fmax(u[t][i], 1e-6), 1 - 1e-6);
-        n_unemployed[t, i] ~ beta_binomial(n_total[t, i],
-                                            u_safe * phi,
-                                            (1 - u_safe) * phi);
-      }
-    }
-  }
-}
+// State evolution: ODE + seasonal (no separate spline)
+logit_u_curr = logit_u_curr + du_dt + seasonal_u[month[t], edu];
+u_curr = inv_logit(logit_u_curr);
 ```
 
-#### 3.7 Generated Quantities Block
+#### 3.4 Priors
 
-Computes derived quantities and model decomposition:
+```stan
+// Time-varying equilibrium: RW prior for smooth trajectories
+u_eq_coef_raw[1, i] ~ normal(-3.0, 1.0);   // ~5% initial equilibrium
+u_eq_coef_raw[k, i] ~ normal(u_eq_coef_raw[k-1, i], sigma_u_eq_spline[i]);
+sigma_u_eq_spline ~ exponential(3);         // Moderate smoothness
 
-- **Equilibrium rates**: $u^*_i = s_i / (s_i + f_i)$
+// Strong hierarchical pooling (tight sigma priors = shared across groups)
+mu_log_adj_speed ~ normal(2.3, 0.25);
+sigma_log_adj_speed ~ exponential(20);       // Mean 0.05
+adj_speed_raw ~ std_normal();
+
+mu_log_shock_2008 ~ normal(-2, 0.8);
+sigma_log_shock_2008 ~ exponential(20);      // Strong pooling on shocks
+shock_2008_raw ~ std_normal();
+
+// ... analogous for 2020 shock, decay rates, seasonal effects
+
+logit_u_init ~ normal(-3.0, 0.5);
+log_phi_minus_1 ~ normal(8.5, 0.5);
+```
+
+#### 3.5 Parallelization
+
+The model uses Stan's `reduce_sum` to parallelize across education levels. Each thread computes the complete trajectory + likelihood for one or more education levels, since education levels are independent in the ODE computation. See the multi-threading section below for performance details.
+
+#### 3.6 Generated Quantities
+
+- **u_eq_mean**: Time-averaged equilibrium per education level
 - **Half-lives**: $t_{1/2} = \ln(2) / \lambda_i$ (education-specific)
-- **Trend trajectory**: Evolution without seasonal effects
-- **Pure ODE trajectory**: Evolution without innovations or seasonality
-- **Seasonal effects**: Difference between full model and trend
+- **Full trajectory u[t, edu]**: ODE + shocks + seasonal
+- **Trend u_trend[t, edu]**: ODE + shocks (no seasonal)
+- **Seasonal effect**: Difference between full and trend
 - **Log-likelihood**: For LOO cross-validation
 - **Posterior predictive**: For model checking
 
 ### 4. Why This Model Succeeds Where GAM Fails
 
-| Feature | GAM Approach | State Space Model |
-|---------|-------------|-------------------|
-| **Shock mechanism** | Indicator variable (absorbed by trend) | Explicit ODE term with decay |
-| **Temporal structure** | Smooth function (static) | Dynamic state evolution |
-| **Prior information** | Penalty on curvature | Informative economic priors |
-| **Shock identification** | Competes with 501-EDF trend | Structurally separated from trend |
-| **Interpretation** | Abstract smooth values | Separation/finding rates |
+| Feature | GAM Approach | Time-Varying Equilibrium Model |
+|---------|-------------|-------------------------------|
+| **Shock mechanism** | Indicator variable (absorbed by trend) | Explicit ODE term with decay, structurally separated |
+| **Temporal structure** | Smooth function (static) | Dynamic ODE + time-varying equilibrium |
+| **Equilibrium** | Not modeled | B-spline $u_{\text{eq}}(t)$ with RW smoothness prior |
+| **Interpretation** | Abstract smooth values | Adjustment speed, shock magnitude, recovery half-life |
 | **Recovery dynamics** | Not modeled | Education-specific decay rates |
-| **Seasonality** | Cyclic smooth | Finding rate multiplier |
+| **Seasonality** | Cyclic smooth | Hierarchical monthly effects on logit scale |
+| **Identifiability** | N/A | Clean separation: equilibrium absorbs trends, shocks are transitory |
 
-**The fundamental insight**: By building economic structure into the model (separation → unemployment → finding), shock effects have a clear mechanistic role. The explicit ODE dynamics provide interpretable estimates of labor market flows.
+**The fundamental insight**: By making the equilibrium time-varying rather than constant, the model cleanly separates structural labor market changes (absorbed by $u_{\text{eq}}(t)$) from transitory shock effects. No separate spline deviation fights the ODE for the same variation.
 
 ## Hierarchical Parameter Structure
 
@@ -609,53 +517,49 @@ The model uses hierarchical priors to pool information across education levels, 
 
 ### Hierarchical Parameters
 
-**1. Equilibrium Unemployment ($u_{eq}$)**
+**1. Time-Varying Equilibrium ($u_{eq}(t)$)**
 ```
-μ_logit_u_eq ~ Normal(-3.3, 0.3)           # Population mean (logit scale)
-σ_logit_u_eq ~ Exponential(2)              # Between-education SD
-logit_u_eq[i] = μ_logit_u_eq + σ_logit_u_eq * u_eq_raw[i]
+u_eq_coef_raw[1, i] ~ Normal(-3.0, 1.0)       # Initial level (wide prior, ~5%)
+u_eq_coef_raw[k, i] ~ Normal(u_eq_coef_raw[k-1, i], sigma_u_eq_spline[i])  # RW smoothness
+sigma_u_eq_spline[i] ~ Exponential(3)          # Per-edu smoothness (mean 0.33)
+logit_u_eq[t, i] = sum_k B_spline[t, k] * u_eq_coef_raw[k, i]
 ```
-- Centers on ~3.5% equilibrium unemployment
-- Allows education-specific deviations
-- Non-centered for efficient sampling
+- B-spline basis (K=10) constructs smooth time-varying equilibrium
+- Random walk prior penalizes rapid changes → decade-scale trends
+- Each education level has its own trajectory with adaptive smoothness
+- Replaces the previous constant equilibrium + separate spline deviation
 
-**2. Adjustment Speed ($s + f$)**
+**2. Adjustment Speed (adj)**
 ```
-μ_log_adj_speed ~ Normal(2.3, 0.5)         # Population mean (log scale)
-σ_log_adj_speed ~ Exponential(1)           # Between-education SD
+μ_log_adj_speed ~ Normal(2.3, 0.25)            # Population mean (log scale)
+σ_log_adj_speed ~ Exponential(20)              # Strong pooling (mean 0.05)
 log_adj_speed[i] = μ_log_adj_speed + σ_log_adj_speed * adj_speed_raw[i]
 ```
-- Data-informed prior: exp(2.3) ≈ 10
-- Controls speed of adjustment to equilibrium
-- Note: implicitly scaled ~30x by logit dynamics
+- exp(2.3) ≈ 10 per month — data-informed from prior fits
+- Controls speed of convergence toward $u_{\text{eq}}(t)$
+- Strong hierarchical pooling (Exponential(20)) prevents identifiability issues
+- Higher education → higher adjustment speed (more fluid labor markets)
 
 **3. Shock Magnitudes (2008, 2020)**
 ```
-μ_log_shock_2008 ~ Normal(-2, 0.8)         # Population mean
-σ_log_shock_2008 ~ Exponential(1)          # Between-education SD
-log_shock_2008[i] = μ_log_shock_2008 + σ_log_shock_2008 * shock_2008_raw[i]
-
-μ_log_shock_2020 ~ Normal(-1.5, 0.8)       # Population mean
-σ_log_shock_2020 ~ Exponential(1)          # Between-education SD
-log_shock_2020[i] = μ_log_shock_2020 + σ_log_shock_2020 * shock_2020_raw[i]
+μ_log_shock_2008 ~ Normal(-2, 0.8)              # Population mean
+σ_log_shock_2008 ~ Exponential(20)              # Strong pooling (mean 0.05)
+shock_2008_effect[i] = exp(μ_log_shock_2008 + σ_log_shock_2008 * shock_2008_raw[i])
 ```
-- Pools shock effects across education levels
-- 2008: exp(-2) ≈ 0.14 (14% increase in separation rate)
-- 2020: exp(-1.5) ≈ 0.22 (22% increase in separation rate)
+- Strong hierarchical pooling reflects the prior that macro shocks affect all education groups similarly
+- 2008: exp(-2) ≈ 0.14 (14% increase in separation rate at population mean)
+- 2020: exp(-1.5) ≈ 0.22 (22% increase at population mean)
+- Between-group variation tightly constrained by Exponential(20) prior
 
 **4. Recovery Rates (Decay)**
 ```
-μ_decay_2008 ~ Normal(0, 0.5)              # Population mean (logit scale)
-σ_decay_2008 ~ Exponential(1)              # Between-education SD
+μ_decay_2008 ~ Normal(0, 0.5)               # Population mean (logit scale)
+σ_decay_2008 ~ Exponential(5)               # Moderate pooling
 decay_2008[i] = 0.1 + 4.9 * inv_logit(μ_decay_2008 + σ_decay_2008 * decay_2008_raw[i])
-
-μ_decay_2020 ~ Normal(0, 0.5)              # Population mean (logit scale)
-σ_decay_2020 ~ Exponential(1)              # Between-education SD
-decay_2020[i] = 0.1 + 4.9 * inv_logit(μ_decay_2020 + σ_decay_2020 * decay_2020_raw[i])
 ```
 - Constrained to [0.1, 5] range
-- Centers on ~2.5 (moderate recovery)
-- Pooling prevents overfitting with limited shock data
+- Centers on ~2.5 on logit scale → decay ≈ 2.55 (moderate recovery)
+- Half-life: $t_{1/2} = \ln(2) / \text{decay}$ in years
 
 **5. Seasonal Effects**
 ```
@@ -669,16 +573,14 @@ seasonal_u[1:11, i] = μ_seasonal + σ_seasonal * seasonal_u_raw[, i]
 - 12th month derived: `seasonal_u[12, i] = -sum(seasonal_u[1:11, i])`
 - Modest effects (~1-3% on logit scale)
 
-**6. Spline Smoothness (σ_spline)**
+**6. Equilibrium Smoothness ($\sigma^{\text{spline}}$)**
 ```
-μ_log_sigma_spline ~ Normal(-0.22, 0.4)   # Population mean on log scale
-σ_log_sigma_spline ~ Exponential(2)       # Between-education SD (mean = 0.5)
-sigma_spline[i] = exp(μ_log_sigma_spline + σ_log_sigma_spline * sigma_spline_raw[i])
+sigma_u_eq_spline[i] ~ Exponential(3)      # Per-edu smoothness (mean 0.33)
 ```
-- Education-specific residual smoothness on spline coefficients
-- PhDs may have smoother trajectories than less-educated workers
-- Data-informed: exp(-0.22) ≈ 0.8 from exploratory fits
-- Hierarchical pooling prevents overfitting of smoothness parameters
+- Controls how much the equilibrium can change per B-spline knot
+- Smaller values = smoother equilibrium trajectory
+- Moderate prior (Exponential(3)) allows data-informed smoothness
+- Each education level gets its own smoothness parameter
 
 ### Non-Hierarchical Parameters
 
@@ -848,56 +750,51 @@ if (length(result$diagnostics$ebfmi) < 4) {
 
 ## Economic Parameter Estimates
 
-### Separation and Finding Rates
+### Adjustment Speed and Equilibrium
 
-The model estimates education-specific job separation rates (probability of losing a job per month) and job finding rates (probability of finding a job per month while unemployed).
+The model estimates education-specific adjustment speeds and time-averaged equilibrium unemployment rates.
 
 ```{r economic-params}
-params <- extract_economic_params(result)
+# Extract parameter summaries directly
+N_edu <- result$stan_data$N_edu
+edu_levels <- result$stan_data$education_levels
 
-# Separation rates
-cat("\n=== Monthly Job Separation Rates ===\n")
-sep_summary <- params$separation_rates
-sep_summary$education <- stan_data$education_levels
-print(sep_summary[, c("education", "mean", "q5", "q95")], digits = 4)
+# Adjustment speeds
+cat("\n=== Adjustment Speeds (adj = s + f, monthly) ===\n")
+adj_summary <- result$fit$summary(variables = paste0("adj_speed[", 1:N_edu, "]"))
+adj_summary$education <- edu_levels
+print(adj_summary[, c("education", "median", "q5", "q95")], digits = 3)
 
-# Finding rates
-cat("\n=== Monthly Job Finding Rates ===\n")
-find_summary <- params$finding_rates
-find_summary$education <- stan_data$education_levels
-print(find_summary[, c("education", "mean", "q5", "q95")], digits = 3)
-
-# Equilibrium unemployment
-cat("\n=== Equilibrium Unemployment Rates ===\n")
-cat("(Long-run steady state: u* = s/(s+f))\n\n")
-eq_summary <- params$equilibrium_rates
-eq_summary$education <- stan_data$education_levels
-print(eq_summary[, c("education", "mean", "q5", "q95")], digits = 4)
+# Time-averaged equilibrium
+cat("\n=== Mean Equilibrium Unemployment Rates ===\n")
+cat("(Time-average of u_eq[t] over the full period)\n\n")
+eq_summary <- result$fit$summary(variables = paste0("u_eq_mean[", 1:N_edu, "]"))
+eq_summary$education <- edu_levels
+print(eq_summary[, c("education", "median", "q5", "q95")], digits = 4)
 ```
 
 ```{r plot-equilibrium}
-#| fig-cap: "Equilibrium unemployment rates by education level (with 90% credible intervals)"
+#| fig-cap: "Time-averaged equilibrium unemployment rates by education level"
 
 eq_df <- data.frame(
-  education = stan_data$education_levels,
-  mean = eq_summary$mean,
+  education = edu_levels,
+  median = eq_summary$median,
   lower = eq_summary$q5,
   upper = eq_summary$q95
 )
 
-# Order by mean rate
 eq_df$education <- factor(eq_df$education,
-                          levels = eq_df$education[order(eq_df$mean)])
+                          levels = eq_df$education[order(eq_df$median)])
 
-ggplot(eq_df, aes(x = education, y = mean * 100)) +
+ggplot(eq_df, aes(x = education, y = median * 100)) +
   geom_point(size = 4, color = "steelblue") +
   geom_errorbar(aes(ymin = lower * 100, ymax = upper * 100),
                 width = 0.2, linewidth = 1, color = "steelblue") +
   coord_flip() +
   labs(x = "Education Level",
-       y = "Equilibrium Unemployment Rate (%)",
-       title = "Long-Run Unemployment Rates by Education",
-       subtitle = "Based on estimated separation and finding rates") +
+       y = "Mean Equilibrium Unemployment Rate (%)",
+       title = "Structural Unemployment Rates by Education",
+       subtitle = "Time-averaged u_eq(t) — the baseline toward which the ODE pulls") +
   theme(axis.text.y = element_text(size = 11))
 ```
 
@@ -922,52 +819,49 @@ cat(sprintf("  2020 mean effect: exp(%.2f) = %.1f%% increase in separation rate\
             100 * exp(hier_summary$mean[hier_summary$variable == "mu_log_shock_2020"])))
 
 cat("\n=== 2008 Financial Crisis Shock Effects (Education-Specific) ===\n")
-cat("(Additional monthly separation probability during shock)\n\n")
-shock08 <- params$shock_2008_effects
-shock08$education <- stan_data$education_levels
-print(shock08[, c("education", "mean", "q5", "q95")], digits = 4)
+shock08 <- result$fit$summary(variables = paste0("shock_2008_effect[", 1:N_edu, "]"))
+shock08$education <- edu_levels
+print(shock08[, c("education", "median", "q5", "q95")], digits = 4)
 
 cat("\n=== 2020 COVID-19 Shock Effects (Education-Specific) ===\n")
-cat("(Additional monthly separation probability during shock)\n\n")
-shock20 <- params$shock_2020_effects
-shock20$education <- stan_data$education_levels
-print(shock20[, c("education", "mean", "q5", "q95")], digits = 4)
+shock20 <- result$fit$summary(variables = paste0("shock_2020_effect[", 1:N_edu, "]"))
+shock20$education <- edu_levels
+print(shock20[, c("education", "median", "q5", "q95")], digits = 4)
 
 cat("\n=== 2008 Shock Half-Lives (Education-Specific) ===\n")
 cat("(Time in years for shock effect to decay by 50%)\n\n")
-hl08 <- params$halflife_2008
-hl08$education <- stan_data$education_levels
-print(hl08[, c("education", "mean", "q5", "q95")], digits = 2)
+hl08 <- result$fit$summary(variables = paste0("halflife_2008[", 1:N_edu, "]"))
+hl08$education <- edu_levels
+print(hl08[, c("education", "median", "q5", "q95")], digits = 2)
 
 cat("\n=== 2020 COVID Half-Lives (Education-Specific) ===\n")
 cat("(Time in years for shock effect to decay by 50%)\n\n")
-hl20 <- params$halflife_2020
-hl20$education <- stan_data$education_levels
-print(hl20[, c("education", "mean", "q5", "q95")], digits = 2)
+hl20 <- result$fit$summary(variables = paste0("halflife_2020[", 1:N_edu, "]"))
+hl20$education <- edu_levels
+print(hl20[, c("education", "median", "q5", "q95")], digits = 2)
 ```
 
 ```{r plot-shock-effects}
 #| fig-cap: "Comparison of shock effects across education levels"
 
-# Combine shock data
 shock_df <- rbind(
   data.frame(
     shock = "2008 Financial Crisis",
-    education = stan_data$education_levels,
-    mean = shock08$mean,
+    education = edu_levels,
+    median = shock08$median,
     lower = shock08$q5,
     upper = shock08$q95
   ),
   data.frame(
     shock = "2020 COVID-19",
-    education = stan_data$education_levels,
-    mean = shock20$mean,
+    education = edu_levels,
+    median = shock20$median,
     lower = shock20$q5,
     upper = shock20$q95
   )
 )
 
-ggplot(shock_df, aes(x = education, y = mean * 100, color = shock)) +
+ggplot(shock_df, aes(x = education, y = median * 100, color = shock)) +
   geom_point(position = position_dodge(width = 0.5), size = 3) +
   geom_errorbar(aes(ymin = lower * 100, ymax = upper * 100),
                 position = position_dodge(width = 0.5), width = 0.3) +
@@ -1228,17 +1122,17 @@ ggplot(decomp_subset, aes(x = year_frac, y = rate * 100, color = type)) +
         strip.text = element_text(size = 12, face = "bold"))
 ```
 
-### Zoom: Seasonal Oscillation Detail (2017-2019)
+### Zoom: Seasonal Oscillation Detail (2022-2026)
 
-A closer look at a few years to see the seasonal oscillation clearly:
+A closer look at recent years to see the seasonal oscillation clearly:
 
 ```{r seasonal-zoom}
-#| fig-cap: "Detailed view of seasonal oscillation (2017-2019)"
+#| fig-cap: "Detailed view of seasonal oscillation (2022-2026)"
 #| fig-height: 8
 
-# Zoom into 2017-2019 to see seasonal pattern clearly
-zoom_years <- decomp_subset[decomp_subset$year_frac >= 2017 &
-                             decomp_subset$year_frac <= 2020, ]
+# Zoom into 2022-2026 to see seasonal pattern clearly
+zoom_years <- decomp_subset[decomp_subset$year_frac >= 2022 &
+                             decomp_subset$year_frac <= 2026, ]
 
 cat("Zoom rows:", nrow(zoom_years), "\n")
 cat("Types in zoom:", unique(as.character(zoom_years$type)), "\n")
@@ -1249,12 +1143,12 @@ ggplot(zoom_years, aes(x = year_frac, y = rate * 100, color = type)) +
   scale_color_manual(values = c("Pure ODE" = "#E74C3C",
                                 "Trend (no seasonal)" = "#F39C12",
                                 "Full Model" = "#3498DB")) +
-  scale_x_continuous(breaks = seq(2017, 2020, 1),
-                     minor_breaks = seq(2017, 2020, 0.25)) +
+  scale_x_continuous(breaks = seq(2022, 2026, 1),
+                     minor_breaks = seq(2022, 2026, 0.25)) +
   labs(x = "Year",
        y = "Unemployment Rate (%)",
        color = "Component",
-       title = "Seasonal Pattern Detail (2017-2019)",
+       title = "Seasonal Pattern Detail (2022-2026)",
        subtitle = "Blue oscillation around orange trend shows seasonal hiring patterns") +
   theme(legend.position = "bottom",
         strip.text = element_text(size = 12, face = "bold"),
@@ -1376,7 +1270,7 @@ if (n_divergent > 0) {
   # Pairs plot for key parameters - shows where divergences occur
   p_pairs <- mcmc_pairs(
     draws,
-    pars = c("mu_logit_u_eq", "sigma_logit_u_eq",
+    pars = c("mu_log_adj_speed", "sigma_log_adj_speed",
              "mu_log_shock_2008", "sigma_log_shock_2008"),
     np = np,
     off_diag_args = list(size = 0.75, alpha = 0.5)
@@ -1410,9 +1304,9 @@ mcmc_nuts_energy(np, binwidth = 1) +
 #| fig-cap: "MCMC trace plots for key parameters"
 #| fig-height: 12
 
-# Trace plots for hierarchical shock model parameters
-p1 <- mcmc_trace(draws, pars = "mu_logit_u_eq", np = np) +
-  labs(title = "Hierarchical Mean: Equilibrium Unemployment (logit scale)")
+# Trace plots for hierarchical parameters
+p1 <- mcmc_trace(draws, pars = "mu_log_adj_speed", np = np) +
+  labs(title = "Hierarchical Mean: Adjustment Speed (log scale)")
 
 p2 <- mcmc_trace(draws, pars = "mu_log_shock_2008", np = np) +
   labs(title = "Hierarchical Mean: 2008 Shock (log scale)")
@@ -1438,22 +1332,22 @@ library(patchwork)
 # Get summary with Rhat and ESS
 # Using hierarchical shock model parameters
 key_params <- c(
-  # Hierarchical equilibrium and adjustment
-  "mu_logit_u_eq", "sigma_logit_u_eq",
+  # Hierarchical adjustment and shocks
   "mu_log_adj_speed", "sigma_log_adj_speed",
-  # Hierarchical shock parameters (NEW)
   "mu_log_shock_2008", "sigma_log_shock_2008",
   "mu_log_shock_2020", "sigma_log_shock_2020",
+  "mu_decay_2008", "sigma_decay_2008",
+  "mu_decay_2020", "sigma_decay_2020",
   # Education-specific derived parameters
-  paste0("u_eq[", 1:stan_data$N_edu, "]"),
   paste0("adj_speed[", 1:stan_data$N_edu, "]"),
   paste0("shock_2008_effect[", 1:stan_data$N_edu, "]"),
   paste0("shock_2020_effect[", 1:stan_data$N_edu, "]"),
   paste0("decay_2008[", 1:stan_data$N_edu, "]"),
   paste0("decay_2020[", 1:stan_data$N_edu, "]"),
-  # Hierarchical spline smoothness (per-education)
-  paste0("sigma_spline[", 1:stan_data$N_edu, "]"),
-  # Global parameters
+  paste0("u_eq_mean[", 1:stan_data$N_edu, "]"),
+  # Equilibrium smoothness (per-education)
+  paste0("sigma_u_eq_spline[", 1:stan_data$N_edu, "]"),
+  # Global
   "phi"
 )
 
@@ -2100,11 +1994,11 @@ This hierarchical ODE state space model successfully models unemployment dynamic
 
 ### Technical Success
 
-Perfect convergence (Rhat < 1.01, ESS > 400, 0 divergences) achieved through:
-- **Hierarchical structure** - Including decay rates solved identification issues for some education levels
+Perfect convergence (0 divergences, all Rhat < 1.01, min ESS = 314) achieved through:
+- **Time-varying equilibrium** - Eliminated identifiability fight between constant u_eq and spline deviation
 - **Non-centered parameterization** - Efficient sampling for all hierarchical parameters
-- **Data-informed priors** - Priors centered near posterior modes from exploratory fits
-- **Prior-centered initialization** - `make_init_at_prior()` avoids multimodal traps
+- **Strong hierarchical pooling** - Tight Exponential(20) priors on shock and adj_speed sigmas
+- **Prior-centered initialization** - `make_init_at_prior_edu_parallel()` starts chains at prior centers
 
 ### Methodological Contribution: Monotonic Trend Parameterization
 
@@ -2226,7 +2120,7 @@ if (file.exists(serial_file) && file.exists(parallel_file)) {
 
 ```{r threading-details}
 # Load edu-parallel model results if available
-parallel_file <- here("models", "ode-state-space-monotonic-spline-fit.qs")
+parallel_file <- here("models", "ode-state-space-edu-parallel-fit-v4.rds")
 
 if (file.exists(parallel_file)) {
   parallel_result <- safe_qread(parallel_file, error_action = "stop")
@@ -2357,8 +2251,7 @@ if (file.exists(serial_file) && file.exists(parallel_file)) {
                   "mu_log_shock_2020", "sigma_log_shock_2020",
                   "mu_decay_2008", "sigma_decay_2008",
                   "mu_decay_2020", "sigma_decay_2020",
-                  "mu_log_sigma_spline", "sigma_log_sigma_spline",
-                  "phi")
+                  "sigma_u_eq_spline", "phi")
 
   serial_summary <- serial_result$fit$summary(variables = key_params)
   parallel_summary <- parallel_result$fit$summary(variables = key_params)
@@ -2712,7 +2605,7 @@ The education-level parallelization successfully provides:
 3. **Full hierarchical structure**: No sacrifice of model features
 4. **Simple configuration**: Use threads_per_chain ≤ N_edu for best efficiency
 
-**Recommendation**: Use the edu-parallel model ([unemployment-ode-state-space-edu-parallel.stan](../stan/unemployment-ode-state-space-edu-parallel.stan)) for development and iteration. Use the serial model ([unemployment-ode-state-space-efficient.stan](../stan/unemployment-ode-state-space-efficient.stan)) for final production runs where simplicity is preferred.
+**Recommendation**: The time-varying equilibrium model ([unemployment-ode-state-space-edu-parallel.stan](../stan/unemployment-ode-state-space-edu-parallel.stan)) is the current production model. It achieves perfect convergence with 0 divergences, all Rhat < 1.01, and cleanly separates structural labor market trends ($u_{\text{eq}}(t)$) from transitory shocks. Use 4 chains with 2 parallel × 7 threads (14 cores) for fitting.
 
 ```{r session-info}
 sessionInfo()
