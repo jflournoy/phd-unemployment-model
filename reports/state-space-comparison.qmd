@@ -245,118 +245,6 @@ ggplot(recent_trend, aes(x = year_frac)) +
         axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-## Residual Diagnostics: Model Fit Assessment
-
-**Observation residual** (observed minus full model prediction):
-Positive values mean the model underpredicts unemployment; negative values mean overprediction.
-Shaded bands show 90% credible intervals from posterior uncertainty.
-
-```{r fig-residual-obs, fig.cap="Observation residuals: observed minus model prediction with 90% credible intervals"}
-knitr::include_graphics("figures/residual-observation.png")
-```
-
-**Equilibrium trajectory** ($u_{\text{eq}}[t]$): The time-varying structural unemployment rate
-(green) constructed from the B-spline basis. The blue band shows the full model fit including
-shocks and seasonal effects. Gray dots are observed monthly unemployment rates.
-
-```{r fig-residual-spline, fig.cap="Time-varying equilibrium u_eq[t] (green) with full model fit (blue) and observed data (gray dots)"}
-knitr::include_graphics("figures/residual-spline-component.png")
-```
-
-> The green band shows the time-varying equilibrium toward which the ODE pulls
-> unemployment. Deviations of the blue line from the green band represent the
-> combined effect of the 2008 and 2020 shocks. The gray dots show the observed
-> monthly unemployment rates from the CPS data.
-
-## Hierarchical Parameter Structure
-
-The model uses hierarchical priors to pool information across education levels, improving estimation efficiency while allowing group-specific variation.
-
-### Hierarchical Parameters
-
-**1. Time-Varying Equilibrium ($u_{eq}(t)$)**
-```
-u_eq_coef_raw[1, i] ~ Normal(-3.0, 1.0)       # Initial level (wide prior, ~5%)
-u_eq_coef_raw[k, i] ~ Normal(u_eq_coef_raw[k-1, i], sigma_u_eq_spline[i])  # RW smoothness
-sigma_u_eq_spline[i] ~ Exponential(3)          # Per-edu smoothness (mean 0.33)
-logit_u_eq[t, i] = sum_k B_spline[t, k] * u_eq_coef_raw[k, i]
-```
-- B-spline basis (K=10) constructs smooth time-varying equilibrium
-- Random walk prior penalizes rapid changes → decade-scale trends
-- Each education level has its own trajectory with adaptive smoothness
-
-**2. Adjustment Speed (adj)**
-```
-μ_log_adj_speed ~ Normal(2.3, 0.25)            # Population mean (log scale)
-σ_log_adj_speed ~ Exponential(20)              # Strong pooling (mean 0.05)
-log_adj_speed[i] = μ_log_adj_speed + σ_log_adj_speed * adj_speed_raw[i]
-```
-- exp(2.3) ≈ 10 per month — data-informed from prior fits
-- Controls speed of convergence toward $u_{\text{eq}}(t)$
-- Strong hierarchical pooling (Exponential(20)) prevents identifiability issues
-- Higher education → higher adjustment speed (more fluid labor markets)
-
-**3. Shock Magnitudes (2008, 2020)**
-```
-μ_log_shock_2008 ~ Normal(-2, 0.8)              # Population mean
-σ_log_shock_2008 ~ Exponential(20)              # Strong pooling (mean 0.05)
-shock_2008_effect[i] = exp(μ_log_shock_2008 + σ_log_shock_2008 * shock_2008_raw[i])
-```
-- Strong hierarchical pooling reflects the prior that macro shocks affect all education groups similarly
-- 2008: exp(-2) ≈ 0.14 (14% increase in separation rate at population mean)
-- 2020: exp(-1.5) ≈ 0.22 (22% increase at population mean)
-- Between-group variation tightly constrained by Exponential(20) prior
-
-**4. Recovery Rates (Decay)**
-```
-μ_decay_2008 ~ Normal(0, 0.5)               # Population mean (logit scale)
-σ_decay_2008 ~ Exponential(5)               # Moderate pooling
-decay_2008[i] = 0.1 + 4.9 * inv_logit(μ_decay_2008 + σ_decay_2008 * decay_2008_raw[i])
-```
-- Constrained to [0.1, 5] range
-- Centers on ~2.5 on logit scale → decay ≈ 2.55 (moderate recovery)
-- Half-life: $t_{1/2} = \ln(2) / \text{decay}$ in years
-
-**5. Seasonal Effects**
-```
-μ_seasonal ~ Normal(0, 0.03)               # Population mean pattern (11 months)
-sum(μ_seasonal) ~ Normal(0, 0.001)         # Soft sum-to-zero constraint
-σ_seasonal ~ Exponential(10)               # Between-education SD (mean = 0.1)
-seasonal_u[1:11, i] = μ_seasonal + σ_seasonal * seasonal_u_raw[, i]
-```
-- Hierarchical pooling of monthly seasonal patterns
-- Population-level pattern with education-specific deviations
-- 12th month derived: `seasonal_u[12, i] = -sum(seasonal_u[1:11, i])`
-- Modest effects (~1-3% on logit scale)
-
-**6. Equilibrium Smoothness ($\sigma^{\text{spline}}$)**
-```
-sigma_u_eq_spline[i] ~ Exponential(3)      # Per-edu smoothness (mean 0.33)
-```
-- Controls how much the equilibrium can change per B-spline knot
-- Smaller values = smoother equilibrium trajectory
-- Moderate prior (Exponential(3)) allows data-informed smoothness
-- Each education level gets its own smoothness parameter
-
-### Non-Hierarchical Parameters
-
-**Initial States**
-- Starting unemployment levels
-- Not hierarchical (equilibrium handles long-run behavior)
-- Prior: Normal(-3.0, 0.5) on logit scale
-
-**Overdispersion**
-- Beta-binomial φ parameter
-- Data-informed: log(φ-1) ~ Normal(8.5, 0.5) → φ ≈ 5000
-- Accounts for extra-binomial variation
-
-### Benefits of Hierarchical Pooling
-
-1. **Improved Estimates**: Small groups (PhDs, professionals) borrow strength from population
-2. **Regularization**: Prevents overfitting of education-specific parameters
-3. **Identifiability**: Constrains some_college adjustment speed through population effect
-4. **Interpretability**: Population means are directly interpretable aggregates
-
 ## Hierarchical Variance Analysis: Comparing Pooling Strength
 
 The hierarchical structure pools information across education levels. The between-education standard deviation ($\sigma$) parameters quantify how much groups differ. Smaller $\sigma$ = stronger pooling.
@@ -449,37 +337,6 @@ ggplot(edu_params, aes(x = median, y = edu)) +
 2. **Shock effects** are tightly pooled across education groups — the Exponential(20) prior on $\sigma$ reflects the economic prior that macro shocks affect all workers similarly. The model estimates similar shock magnitudes across groups.
 
 3. **Mean equilibrium unemployment** ranges from ~1.3% (professional degrees) to ~10.2% (less than high school) — matching the raw data well while the time-varying equilibrium captures structural trends within each group.
-
-## Data Preparation
-
-```{r load-data}
-# Data and model already loaded in setup chunk for report efficiency
-# Display data summary
-cat(sprintf("Time series length: %d months\n", stan_data$T))
-cat(sprintf("Education levels: %d\n", stan_data$N_edu))
-cat(sprintf("Education categories: %s\n",
-            paste(stan_data$education_levels, collapse = ", ")))
-cat(sprintf("Date range: %.2f to %.2f\n",
-            min(stan_data$year_frac), max(stan_data$year_frac)))
-```
-
-## Model Fitting
-
-We use the **efficient spline-based model** which reduces dimensionality from ~2100 to ~105 latent parameters, enabling proper MCMC sampling.
-
-```{r fit-model}
-# Model already loaded in setup chunk for report efficiency
-# Display diagnostics
-cat("\n=== Convergence Diagnostics ===\n")
-cat(sprintf("Divergent transitions: %d\n", result$diagnostics$num_divergent))
-cat(sprintf("Max treedepth exceeded: %d\n", result$diagnostics$max_treedepth_exceeded))
-cat(sprintf("E-BFMI: %s\n", paste(round(result$diagnostics$ebfmi, 3), collapse = ", ")))
-
-# Check all chains completed
-if (length(result$diagnostics$ebfmi) < 4) {
-  cat(sprintf("WARNING: Only %d of 4 chains completed!\n", length(result$diagnostics$ebfmi)))
-}
-```
 
 ## Economic Parameter Estimates
 
@@ -1160,6 +1017,118 @@ The model uses Stan's `reduce_sum` to parallelize across education levels. Each 
 | **Identifiability** | N/A | Clean separation: equilibrium absorbs trends, shocks are transitory |
 
 **The fundamental insight**: By making the equilibrium time-varying rather than constant, the model cleanly separates structural labor market changes (absorbed by $u_{\text{eq}}(t)$) from transitory shock effects. No separate spline deviation fights the ODE for the same variation.
+
+## Hierarchical Parameter Structure
+
+The model uses hierarchical priors to pool information across education levels, improving estimation efficiency while allowing group-specific variation.
+
+### Hierarchical Parameters
+
+**1. Time-Varying Equilibrium ($u_{eq}(t)$)**
+```
+u_eq_coef_raw[1, i] ~ Normal(-3.0, 1.0)       # Initial level (wide prior, ~5%)
+u_eq_coef_raw[k, i] ~ Normal(u_eq_coef_raw[k-1, i], sigma_u_eq_spline[i])  # RW smoothness
+sigma_u_eq_spline[i] ~ Exponential(3)          # Per-edu smoothness (mean 0.33)
+logit_u_eq[t, i] = sum_k B_spline[t, k] * u_eq_coef_raw[k, i]
+```
+- B-spline basis (K=10) constructs smooth time-varying equilibrium
+- Random walk prior penalizes rapid changes → decade-scale trends
+- Each education level has its own trajectory with adaptive smoothness
+
+**2. Adjustment Speed (adj)**
+```
+μ_log_adj_speed ~ Normal(2.3, 0.25)            # Population mean (log scale)
+σ_log_adj_speed ~ Exponential(20)              # Strong pooling (mean 0.05)
+log_adj_speed[i] = μ_log_adj_speed + σ_log_adj_speed * adj_speed_raw[i]
+```
+- exp(2.3) ≈ 10 per month — data-informed from prior fits
+- Controls speed of convergence toward $u_{\text{eq}}(t)$
+- Strong hierarchical pooling (Exponential(20)) prevents identifiability issues
+- Higher education → higher adjustment speed (more fluid labor markets)
+
+**3. Shock Magnitudes (2008, 2020)**
+```
+μ_log_shock_2008 ~ Normal(-2, 0.8)              # Population mean
+σ_log_shock_2008 ~ Exponential(20)              # Strong pooling (mean 0.05)
+shock_2008_effect[i] = exp(μ_log_shock_2008 + σ_log_shock_2008 * shock_2008_raw[i])
+```
+- Strong hierarchical pooling reflects the prior that macro shocks affect all education groups similarly
+- 2008: exp(-2) ≈ 0.14 (14% increase in separation rate at population mean)
+- 2020: exp(-1.5) ≈ 0.22 (22% increase at population mean)
+- Between-group variation tightly constrained by Exponential(20) prior
+
+**4. Recovery Rates (Decay)**
+```
+μ_decay_2008 ~ Normal(0, 0.5)               # Population mean (logit scale)
+σ_decay_2008 ~ Exponential(5)               # Moderate pooling
+decay_2008[i] = 0.1 + 4.9 * inv_logit(μ_decay_2008 + σ_decay_2008 * decay_2008_raw[i])
+```
+- Constrained to [0.1, 5] range
+- Centers on ~2.5 on logit scale → decay ≈ 2.55 (moderate recovery)
+- Half-life: $t_{1/2} = \ln(2) / \text{decay}$ in years
+
+**5. Seasonal Effects**
+```
+μ_seasonal ~ Normal(0, 0.03)               # Population mean pattern (11 months)
+sum(μ_seasonal) ~ Normal(0, 0.001)         # Soft sum-to-zero constraint
+σ_seasonal ~ Exponential(10)               # Between-education SD (mean = 0.1)
+seasonal_u[1:11, i] = μ_seasonal + σ_seasonal * seasonal_u_raw[, i]
+```
+- Hierarchical pooling of monthly seasonal patterns
+- Population-level pattern with education-specific deviations
+- 12th month derived: `seasonal_u[12, i] = -sum(seasonal_u[1:11, i])`
+- Modest effects (~1-3% on logit scale)
+
+**6. Equilibrium Smoothness ($\sigma^{\text{spline}}$)**
+```
+sigma_u_eq_spline[i] ~ Exponential(3)      # Per-edu smoothness (mean 0.33)
+```
+- Controls how much the equilibrium can change per B-spline knot
+- Smaller values = smoother equilibrium trajectory
+- Moderate prior (Exponential(3)) allows data-informed smoothness
+- Each education level gets its own smoothness parameter
+
+### Non-Hierarchical Parameters
+
+**Initial States**
+- Starting unemployment levels
+- Not hierarchical (equilibrium handles long-run behavior)
+- Prior: Normal(-3.0, 0.5) on logit scale
+
+**Overdispersion**
+- Beta-binomial φ parameter
+- Data-informed: log(φ-1) ~ Normal(8.5, 0.5) → φ ≈ 5000
+- Accounts for extra-binomial variation
+
+### Benefits of Hierarchical Pooling
+
+1. **Improved Estimates**: Small groups (PhDs, professionals) borrow strength from population
+2. **Regularization**: Prevents overfitting of education-specific parameters
+3. **Identifiability**: Constrains some_college adjustment speed through population effect
+4. **Interpretability**: Population means are directly interpretable aggregates
+
+## Residual Diagnostics: Model Fit Assessment
+
+**Observation residual** (observed minus full model prediction):
+Positive values mean the model underpredicts unemployment; negative values mean overprediction.
+Shaded bands show 90% credible intervals from posterior uncertainty.
+
+```{r fig-residual-obs, fig.cap="Observation residuals: observed minus model prediction with 90% credible intervals"}
+knitr::include_graphics("figures/residual-observation.png")
+```
+
+**Equilibrium trajectory** ($u_{\text{eq}}[t]$): The time-varying structural unemployment rate
+(green) constructed from the B-spline basis. The blue band shows the full model fit including
+shocks and seasonal effects. Gray dots are observed monthly unemployment rates.
+
+```{r fig-residual-spline, fig.cap="Time-varying equilibrium u_eq[t] (green) with full model fit (blue) and observed data (gray dots)"}
+knitr::include_graphics("figures/residual-spline-component.png")
+```
+
+> The green band shows the time-varying equilibrium toward which the ODE pulls
+> unemployment. Deviations of the blue line from the green band represent the
+> combined effect of the 2008 and 2020 shocks. The gray dots show the observed
+> monthly unemployment rates from the CPS data.
 
 ## Model Diagnostics
 
