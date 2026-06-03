@@ -268,245 +268,6 @@ knitr::include_graphics("figures/residual-spline-component.png")
 > combined effect of the 2008 and 2020 shocks. The gray dots show the observed
 > monthly unemployment rates from the CPS data.
 
-## Model Structure: Time-Varying Equilibrium
-
-This section explains the model architecture and the economic theory behind it.
-
-### 1. Economic Foundation: Labor Market Flow Dynamics
-
-#### 1.1 The ODE with Time-Varying Equilibrium
-
-The fundamental equation is:
-
-$$\frac{du}{dt} = s^{\text{eff}}(t) \cdot (1-u) - f(t) \cdot u$$
-
-where the flow rates derive from a **time-varying equilibrium** $u_{\text{eq}}(t)$:
-
-$$s(t) = u_{\text{eq}}(t) \cdot \text{adj}$$
-$$f(t) = (1 - u_{\text{eq}}(t)) \cdot \text{adj}$$
-
-The adjustment speed $\text{adj} = s + f$ controls how fast $u$ converges toward $u_{\text{eq}}(t)$. The ODE simplifies to:
-
-$$\frac{du}{dt} = \text{adj} \cdot (u_{\text{eq}}(t) - u)$$
-
-**Key insight:** $u_{\text{eq}}(t)$ absorbs slow structural changes in labor markets (de-industrialization, education polarization, etc.), while shocks create transitory deviations. There is no separate "spline deviation" fighting with the equilibrium for identifiability.
-
-#### 1.2 Time-Varying Equilibrium via B-Splines
-
-$u_{\text{eq}}(t)$ is constructed from a cubic B-spline basis:
-
-$$\text{logit}(u_{\text{eq},i}(t)) = \sum_{k=1}^{K} \beta_{k,i} \cdot B_k(t)$$
-
-where $B_k(t)$ are B-spline basis functions ($K=10$), and $\beta_{k,i}$ are education-specific coefficients with a **random walk prior** for smoothness:
-
-$$\beta_{1,i} \sim \text{Normal}(-3, 1)$$
-$$\beta_{k,i} \sim \text{Normal}(\beta_{k-1,i}, \sigma^{\text{spline}}_i) \quad \text{for } k = 2, ..., K$$
-$$\sigma^{\text{spline}}_i \sim \text{Exponential}(3)$$
-
-This prior penalizes rapid changes in the equilibrium trajectory, producing smooth curves that capture decade-scale structural trends without overfitting.
-
-### 2. Extending the Model
-
-#### 2.1 Education Heterogeneity
-
-Each of the 7 education levels has its own:
-- B-spline coefficients $\beta_{k,i}$ → time-varying equilibrium $u_{\text{eq},i}(t)$
-- Adjustment speed $\text{adj}_i$ (hierarchical)
-- Shock effects and decay rates (hierarchical)
-- Seasonal pattern (hierarchical)
-
-All use **non-centered hierarchical priors** for efficient sampling:
-
-$$\text{adj}_i = \exp(\mu_{\text{adj}} + \sigma_{\text{adj}} \cdot z_i^{\text{adj}}) \quad \text{with } z_i^{\text{adj}} \sim \text{Normal}(0,1)$$
-
-#### 2.2 Economic Shocks
-
-During recessions, separation rates spike above the time-varying baseline:
-
-$$s_i^{\text{eff}}(t) = s_i(t) + I_{2008}(t) \cdot \delta_{2008,i} + I_{2020}(t) \cdot \delta_{2020,i}$$
-
-where $s_i(t) = u_{\text{eq},i}(t) \cdot \text{adj}_i$ is the baseline separation rate, $I(t)$ is the **shock impulse function**, and $\delta_i$ are education-specific shock magnitudes with **strong hierarchical pooling**:
-
-$$\delta_{2008,i} = \exp(\mu_{2008} + \sigma_{2008} \cdot z_i^{2008}), \quad \sigma_{2008} \sim \text{Exponential}(20)$$
-
-The tight prior on $\sigma$ (mean 0.05) reflects the economic prior that macro shocks affect all education groups similarly.
-
-**Impulse function** (for 2008, analogous for 2020):
-
-$$I_{2008}(t) = \begin{cases}
-0 & t < t_{\text{onset}} \\
-\frac{t - t_{\text{onset}}}{t_{\text{peak}} - t_{\text{onset}}} & t_{\text{onset}} \leq t \leq t_{\text{peak}} \\
-e^{-\lambda_i (t - t_{\text{peak}})} & t > t_{\text{peak}}
-\end{cases}$$
-
-The half-life of recovery is $t_{1/2} = \ln(2)/\lambda_i$, with decay rates also hierarchically pooled.
-
-#### 2.3 Seasonal Effects
-
-Monthly seasonal effects are added directly on the logit scale after the ODE step:
-
-$$\text{logit}(u_{t,i}) = \text{logit}(u_{t-1,i}) + \Delta u_{t,i} + \gamma_{m(t),i}$$
-
-with a hierarchical sum-to-zero structure:
-
-$$\gamma_{1:11,i} = \mu_{\text{seas}} + \sigma_{\text{seas}} \cdot z_i^{\text{seas}}, \quad \gamma_{12,i} = -\sum_{m=1}^{11} \gamma_{m,i}$$
-
-#### 2.4 State Space Formulation
-
-We observe **counts** (binomial samples from the latent unemployment rate), not the true rate.
-
-**Process model** (discrete-time evolution):
-$$\text{logit}(u_{t,i}) = \text{logit}(u_{t-1,i}) + \Delta u_{t,i} + \gamma_{m(t),i}$$
-
-where $\Delta u_{t,i} = \text{adj}_i \cdot (u_{\text{eq},i}(t) - u_{t-1,i}) + \text{shocks}$ is the ODE-predicted change. No separate innovation term — the time-varying equilibrium plus shocks capture all systematic dynamics.
-
-**Observation model**:
-$$n_{\text{unemployed},t,i} \sim \text{Beta-Binomial}(n_{\text{total},t,i}, u_{t,i} \cdot \phi, (1-u_{t,i}) \cdot \phi)$$
-
-The beta-binomial allows overdispersion through $\phi$.
-
-### 3. Stan Implementation
-
-The full model is in [`stan/unemployment-ode-state-space-edu-parallel.stan`](stan/unemployment-ode-state-space-edu-parallel.stan).
-
-#### 3.1 Key Parameters
-
-```stan
-parameters {
-  // Time-varying equilibrium (B-spline coefficients)
-  matrix[K_spline, N_edu] u_eq_coef_raw;        // Spline coefs per edu
-  vector<lower=0>[N_edu] sigma_u_eq_spline;      // Smoothness per edu
-
-  // Adjustment speeds (hierarchical, non-centered)
-  real mu_log_adj_speed;
-  real<lower=0> sigma_log_adj_speed;
-  vector[N_edu] adj_speed_raw;
-
-  // Shock effects (hierarchical, non-centered, strong pooling)
-  real mu_log_shock_2008;
-  real<lower=0> sigma_log_shock_2008;
-  vector[N_edu] shock_2008_raw;
-  // ... same for 2020
-
-  // Decay rates (hierarchical, non-centered)
-  real mu_decay_2008;
-  real<lower=0> sigma_decay_2008;
-  vector[N_edu] decay_2008_raw;
-  // ... same for 2020
-
-  // Seasonal effects (hierarchical, non-centered)
-  vector[11] mu_seasonal;
-  real<lower=0> sigma_seasonal;
-  matrix[11, N_edu] seasonal_u_raw;
-
-  // Initial states and dispersion
-  vector[N_edu] logit_u_init;
-  real log_phi_minus_1;
-}
-```
-
-#### 3.2 Transformed Parameters
-
-The time-varying equilibrium is constructed from the B-spline basis:
-
-```stan
-transformed parameters {
-  matrix[T, N_edu] logit_u_eq;
-  matrix[T, N_edu] u_eq;
-  for (i in 1:N_edu) {
-    logit_u_eq[, i] = B_spline * u_eq_coef_raw[, i];
-    u_eq[, i] = inv_logit(logit_u_eq[, i]);
-  }
-
-  // Adjustment speeds
-  adj_speed[i] = exp(mu_log_adj_speed + sigma_log_adj_speed * adj_speed_raw[i]);
-
-  // Shock effects
-  shock_2008_effect[i] = exp(mu_log_shock_2008 + sigma_log_shock_2008 * shock_2008_raw[i]);
-
-  // Seasonal effects with sum-to-zero
-  seasonal_u[1:11, i] = mu_seasonal + sigma_seasonal * seasonal_u_raw[, i];
-  seasonal_u[12, i] = -sum(seasonal_u[1:11, i]);
-}
-```
-
-#### 3.3 ODE Computation (Inside reduce_sum)
-
-The ODE is evaluated at each time step using the time-varying equilibrium:
-
-```stan
-// Inside the partial function, per time step:
-real u_eq_t = inv_logit(logit_u_eq[t, edu]);
-real u_eq_safe = fmin(fmax(u_eq_t, 1e-6), 1 - 1e-6);
-
-// Flow rates from time-varying equilibrium
-real s_base = u_eq_safe * adj_speed[edu];
-real f_base = (1 - u_eq_safe) * adj_speed[edu];
-
-// Add shock contributions
-real s_eff = s_base
-             + shock_2008_intensity * shock_2008_effect[edu]
-             + shock_2020_intensity * shock_2020_effect[edu];
-
-// ODE: du/dt = s_eff*(1-u) - f_base*u
-real du_dt = s_eff * (1 - u_curr) - f_base * u_curr;
-
-// State evolution: ODE + seasonal (no separate spline)
-logit_u_curr = logit_u_curr + du_dt + seasonal_u[month[t], edu];
-u_curr = inv_logit(logit_u_curr);
-```
-
-#### 3.4 Priors
-
-```stan
-// Time-varying equilibrium: RW prior for smooth trajectories
-u_eq_coef_raw[1, i] ~ normal(-3.0, 1.0);   // ~5% initial equilibrium
-u_eq_coef_raw[k, i] ~ normal(u_eq_coef_raw[k-1, i], sigma_u_eq_spline[i]);
-sigma_u_eq_spline ~ exponential(3);         // Moderate smoothness
-
-// Strong hierarchical pooling (tight sigma priors = shared across groups)
-mu_log_adj_speed ~ normal(2.3, 0.25);
-sigma_log_adj_speed ~ exponential(20);       // Mean 0.05
-adj_speed_raw ~ std_normal();
-
-mu_log_shock_2008 ~ normal(-2, 0.8);
-sigma_log_shock_2008 ~ exponential(20);      // Strong pooling on shocks
-shock_2008_raw ~ std_normal();
-
-// ... analogous for 2020 shock, decay rates, seasonal effects
-
-logit_u_init ~ normal(-3.0, 0.5);
-log_phi_minus_1 ~ normal(8.5, 0.5);
-```
-
-#### 3.5 Parallelization
-
-The model uses Stan's `reduce_sum` to parallelize across education levels. Each thread computes the complete trajectory + likelihood for one or more education levels, since education levels are independent in the ODE computation. See the multi-threading section below for performance details.
-
-#### 3.6 Generated Quantities
-
-- **u_eq_mean**: Time-averaged equilibrium per education level
-- **Half-lives**: $t_{1/2} = \ln(2) / \lambda_i$ (education-specific)
-- **Full trajectory u[t, edu]**: ODE + shocks + seasonal
-- **Trend u_trend[t, edu]**: ODE + shocks (no seasonal)
-- **Seasonal effect**: Difference between full and trend
-- **Log-likelihood**: For LOO cross-validation
-- **Posterior predictive**: For model checking
-
-### 4. Why This Model Succeeds Where GAM Fails
-
-| Feature | GAM Approach | Time-Varying Equilibrium Model |
-|---------|-------------|-------------------------------|
-| **Shock mechanism** | Indicator variable (absorbed by trend) | Explicit ODE term with decay, structurally separated |
-| **Temporal structure** | Smooth function (static) | Dynamic ODE + time-varying equilibrium |
-| **Equilibrium** | Not modeled | B-spline $u_{\text{eq}}(t)$ with RW smoothness prior |
-| **Interpretation** | Abstract smooth values | Adjustment speed, shock magnitude, recovery half-life |
-| **Recovery dynamics** | Not modeled | Education-specific decay rates |
-| **Seasonality** | Cyclic smooth | Hierarchical monthly effects on logit scale |
-| **Identifiability** | N/A | Clean separation: equilibrium absorbs trends, shocks are transitory |
-
-**The fundamental insight**: By making the equilibrium time-varying rather than constant, the model cleanly separates structural labor market changes (absorbed by $u_{\text{eq}}(t)$) from transitory shock effects. No separate spline deviation fights the ODE for the same variation.
-
 ## Hierarchical Parameter Structure
 
 The model uses hierarchical priors to pool information across education levels, improving estimation efficiency while allowing group-specific variation.
@@ -1161,6 +922,245 @@ ggplot() +
         axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+## Model Structure: Time-Varying Equilibrium
+
+This section explains the model architecture and the economic theory behind it.
+
+### 1. Economic Foundation: Labor Market Flow Dynamics
+
+#### 1.1 The ODE with Time-Varying Equilibrium
+
+The fundamental equation is:
+
+$$\frac{du}{dt} = s^{\text{eff}}(t) \cdot (1-u) - f(t) \cdot u$$
+
+where the flow rates derive from a **time-varying equilibrium** $u_{\text{eq}}(t)$:
+
+$$s(t) = u_{\text{eq}}(t) \cdot \text{adj}$$
+$$f(t) = (1 - u_{\text{eq}}(t)) \cdot \text{adj}$$
+
+The adjustment speed $\text{adj} = s + f$ controls how fast $u$ converges toward $u_{\text{eq}}(t)$. The ODE simplifies to:
+
+$$\frac{du}{dt} = \text{adj} \cdot (u_{\text{eq}}(t) - u)$$
+
+**Key insight:** $u_{\text{eq}}(t)$ absorbs slow structural changes in labor markets (de-industrialization, education polarization, etc.), while shocks create transitory deviations. There is no separate "spline deviation" fighting with the equilibrium for identifiability.
+
+#### 1.2 Time-Varying Equilibrium via B-Splines
+
+$u_{\text{eq}}(t)$ is constructed from a cubic B-spline basis:
+
+$$\text{logit}(u_{\text{eq},i}(t)) = \sum_{k=1}^{K} \beta_{k,i} \cdot B_k(t)$$
+
+where $B_k(t)$ are B-spline basis functions ($K=10$), and $\beta_{k,i}$ are education-specific coefficients with a **random walk prior** for smoothness:
+
+$$\beta_{1,i} \sim \text{Normal}(-3, 1)$$
+$$\beta_{k,i} \sim \text{Normal}(\beta_{k-1,i}, \sigma^{\text{spline}}_i) \quad \text{for } k = 2, ..., K$$
+$$\sigma^{\text{spline}}_i \sim \text{Exponential}(3)$$
+
+This prior penalizes rapid changes in the equilibrium trajectory, producing smooth curves that capture decade-scale structural trends without overfitting.
+
+### 2. Extending the Model
+
+#### 2.1 Education Heterogeneity
+
+Each of the 7 education levels has its own:
+- B-spline coefficients $\beta_{k,i}$ → time-varying equilibrium $u_{\text{eq},i}(t)$
+- Adjustment speed $\text{adj}_i$ (hierarchical)
+- Shock effects and decay rates (hierarchical)
+- Seasonal pattern (hierarchical)
+
+All use **non-centered hierarchical priors** for efficient sampling:
+
+$$\text{adj}_i = \exp(\mu_{\text{adj}} + \sigma_{\text{adj}} \cdot z_i^{\text{adj}}) \quad \text{with } z_i^{\text{adj}} \sim \text{Normal}(0,1)$$
+
+#### 2.2 Economic Shocks
+
+During recessions, separation rates spike above the time-varying baseline:
+
+$$s_i^{\text{eff}}(t) = s_i(t) + I_{2008}(t) \cdot \delta_{2008,i} + I_{2020}(t) \cdot \delta_{2020,i}$$
+
+where $s_i(t) = u_{\text{eq},i}(t) \cdot \text{adj}_i$ is the baseline separation rate, $I(t)$ is the **shock impulse function**, and $\delta_i$ are education-specific shock magnitudes with **strong hierarchical pooling**:
+
+$$\delta_{2008,i} = \exp(\mu_{2008} + \sigma_{2008} \cdot z_i^{2008}), \quad \sigma_{2008} \sim \text{Exponential}(20)$$
+
+The tight prior on $\sigma$ (mean 0.05) reflects the economic prior that macro shocks affect all education groups similarly.
+
+**Impulse function** (for 2008, analogous for 2020):
+
+$$I_{2008}(t) = \begin{cases}
+0 & t < t_{\text{onset}} \\
+\frac{t - t_{\text{onset}}}{t_{\text{peak}} - t_{\text{onset}}} & t_{\text{onset}} \leq t \leq t_{\text{peak}} \\
+e^{-\lambda_i (t - t_{\text{peak}})} & t > t_{\text{peak}}
+\end{cases}$$
+
+The half-life of recovery is $t_{1/2} = \ln(2)/\lambda_i$, with decay rates also hierarchically pooled.
+
+#### 2.3 Seasonal Effects
+
+Monthly seasonal effects are added directly on the logit scale after the ODE step:
+
+$$\text{logit}(u_{t,i}) = \text{logit}(u_{t-1,i}) + \Delta u_{t,i} + \gamma_{m(t),i}$$
+
+with a hierarchical sum-to-zero structure:
+
+$$\gamma_{1:11,i} = \mu_{\text{seas}} + \sigma_{\text{seas}} \cdot z_i^{\text{seas}}, \quad \gamma_{12,i} = -\sum_{m=1}^{11} \gamma_{m,i}$$
+
+#### 2.4 State Space Formulation
+
+We observe **counts** (binomial samples from the latent unemployment rate), not the true rate.
+
+**Process model** (discrete-time evolution):
+$$\text{logit}(u_{t,i}) = \text{logit}(u_{t-1,i}) + \Delta u_{t,i} + \gamma_{m(t),i}$$
+
+where $\Delta u_{t,i} = \text{adj}_i \cdot (u_{\text{eq},i}(t) - u_{t-1,i}) + \text{shocks}$ is the ODE-predicted change. No separate innovation term — the time-varying equilibrium plus shocks capture all systematic dynamics.
+
+**Observation model**:
+$$n_{\text{unemployed},t,i} \sim \text{Beta-Binomial}(n_{\text{total},t,i}, u_{t,i} \cdot \phi, (1-u_{t,i}) \cdot \phi)$$
+
+The beta-binomial allows overdispersion through $\phi$.
+
+### 3. Stan Implementation
+
+The full model is in [`stan/unemployment-ode-state-space-edu-parallel.stan`](stan/unemployment-ode-state-space-edu-parallel.stan).
+
+#### 3.1 Key Parameters
+
+```stan
+parameters {
+  // Time-varying equilibrium (B-spline coefficients)
+  matrix[K_spline, N_edu] u_eq_coef_raw;        // Spline coefs per edu
+  vector<lower=0>[N_edu] sigma_u_eq_spline;      // Smoothness per edu
+
+  // Adjustment speeds (hierarchical, non-centered)
+  real mu_log_adj_speed;
+  real<lower=0> sigma_log_adj_speed;
+  vector[N_edu] adj_speed_raw;
+
+  // Shock effects (hierarchical, non-centered, strong pooling)
+  real mu_log_shock_2008;
+  real<lower=0> sigma_log_shock_2008;
+  vector[N_edu] shock_2008_raw;
+  // ... same for 2020
+
+  // Decay rates (hierarchical, non-centered)
+  real mu_decay_2008;
+  real<lower=0> sigma_decay_2008;
+  vector[N_edu] decay_2008_raw;
+  // ... same for 2020
+
+  // Seasonal effects (hierarchical, non-centered)
+  vector[11] mu_seasonal;
+  real<lower=0> sigma_seasonal;
+  matrix[11, N_edu] seasonal_u_raw;
+
+  // Initial states and dispersion
+  vector[N_edu] logit_u_init;
+  real log_phi_minus_1;
+}
+```
+
+#### 3.2 Transformed Parameters
+
+The time-varying equilibrium is constructed from the B-spline basis:
+
+```stan
+transformed parameters {
+  matrix[T, N_edu] logit_u_eq;
+  matrix[T, N_edu] u_eq;
+  for (i in 1:N_edu) {
+    logit_u_eq[, i] = B_spline * u_eq_coef_raw[, i];
+    u_eq[, i] = inv_logit(logit_u_eq[, i]);
+  }
+
+  // Adjustment speeds
+  adj_speed[i] = exp(mu_log_adj_speed + sigma_log_adj_speed * adj_speed_raw[i]);
+
+  // Shock effects
+  shock_2008_effect[i] = exp(mu_log_shock_2008 + sigma_log_shock_2008 * shock_2008_raw[i]);
+
+  // Seasonal effects with sum-to-zero
+  seasonal_u[1:11, i] = mu_seasonal + sigma_seasonal * seasonal_u_raw[, i];
+  seasonal_u[12, i] = -sum(seasonal_u[1:11, i]);
+}
+```
+
+#### 3.3 ODE Computation (Inside reduce_sum)
+
+The ODE is evaluated at each time step using the time-varying equilibrium:
+
+```stan
+// Inside the partial function, per time step:
+real u_eq_t = inv_logit(logit_u_eq[t, edu]);
+real u_eq_safe = fmin(fmax(u_eq_t, 1e-6), 1 - 1e-6);
+
+// Flow rates from time-varying equilibrium
+real s_base = u_eq_safe * adj_speed[edu];
+real f_base = (1 - u_eq_safe) * adj_speed[edu];
+
+// Add shock contributions
+real s_eff = s_base
+             + shock_2008_intensity * shock_2008_effect[edu]
+             + shock_2020_intensity * shock_2020_effect[edu];
+
+// ODE: du/dt = s_eff*(1-u) - f_base*u
+real du_dt = s_eff * (1 - u_curr) - f_base * u_curr;
+
+// State evolution: ODE + seasonal (no separate spline)
+logit_u_curr = logit_u_curr + du_dt + seasonal_u[month[t], edu];
+u_curr = inv_logit(logit_u_curr);
+```
+
+#### 3.4 Priors
+
+```stan
+// Time-varying equilibrium: RW prior for smooth trajectories
+u_eq_coef_raw[1, i] ~ normal(-3.0, 1.0);   // ~5% initial equilibrium
+u_eq_coef_raw[k, i] ~ normal(u_eq_coef_raw[k-1, i], sigma_u_eq_spline[i]);
+sigma_u_eq_spline ~ exponential(3);         // Moderate smoothness
+
+// Strong hierarchical pooling (tight sigma priors = shared across groups)
+mu_log_adj_speed ~ normal(2.3, 0.25);
+sigma_log_adj_speed ~ exponential(20);       // Mean 0.05
+adj_speed_raw ~ std_normal();
+
+mu_log_shock_2008 ~ normal(-2, 0.8);
+sigma_log_shock_2008 ~ exponential(20);      // Strong pooling on shocks
+shock_2008_raw ~ std_normal();
+
+// ... analogous for 2020 shock, decay rates, seasonal effects
+
+logit_u_init ~ normal(-3.0, 0.5);
+log_phi_minus_1 ~ normal(8.5, 0.5);
+```
+
+#### 3.5 Parallelization
+
+The model uses Stan's `reduce_sum` to parallelize across education levels. Each thread computes the complete trajectory + likelihood for one or more education levels, since education levels are independent in the ODE computation. See the multi-threading section below for performance details.
+
+#### 3.6 Generated Quantities
+
+- **u_eq_mean**: Time-averaged equilibrium per education level
+- **Half-lives**: $t_{1/2} = \ln(2) / \lambda_i$ (education-specific)
+- **Full trajectory u[t, edu]**: ODE + shocks + seasonal
+- **Trend u_trend[t, edu]**: ODE + shocks (no seasonal)
+- **Seasonal effect**: Difference between full and trend
+- **Log-likelihood**: For LOO cross-validation
+- **Posterior predictive**: For model checking
+
+### 4. Why This Model Succeeds Where GAM Fails
+
+| Feature | GAM Approach | Time-Varying Equilibrium Model |
+|---------|-------------|-------------------------------|
+| **Shock mechanism** | Indicator variable (absorbed by trend) | Explicit ODE term with decay, structurally separated |
+| **Temporal structure** | Smooth function (static) | Dynamic ODE + time-varying equilibrium |
+| **Equilibrium** | Not modeled | B-spline $u_{\text{eq}}(t)$ with RW smoothness prior |
+| **Interpretation** | Abstract smooth values | Adjustment speed, shock magnitude, recovery half-life |
+| **Recovery dynamics** | Not modeled | Education-specific decay rates |
+| **Seasonality** | Cyclic smooth | Hierarchical monthly effects on logit scale |
+| **Identifiability** | N/A | Clean separation: equilibrium absorbs trends, shocks are transitory |
+
+**The fundamental insight**: By making the equilibrium time-varying rather than constant, the model cleanly separates structural labor market changes (absorbed by $u_{\text{eq}}(t)$) from transitory shock effects. No separate spline deviation fights the ODE for the same variation.
+
 ## Model Diagnostics
 
 A well-specified model should have:
@@ -1419,507 +1419,6 @@ se_diff <- loo_results$comparison[2, "se_diff"]
 
 **Interpretation**: The ELPD difference is small relative to its uncertainty (|difference| < 2×SE), indicating that adding education trends does not meaningfully improve predictive performance. The data do not support systematic linear trends across education rank for most labor market parameters, suggesting that education-specific heterogeneity is adequately captured by the hierarchical structure without imposing monotonic trends.
 
-## Education Trend Model Parameter Estimates
-
-To understand whether education systematically predicts labor market dynamics, we examine the trend parameters (β) from the education-trend model. Positive β indicates that higher education rank is associated with higher parameter values (on the transformed scale).
-
-```{r education-trend-parameters}
-# Extract beta parameters from education-trend model
-fit <- loo_results$education_trend_result$fit
-# Get all variable names
-all_vars <- fit$metadata()$stan_variables
-beta_vars <- grep("^beta_", all_vars, value = TRUE)
-if (length(beta_vars) == 0) {
-  stop("No beta parameters found in the model.")
-}
-beta_summary <- fit$summary(variables = beta_vars)
-
-# Create readable names
-beta_summary$parameter <- gsub("^beta_", "", beta_summary$variable)
-beta_summary$parameter <- gsub("_", " ", beta_summary$parameter)
-beta_summary$parameter <- paste0(toupper(substring(beta_summary$parameter, 1, 1)), substring(beta_summary$parameter, 2))
-
-cat("### Education Trend Parameters (β)\n")
-cat("Positive values indicate higher education rank predicts higher parameter values.\n\n")
-print(beta_summary[, c("parameter", "mean", "sd", "q5", "q95")])
-```
-
-**Key findings**:
-
-- Most β parameters have 90% credible intervals that include zero, except for equilibrium unemployment (β = `r round(beta_summary$mean[beta_summary$parameter == "Logit u eq"], 3)`, 90% CI [`r round(beta_summary$q5[beta_summary$parameter == "Logit u eq"], 3)`, `r round(beta_summary$q95[beta_summary$parameter == "Logit u eq"], 3)`] excludes zero).
-- The negative trend for equilibrium unemployment indicates that higher education levels have systematically lower natural unemployment rates.
-- The largest absolute trend is for `r beta_summary$parameter[which.max(abs(beta_summary$mean))]` (β = `r round(beta_summary$mean[which.max(abs(beta_summary$mean))], 3)`).
-- The LOO-CV comparison indicates that adding education trends does not improve overall predictive accuracy (ELPD difference = `r round(elpd_diff, 2)` ± `r round(se_diff, 2)`, small relative to uncertainty), suggesting that the hierarchical structure already captures education-specific heterogeneity adequately.
-
-## Monotonic I-Spline Model
-
-The linear education-trend model tests whether parameters change *linearly* with education rank. However, the true relationship between education and labor market outcomes may be **nonlinear but monotonic** — for example, the benefit of additional education may have diminishing returns, or there may be threshold effects.
-
-To test for smooth monotonic relationships, we implement a **monotonic I-spline model** that uses I-spline basis functions with positive coefficients to ensure monotonicity while allowing flexible nonlinear shapes.
-
-### I-Spline Approach
-
-**Key idea**: Instead of `parameter[i] = mu + beta * edu_rank[i]` (linear), we use:
-$$\text{parameter}[i] = \mu + \sum_{k=1}^{K} \beta_k \cdot I_k(\text{edu\_rank}[i])$$
-
-where:
-- $I_k(x)$ are **I-spline basis functions** (integrated B-splines) that are monotonically increasing
-- $\beta_k \geq 0$ are positive coefficients, ensuring the total effect is monotonic
-- $K = 4$ basis functions provide flexibility while avoiding overfitting
-
-```{r monotonic-spline-fit, eval=TRUE}
-#| cache: false
-#| message: false
-
-# Check if monotonic spline model results are available
-monotonic_spline_file <- here::here("models", "ode-state-space-monotonic-spline-fit.qs")
-monotonic_spline_file_rds <- here::here("models", "ode-state-space-monotonic-spline-fit.rds")
-# Also check if edu-parallel model (.rds) can substitute
-monotonic_alt_file <- here::here("models", "ode-state-space-edu-parallel-fit.rds")
-
-if (file.exists(monotonic_spline_file_rds)) {
-  monotonic_spline_file <- monotonic_spline_file_rds
-} else if (!file.exists(monotonic_spline_file) && file.exists(monotonic_alt_file)) {
-  # Use edu-parallel model as substitute
-  monotonic_spline_file <- monotonic_alt_file
-  cat("Using edu-parallel model for state-space analysis (monotonic spline model not available)\n")
-}
-
-# Run quick test if no saved results exist
-if (!file.exists(monotonic_spline_file)) {
-  cat("Running monotonic I-spline model quick test...\n")
-
-  # Load data
-  education_counts <- targets::tar_read("education_counts")
-  education_order <- c("less_than_hs", "high_school", "some_college",
-                       "bachelors", "masters", "professional", "phd")
-
-  # Prepare data
-  stan_data <- prepare_stan_data_monotonic_spline(
-    data = education_counts,
-    education_order = education_order,
-    n_ispline_basis = 4
-  )
-
-  # Compile model
-  stan_file <- here::here("stan", "unemployment-ode-state-space-monotonic-spline.stan")
-  model <- cmdstanr::cmdstan_model(stan_file, cpp_options = list(stan_threads = TRUE))
-
-  # Quick fit (minimal iterations for report)
-  init_fun <- function() make_init_at_prior_monotonic_spline(stan_data)
-  stan_data_for_fit <- stan_data[!sapply(stan_data, is.character)]
-
-  cat("Fitting model with 2 chains, 100+100 iterations...\n")
-  monotonic_fit <- model$sample(
-    data = stan_data_for_fit,
-    chains = 2,
-    parallel_chains = 2,
-    threads_per_chain = 4,
-    iter_warmup = 100,
-    iter_sampling = 100,
-    adapt_delta = 0.95,
-    max_treedepth = 12,
-    refresh = 50,
-    init = init_fun
-  )
-
-  # Store results
-  monotonic_result <- list(
-    fit = monotonic_fit,
-    data = stan_data,
-    diagnostics = list(
-      num_divergent = sum(monotonic_fit$sampler_diagnostics()[,,"divergent__"]),
-      max_treedepth_exceeded = sum(monotonic_fit$sampler_diagnostics()[,,"treedepth__"] >= 12)
-    )
-  )
-
-  # Compute LOO-CV
-  log_lik <- tryCatch({
-    monotonic_fit$draws("log_lik", format = "matrix")
-  }, error = function(e) NULL)
-
-  if (!is.null(log_lik)) {
-    monotonic_result$loo <- loo::loo(log_lik, cores = 2)
-  }
-
-} else {
-  cat("Loading saved monotonic I-spline model results...\n")
-  monotonic_result <- safe_qread(monotonic_spline_file, error_action = "warn")
-  if (is.null(monotonic_result)) {
-    cat("Warning: Could not load saved results. Model comparison unavailable.\n")
-  }
-}
-```
-
-### I-Spline Basis Visualization
-
-The I-spline basis functions provide smooth, monotonically increasing curves that can capture nonlinear relationships:
-
-```{r ispline-basis-plot, eval=TRUE}
-# Generate and visualize I-spline basis
-education_levels <- c("Less than HS", "High School", "Some College",
-                      "Bachelor's", "Master's", "Professional", "PhD")
-basis <- generate_ispline_basis(7, n_basis = 4)
-
-basis_df <- data.frame(
-  education = rep(1:7, 4),
-  education_label = factor(rep(education_levels, 4), levels = education_levels),
-  basis_function = rep(1:4, each = 7),
-  value = as.vector(basis)
-)
-
-ggplot(basis_df, aes(x = education, y = value, color = factor(basis_function))) +
-  geom_line(linewidth = 1.2) +
-  geom_point(size = 2) +
-  scale_x_continuous(breaks = 1:7, labels = education_levels) +
-  scale_color_brewer(palette = "Set1", name = "Basis Function") +
-  labs(x = "Education Level",
-       y = "Basis Function Value",
-       title = "I-Spline Basis Functions for Education Levels",
-       subtitle = "Each curve is monotonically increasing; weighted combinations preserve monotonicity") +
-  theme_minimal(base_size = 12) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-```
-
-### Model Diagnostics
-
-```{r monotonic-diagnostics, eval=TRUE}
-if (exists("monotonic_result") && !is.null(monotonic_result)) {
-  cat("=== Monotonic I-Spline Model Diagnostics ===\n\n")
-  cat("Divergences:", monotonic_result$diagnostics$num_divergent, "\n")
-  cat("Treedepth issues:", monotonic_result$diagnostics$max_treedepth_exceeded, "\n")
-
-  if (!is.null(monotonic_result$loo)) {
-    cat("\nLOO-CV Results:\n")
-    cat("  ELPD:", round(monotonic_result$loo$estimates["elpd_loo", "Estimate"], 1),
-        "±", round(monotonic_result$loo$estimates["elpd_loo", "SE"], 1), "\n")
-    cat("  p_loo:", round(monotonic_result$loo$estimates["p_loo", "Estimate"], 1), "\n")
-    cat("  Problematic observations (k > 0.7):",
-        sum(monotonic_result$loo$diagnostics$pareto_k > 0.7), "\n")
-  }
-} else {
-  cat("Monotonic I-spline model results not available.\n")
-}
-```
-
-### Why I-Spline Succeeds: Comparison with Ordered Categorical
-
-We explored an alternative **ordered categorical** parameterization that enforces monotonicity through Stan's `ordered[N]` constraint:
-
-```stan
-real sigma;              // Can be positive or negative
-ordered[N_edu] theta;    // θ₁ ≤ θ₂ ≤ ... ≤ θ₇
-parameter[i] = mu + sigma * theta[i]
-```
-
-This approach seemed elegant but **failed catastrophically** due to geometric pathologies:
-
-**Ordered Categorical Results (2026-02-11):**
-```
-Configuration:
-- adapt_delta = 0.98 (very conservative)
-- max_treedepth = 14 (very deep)
-- Iterations: 1000 warmup + 2000 sampling
-- Time: 373 minutes
-
-Convergence Diagnostics:
-❌ Divergences: 0 (misleading - other issues dominate)
-❌ Max treedepth hits: 6003/8000 (75% ← SEVERE)
-❌ Max Rhat: 2.43 (need < 1.01)
-❌ Min ESS: 4.85 (need > 400)
-
-Status: UNUSABLE - chains never converged
-```
-
-**Why Ordered Categorical Failed:**
-
-1. **Sign ambiguity**: When `sigma > 0`, parameters increase with education; when `sigma < 0`, they decrease. This creates a phase transition at `sigma = 0`.
-
-2. **Bimodal posterior**: The two modes (increasing vs decreasing trend) trap chains in different regions (Rhat = 2.43).
-
-3. **Boundary effects**: The `ordered` constraint creates hard boundaries that amplify hierarchical funnel geometry.
-
-**I-Spline Success (verified 2026-02-10):**
-```
-Configuration:
-- adapt_delta = 0.95 (standard)
-- max_treedepth = 12 (standard)
-- Iterations: 1000 warmup + 2000 sampling
-- Time: 50 minutes (7.5× faster!)
-
-Convergence Diagnostics:
-✅ Divergences: 0
-✅ Max treedepth hits: 1/8000 (<0.01% ← EXCELLENT)
-✅ EBFMI: [0.63, 0.66, 0.67, 0.69]
-✅ All Rhat < 1.01
-✅ All ESS > 400
-
-Status: PRODUCTION READY
-```
-
-**Why I-Spline Succeeds:**
-
-```stan
-vector<lower=0>[K_ispline] beta_ispline;  // Always positive
-parameter[i] = mu + dot_product(I_spline[i], beta_ispline) + ...
-```
-
-1. **No sign ambiguity**: Positive coefficients always produce monotonic trend in one direction
-2. **No phase transitions**: Smooth parameter space (can be flat if `beta ≈ 0`)
-3. **No boundaries**: Positive coefficients are unconstrained (exponential parameterization)
-4. **7.5× faster**: Good geometry = efficient computation
-
-**Key Lesson**: Enforce monotonicity through **positive parameterization** (I-spline coefficients), not through **constraints** (ordered vectors). Constraints that seem helpful can create severe geometric pathologies.
-
-For detailed analysis, see `reports/education-trend-modeling-approaches.html`.
-
-### Model Comparison: Three Approaches to Education Trends
-
-We can compare three approaches to modeling education effects:
-
-| Model | Trend Type | Parameters per Feature | Constraints | Flexibility |
-|-------|-----------|----------------------|-------------|-------------|
-| **Edu-Parallel** | None | 0 (exchangeable) | Hierarchical pooling | High (any pattern) |
-| **Education-Trend** | Linear | 1 (slope β) | None | Low (only linear) |
-| **Monotonic I-Spline** | Smooth monotonic | 4 (spline coefs) | β ≥ 0 (monotonic) | Medium |
-
-```{r model-comparison-three, eval=TRUE}
-# Compare all three models if results available
-if (exists("monotonic_result") && !is.null(monotonic_result) && !is.null(monotonic_result$loo)) {
-  comparison_df <- data.frame(
-    Model = c("Edu-Parallel", "Education-Trend", "Monotonic I-Spline"),
-    ELPD = c(
-      edu_parallel_elpd,
-      education_trend_elpd,
-      monotonic_result$loo$estimates["elpd_loo", "Estimate"]
-    ),
-    SE = c(
-      edu_parallel_se,
-      education_trend_se,
-      monotonic_result$loo$estimates["elpd_loo", "SE"]
-    )
-  )
-
-  cat("### Three-Way LOO-CV Comparison\n\n")
-  print(knitr::kable(comparison_df, digits = 1, align = c("l", "r", "r"),
-                     col.names = c("Model", "ELPD", "SE")))
-
-  cat("\n**Interpretation**: ")
-  best_model <- comparison_df$Model[which.max(comparison_df$ELPD)]
-  cat("The", best_model, "model has the highest ELPD, but differences may be small relative to their uncertainty.\n")
-}
-```
-
-### Hierarchical Parameter Comparison Across Models
-
-The following plots compare how each model represents the education-specific hierarchical parameters. This visualizes the key difference between approaches:
-
-- **Edu-Parallel**: Parameters are exchangeable within the hierarchical prior (no ordering constraint)
-- **Education-Trend**: Parameters follow a linear trend with education rank
-- **Monotonic I-Spline**: Parameters follow a smooth, monotonically increasing/decreasing curve
-
-```{r hierarchical-params-comparison, fig.height=12, fig.width=10}
-#| fig-cap: "Comparison of hierarchical parameters across model specifications"
-
-# Education level labels
-edu_labels <- c("Less than HS", "High School", "Some College",
-                "Bachelor's", "Master's", "Professional", "PhD")
-
-# Helper function to extract parameter summaries
-extract_param_summary <- function(fit, param_name, edu_labels) {
-  draws <- fit$draws(param_name, format = "matrix")
-  data.frame(
-    education = factor(edu_labels, levels = edu_labels),
-    edu_rank = 1:length(edu_labels),
-    mean = colMeans(draws),
-    q5 = apply(draws, 2, quantile, 0.05),
-    q25 = apply(draws, 2, quantile, 0.25),
-    q75 = apply(draws, 2, quantile, 0.75),
-    q95 = apply(draws, 2, quantile, 0.95)
-  )
-}
-
-# Extract parameters from each model
-params_to_plot <- c("u_eq", "adj_speed", "shock_2008_effect", "shock_2020_effect",
-                    "decay_2008", "decay_2020")
-param_labels <- c("Equilibrium Unemployment (u*)", "Adjustment Speed",
-                  "2008 Shock Effect", "2020 Shock Effect",
-                  "2008 Decay Rate", "2020 Decay Rate")
-
-# Build comparison data frame
-all_params <- list()
-
-for (i in seq_along(params_to_plot)) {
-  param <- params_to_plot[i]
-  label <- param_labels[i]
-
-  # Edu-Parallel model
-  tryCatch({
-    ep_df <- extract_param_summary(loo_results$edu_parallel_result$fit, param, edu_labels)
-    ep_df$model <- "Edu-Parallel (Free)"
-    ep_df$parameter <- label
-    all_params[[paste0("ep_", param)]] <- ep_df
-  }, error = function(e) NULL)
-
-  # Education-Trend model
-  tryCatch({
-    et_df <- extract_param_summary(loo_results$education_trend_result$fit, param, edu_labels)
-    et_df$model <- "Education-Trend (Linear)"
-    et_df$parameter <- label
-    all_params[[paste0("et_", param)]] <- et_df
-  }, error = function(e) NULL)
-
-  # Monotonic I-Spline model
-  if (exists("monotonic_result") && !is.null(monotonic_result$fit)) {
-    tryCatch({
-      ms_df <- extract_param_summary(monotonic_result$fit, param, edu_labels)
-      ms_df$model <- "Monotonic I-Spline"
-      ms_df$parameter <- label
-      all_params[[paste0("ms_", param)]] <- ms_df
-    }, error = function(e) NULL)
-  }
-}
-
-# Combine all data
-if (length(all_params) > 0) {
-  comparison_data <- do.call(rbind, all_params)
-  comparison_data$model <- factor(comparison_data$model,
-                                   levels = c("Edu-Parallel (Free)",
-                                              "Education-Trend (Linear)",
-                                              "Monotonic I-Spline"))
-
-  # Create faceted plot
-  ggplot(comparison_data, aes(x = edu_rank, y = mean, color = model, fill = model)) +
-    geom_ribbon(aes(ymin = q5, ymax = q95), alpha = 0.15, color = NA) +
-    geom_ribbon(aes(ymin = q25, ymax = q75), alpha = 0.3, color = NA) +
-    geom_line(linewidth = 1) +
-    geom_point(size = 2) +
-    facet_wrap(~ parameter, scales = "free_y", ncol = 2) +
-    scale_x_continuous(breaks = 1:7, labels = edu_labels) +
-    scale_color_manual(values = c("Edu-Parallel (Free)" = "#2ecc71",
-                                   "Education-Trend (Linear)" = "#3498db",
-                                   "Monotonic I-Spline" = "#e74c3c")) +
-    scale_fill_manual(values = c("Edu-Parallel (Free)" = "#2ecc71",
-                                  "Education-Trend (Linear)" = "#3498db",
-                                  "Monotonic I-Spline" = "#e74c3c")) +
-    labs(x = "Education Level",
-         y = "Parameter Value",
-         color = "Model",
-         fill = "Model",
-         title = "Hierarchical Parameters by Model Specification",
-         subtitle = "Lines: posterior mean; Dark band: 50% CI; Light band: 90% CI") +
-    theme_minimal(base_size = 11) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
-          legend.position = "bottom",
-          strip.text = element_text(size = 10, face = "bold"),
-          panel.grid.minor = element_blank())
-} else {
-  cat("Could not extract parameters for comparison.\n")
-}
-```
-
-### Individual Model Parameter Plots
-
-```{r individual-model-plots, fig.height=8, fig.width=10}
-#| fig-cap: "Equilibrium unemployment and adjustment speed by education level for each model"
-
-# Focus on two key parameters: u_eq and adj_speed
-key_params <- comparison_data[comparison_data$parameter %in%
-                               c("Equilibrium Unemployment (u*)", "Adjustment Speed"), ]
-
-if (nrow(key_params) > 0) {
-  ggplot(key_params, aes(x = education, y = mean, color = model)) +
-    geom_errorbar(aes(ymin = q5, ymax = q95), width = 0.3,
-                  position = position_dodge(width = 0.5), alpha = 0.5) +
-    geom_errorbar(aes(ymin = q25, ymax = q75), width = 0.15, linewidth = 1,
-                  position = position_dodge(width = 0.5)) +
-    geom_point(size = 3, position = position_dodge(width = 0.5)) +
-    facet_wrap(~ parameter, scales = "free_y", ncol = 1) +
-    scale_color_manual(values = c("Edu-Parallel (Free)" = "#2ecc71",
-                                   "Education-Trend (Linear)" = "#3498db",
-                                   "Monotonic I-Spline" = "#e74c3c")) +
-    labs(x = "Education Level",
-         y = "Parameter Value",
-         color = "Model",
-         title = "Key Labor Market Parameters Across Models",
-         subtitle = "Thick bar: 50% CI; Thin bar: 90% CI") +
-    theme_minimal(base_size = 12) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          legend.position = "bottom",
-          strip.text = element_text(size = 12, face = "bold"))
-}
-```
-
-### Shock Response Comparison
-
-```{r shock-comparison-plot, fig.height=6, fig.width=10}
-#| fig-cap: "Shock effects and recovery rates by education level"
-
-# Focus on shock parameters
-shock_params <- comparison_data[comparison_data$parameter %in%
-                                 c("2008 Shock Effect", "2020 Shock Effect",
-                                   "2008 Decay Rate", "2020 Decay Rate"), ]
-
-if (nrow(shock_params) > 0) {
-  ggplot(shock_params, aes(x = education, y = mean, color = model)) +
-    geom_errorbar(aes(ymin = q5, ymax = q95), width = 0.3,
-                  position = position_dodge(width = 0.5), alpha = 0.5) +
-    geom_point(size = 2.5, position = position_dodge(width = 0.5)) +
-    geom_line(aes(group = model), position = position_dodge(width = 0.5), alpha = 0.5) +
-    facet_wrap(~ parameter, scales = "free_y", ncol = 2) +
-    scale_color_manual(values = c("Edu-Parallel (Free)" = "#2ecc71",
-                                   "Education-Trend (Linear)" = "#3498db",
-                                   "Monotonic I-Spline" = "#e74c3c")) +
-    labs(x = "Education Level",
-         y = "Parameter Value",
-         color = "Model",
-         title = "Economic Shock Parameters Across Models",
-         subtitle = "Points: posterior mean; Whiskers: 90% CI") +
-    theme_minimal(base_size = 11) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 9),
-          legend.position = "bottom",
-          strip.text = element_text(size = 10, face = "bold"))
-}
-```
-
-### Model Differences Summary
-
-```{r model-differences-table}
-# Create summary table of key differences
-if (exists("comparison_data") && nrow(comparison_data) > 0) {
-  # Calculate range of parameter values for each model
-  range_summary <- comparison_data %>%
-    dplyr::group_by(model, parameter) %>%
-    dplyr::summarize(
-      min_mean = min(mean),
-      max_mean = max(mean),
-      range = max(mean) - min(mean),
-      .groups = "drop"
-    ) %>%
-    tidyr::pivot_wider(names_from = model, values_from = c(min_mean, max_mean, range))
-
-  cat("\n### Parameter Range by Model\n")
-  cat("This table shows the range of parameter values across education levels for each model.\n\n")
-
-  # Simpler summary
-  simple_summary <- comparison_data %>%
-    dplyr::group_by(model, parameter) %>%
-    dplyr::summarize(
-      `Range (max-min)` = round(max(mean) - min(mean), 3),
-      .groups = "drop"
-    ) %>%
-    tidyr::pivot_wider(names_from = model, values_from = `Range (max-min)`)
-
-  print(knitr::kable(simple_summary, align = c("l", "r", "r", "r"),
-                     caption = "Range of parameter means across education levels"))
-}
-```
-
-**Key insight**: If the monotonic I-spline model does not substantially improve over the edu-parallel model, this suggests that:
-1. Education-specific effects are not monotonic in education rank
-2. The hierarchical structure adequately captures heterogeneity without imposing monotonicity
-3. Individual education levels may have idiosyncratic labor market characteristics
-
 ## Summary
 
 This hierarchical ODE state space model successfully models unemployment dynamics across education levels with proper identification of shock effects and labor market parameters.
@@ -1937,56 +1436,23 @@ This hierarchical ODE state space model successfully models unemployment dynamic
 
 ### Key Findings
 
-1. **Shock effects are positive and identifiable** - Both 2008 and 2020 crises show clear positive effects on job separation rates
+1. **Time-varying equilibrium captures structural labor market change** — $u_{\text{eq}}(t)$ smoothly evolves to reflect decade-scale trends (de-industrialization, education polarization). Shocks are cleanly separated as transitory deviations.
 
-2. **Hierarchical pooling strengthens inference** - Population-level means inform education-specific estimates while allowing heterogeneity:
-   - Equilibrium unemployment: PhD ~1.5%, Less than HS ~7-8%
-   - Adjustment speeds: Range from 2-30, with substantial education variation
-   - Shock magnitudes: Pooled across education with appropriate between-group variation
-   - Recovery rates: Hierarchical decay parameters prevent overfitting
+2. **The 2008 crisis produced lasting structural damage for non-PhD workers** — Decay half-lives of 5-6 years for most groups (vs. 5 weeks for PhDs) indicate the shock persisted far beyond the recession. The equilibrium $u_{\text{eq}}(t)$ shifted upward, absorbing permanent job losses.
 
-3. **Economic parameters are interpretable** - Separation rates (~0.1-0.4/month), finding rates (2-30/month) reflect actual labor market dynamics scaled by logit geometry
+3. **The 2020 COVID shock was purely transitory** — Half-lives of 4-5 months across all education levels, with no permanent equilibrium shift. The labor market bounced back quickly.
 
-4. **Shock magnitude estimates are credible**:
-   - 2008 financial crisis: ~14-47% increase in separation rate across education levels
-   - 2020 COVID-19: ~27-107% increase in separation rate (massive shock!)
+4. **Adjustment speeds increase with education** — Ranging from 8.9 (less than high school) to 57.3 (PhD) per month, reflecting more fluid labor markets at higher education levels.
 
-5. **Recovery dynamics vary by education** - Hierarchical decay parameters capture different recovery speeds while borrowing strength across groups
+5. **Mean equilibrium unemployment** ranges from 1.1% (professional degrees) to 8.9% (less than high school), closely matching raw data while the time-varying trajectory captures within-group structural trends.
 
 ### Technical Success
 
-Perfect convergence (0 divergences, all Rhat < 1.01, min ESS = 314) achieved through:
-- **Time-varying equilibrium** - Eliminated identifiability fight between constant u_eq and spline deviation
-- **Non-centered parameterization** - Efficient sampling for all hierarchical parameters
-- **Strong hierarchical pooling** - Tight Exponential(20) priors on shock and adj_speed sigmas
-- **Prior-centered initialization** - `make_init_at_prior_edu_parallel()` starts chains at prior centers
-
-### Methodological Contribution: Monotonic Trend Parameterization
-
-A key finding from this work is that **parameterization matters critically** for monotonic trend modeling in hierarchical Bayesian models.
-
-**Two approaches for enforcing monotonicity:**
-
-| Approach | Method | Convergence | Time | Max Treedepth Hits |
-|----------|--------|-------------|------|-------------------|
-| **Ordered Categorical** | `ordered[N] theta` + signed scale | ❌ Failed (Rhat=2.43, ESS=5) | 373 min | 75% |
-| **I-Spline** | Positive coefficients | ✅ Excellent (Rhat<1.01, ESS>400) | 50 min | <0.01% |
-
-**Why the difference?**
-
-The ordered categorical approach (`ordered[N_edu] theta` with `real sigma`) creates geometric pathologies:
-- **Sign ambiguity**: sigma > 0 (increasing) vs sigma < 0 (decreasing) creates phase transition at sigma=0
-- **Bimodal posterior**: Chains trapped in different modes (increasing vs decreasing trend)
-- **Boundary effects**: `ordered` constraint amplifies hierarchical funnel geometry
-
-The I-spline approach enforces monotonicity through **positive parameterization** (`vector<lower=0>[K] beta`) rather than constraints:
-- No sign ambiguity (always monotonic in one direction)
-- No phase transitions (smooth parameter space)
-- No boundary issues (positive coefficients are unconstrained)
-
-**Practical impact**: Despite more conservative sampler settings (adapt_delta=0.98, max_treedepth=14), the ordered categorical model took 373 minutes and failed to converge. The I-spline model converged in 50 minutes (7.5× faster) with standard settings.
-
-This has broad implications for hierarchical Bayesian modeling when monotonicity constraints are desired. See `reports/education-trend-modeling-approaches.html` for detailed analysis.
+Perfect convergence (0 divergences, 0/22,418 parameters with Rhat > 1.05, max Rhat 1.013, min ESS 298) achieved through:
+- **Time-varying equilibrium** — Eliminated identifiability fight between constant u_eq and spline deviation
+- **Non-centered parameterization** — Efficient sampling for all hierarchical parameters
+- **Moderate hierarchical pooling** — Exponential(2) on adj_speed sigma, Exponential(5) on shock sigmas, Exponential(1) on decay sigma
+- **Prior-centered initialization** — `make_init_at_prior_edu_parallel()` starts chains at prior centers
 
 ## Multi-Threading Performance Optimization
 
@@ -1995,578 +1461,19 @@ This has broad implications for hierarchical Bayesian modeling when monotonicity
 :::{.callout-tip}
 ## Working Solution: Education-Level Parallelization
 
-After discovering that Stan's `reduce_sum()` has type constraints preventing observation-level parallelization, we implemented a **education-level parallelization strategy** that successfully achieves significant speedup:
-
-- **Key insight**: Education levels are independent in the ODE computation
-- **Approach**: Each thread computes the complete trajectory + likelihood for one or more education levels
-- **Speedup achieved**: **2.38x** on real CPS data (22 min → 9 min)
-- **Data flattening**: 2D arrays converted to 1D with indexing `(edu-1)*T + t` for `reduce_sum` compatibility
-
-The edu-parallel model ([unemployment-ode-state-space-edu-parallel.stan](../stan/unemployment-ode-state-space-edu-parallel.stan)) is fully functional and integrated into the targets pipeline.
-:::
-
-**What We Implemented**:
-
-- Complete `reduce_sum()` Stan implementation parallelizing across education levels
-- `partial_edu_trajectory()` function computing full trajectory + likelihood per education level
-- Flattened data structures compatible with `reduce_sum()` type constraints
-- Comprehensive TDD test suite (31 structure tests all passing)
-- R wrapper function (`fit_ode_state_space_edu_parallel()`)
-- Full targets pipeline integration
-
-**Current Recommendation**: Use the edu-parallel model when runtime is important (development, iteration). Use the serial model for final production runs (simpler, equivalent results).
-
-### Performance Comparison
-
-```{r threading-comparison}
-#| fig-cap: "Performance comparison: Serial vs Education-Parallel execution"
-
-# Check if both model results are available
-serial_file <- here("models", "ode-state-space-monotonic-spline-serial.qs")
-parallel_file <- here("models", "ode-state-space-monotonic-spline-parallel.qs")
-
-# Skip this section if we don't have separate serial/parallel fits
-if (file.exists(serial_file) && file.exists(parallel_file)) {
-  serial_result <- safe_qread(serial_file, error_action = "stop")
-  parallel_result <- safe_qread(parallel_file, error_action = "stop")
-
-  # Extract timing info
-  serial_time <- serial_result$timing$elapsed_mins
-  parallel_time <- parallel_result$timing$elapsed_mins
-  speedup <- serial_time / parallel_time
-
-  # Create comparison data
-  comparison <- data.frame(
-    Model = c("Serial (Efficient)", "Edu-Parallel (reduce_sum)"),
-    Runtime_min = c(serial_time, parallel_time),
-    Chains = c(4, parallel_result$timing$chains %||% 4),
-    Threads_per_chain = c(1, parallel_result$timing$threads_per_chain %||% 7),
-    Divergences = c(serial_result$diagnostics$num_divergent,
-                    parallel_result$diagnostics$num_divergent),
-    Speedup = c(1.0, speedup)
-  )
-
-  cat("\n=== Runtime Performance ===\n")
-  knitr::kable(
-    comparison,
-    col.names = c("Model", "Runtime (min)", "Chains", "Threads/Chain", "Divergences", "Speedup"),
-    digits = c(0, 1, 0, 0, 0, 2),
-    align = c("l", "r", "r", "r", "r", "r")
-  )
-
-  # Visualize speedup
-  ggplot(comparison, aes(x = Model, y = Runtime_min)) +
-    geom_col(aes(fill = Model), width = 0.6) +
-    geom_text(aes(label = sprintf("%.1f min\n(%.2fx)", Runtime_min, Speedup)),
-              vjust = -0.5, size = 4) +
-    scale_fill_manual(values = c("Serial (Efficient)" = "#95a5a6",
-                                  "Edu-Parallel (reduce_sum)" = "#3498db")) +
-    labs(x = NULL,
-         y = "Runtime (minutes)",
-         title = "Model Fitting Runtime Comparison",
-         subtitle = "Education-level parallelization achieves significant speedup") +
-    theme_minimal(base_size = 14) +
-    theme(legend.position = "none",
-          axis.text.x = element_text(size = 12))
-
-} else {
-  cat("\nNote: Serial vs parallel comparison skipped.\n")
-  cat("This requires separate model fits with different threading configurations.\n")
-}
-```
-
-### Threading Implementation Details
-
-**Education-Parallel Model Characteristics**:
-
-```{r threading-details}
-# Load edu-parallel model results if available
-parallel_file <- here("models", "ode-state-space-edu-parallel-fit-v4.rds")
-
-if (file.exists(parallel_file)) {
-  parallel_result <- safe_qread(parallel_file, error_action = "stop")
-
-  cat("Threading Configuration:\n")
-  cat(sprintf("  Threads per chain: %d\n", parallel_result$timing$threads_per_chain %||% 7))
-  cat(sprintf("  Grainsize: %d education levels per thread chunk\n", parallel_result$timing$grainsize %||% 1))
-  cat(sprintf("  Education levels: %d\n", parallel_result$stan_data$N_edu))
-  cat(sprintf("  Time points: %d\n", parallel_result$stan_data$T))
-  cat(sprintf("  Total observations: %d (T × N_edu)\n",
-              parallel_result$stan_data$T * parallel_result$stan_data$N_edu))
-
-  cat("\nConvergence Diagnostics:\n")
-  cat(sprintf("  Divergences: %d\n", parallel_result$diagnostics$num_divergent))
-  cat(sprintf("  Max treedepth exceeded: %d\n", parallel_result$diagnostics$max_treedepth_exceeded))
-  cat(sprintf("  E-BFMI: %s\n", paste(round(parallel_result$diagnostics$ebfmi, 3), collapse = ", ")))
-
-} else {
-  cat("Edu-parallel model results not available.\n")
-  cat("Run targets::tar_make(model_ode_state_space_edu_parallel) to generate.\n")
-}
-```
-
-### When to Use Threading
-
-**Threading provides benefit when**:
-- Multiple CPU cores available (8+ cores recommended)
-- Long sampling runs (>20 minutes serial runtime)
-- Multiple education levels (N_edu ≥ 4 gives better parallelization)
-- Repeated model fitting (e.g., cross-validation, sensitivity analysis)
-
-**Threading provides limited benefit when**:
-- Few cores available (<4 cores)
-- Short sampling runs (<10 minutes)
-- Few education levels (N_edu < 3)
-
-### Threading Configuration Guidelines
-
-```{r threading-config}
-cat("=== Recommended Threading Configurations ===\n\n")
-
-# Different configurations for different scenarios
-configs <- data.frame(
-  Scenario = c("Development (fast iteration)",
-               "Standard analysis",
-               "Production (many cores)"),
-  Parallel_Chains = c(2, 2, 4),
-  Threads_per_Chain = c(7, 7, 4),
-  Total_Threads = c(14, 14, 16),
-  Notes = c("Maximize threads for speed",
-            "Balance threads and chains",
-            "More chains for better mixing")
-)
-
-knitr::kable(configs, align = c("l", "r", "r", "r", "l"))
-
-cat("\n\nKey insight: With N_edu=7 education levels, using 7 threads per chain\n")
-cat("allows each thread to handle one education level completely.\n")
-```
-
-### Threading Overhead Analysis
-
-```{r threading-overhead}
-# Education-level parallelization has different characteristics
-# Since each education level is computed independently, the parallelization
-# is nearly perfect within the likelihood computation
-
-cat("=== Education-Level Parallelization Analysis ===\n\n")
-
-cat("Parallelization approach:\n")
-cat("  - Each thread computes: ODE trajectory + likelihood for one education level\n")
-cat("  - Education levels are independent (no cross-talk in ODE)\n")
-cat("  - Synchronization only at reduce_sum aggregation point\n\n")
-
-cat("Expected scaling:\n")
-cat("  - With N_edu=7 and 7 threads: Each thread handles 1 education level\n")
-cat("  - ODE computation: ~90% of per-education runtime\n")
-cat("  - Likelihood computation: ~10% of per-education runtime\n")
-cat("  - Both are parallelized across education levels\n\n")
-
-cat("Observed speedup: 2.38x (22.28 min → 9.37 min)\n")
-cat("This indicates good parallelization efficiency for the ODE-heavy workload.\n")
-```
-
-### Alternative Optimization Strategies
-
-The education-level parallelization provides **2.38x speedup** while maintaining full hierarchical structure. For even greater speedup, consider:
-
-1. **Increase threads**: With more cores, use more threads per chain
-   - **Benefit**: Linear scaling up to N_edu threads
-   - **Use case**: Development iteration on multi-core workstations
-
-2. **GPU acceleration**: Use Stan's GPU support for matrix operations
-   - ✅ Potential for 10-50x speedup on large matrix operations
-   - ❌ Requires GPU hardware and Stan GPU toolchain
-   - ❌ Limited GPU support for ODE solvers in Stan
-   - **Use case**: When GPU infrastructure is already available
-
-3. **Model simplification**: Reduce model complexity
-   - Replace GAM smooths with simpler polynomials
-   - Reduce number of shock components
-   - ✅ Faster sampling with fewer parameters
-   - ❌ May sacrifice model expressiveness
-   - **Use case**: When runtime is critical and simpler model is adequate
-
-## Parameter Equivalence: Serial vs Education-Parallel Models
-
-A critical validation is ensuring that the education-parallel model produces **equivalent posteriors** to the serial model. Small differences are expected due to MCMC stochasticity, but key parameters should match closely.
-
-```{r parameter-comparison}
-#| fig-cap: "Parameter comparison between serial and education-parallel models"
-#| fig-height: 10
-
-serial_file <- here("models", "ode-state-space-monotonic-spline-serial.qs")
-parallel_file <- here("models", "ode-state-space-monotonic-spline-parallel.qs")
-
-if (file.exists(serial_file) && file.exists(parallel_file)) {
-  serial_result <- safe_qread(serial_file, error_action = "stop")
-  parallel_result <- safe_qread(parallel_file, error_action = "stop")
-
-  cat("\n=== Parameter Equivalence Check ===\n")
-  cat("Comparing posterior means between serial and edu-parallel models:\n\n")
-
-  # Key hierarchical parameters
-  key_params <- c("mu_logit_u_eq", "sigma_logit_u_eq",
-                  "mu_log_adj_speed", "sigma_log_adj_speed",
-                  "mu_log_shock_2008", "sigma_log_shock_2008",
-                  "mu_log_shock_2020", "sigma_log_shock_2020",
-                  "mu_decay_2008", "sigma_decay_2008",
-                  "mu_decay_2020", "sigma_decay_2020",
-                  "sigma_u_eq_spline", "phi")
-
-  serial_summary <- serial_result$fit$summary(variables = key_params)
-  parallel_summary <- parallel_result$fit$summary(variables = key_params)
-
-  # Create comparison data frame
-  param_comparison <- data.frame(
-    Parameter = key_params,
-    Serial_Mean = serial_summary$mean,
-    Serial_SD = serial_summary$sd,
-    Parallel_Mean = parallel_summary$mean,
-    Parallel_SD = parallel_summary$sd,
-    Abs_Diff = abs(serial_summary$mean - parallel_summary$mean),
-    Pct_Diff = abs(serial_summary$mean - parallel_summary$mean) / abs(serial_summary$mean) * 100
-  )
-
-  cat("Hierarchical Population Parameters:\n\n")
-  knitr::kable(
-    param_comparison,
-    digits = c(0, 3, 3, 3, 3, 4, 1),
-    col.names = c("Parameter", "Serial Mean", "Serial SD", "Parallel Mean", "Parallel SD", "Abs Diff", "% Diff"),
-    align = c("l", "r", "r", "r", "r", "r", "r")
-  )
-
-  # Visual comparison
-  param_comparison$Parameter <- factor(param_comparison$Parameter,
-                                        levels = rev(key_params))
-
-  p1 <- ggplot(param_comparison, aes(y = Parameter)) +
-    geom_point(aes(x = Serial_Mean), color = "#E74C3C", size = 3, shape = 16) +
-    geom_point(aes(x = Parallel_Mean), color = "#3498DB", size = 3, shape = 17) +
-    geom_segment(aes(x = Serial_Mean, xend = Parallel_Mean,
-                     yend = Parameter), alpha = 0.3, linewidth = 0.5) +
-    labs(x = "Posterior Mean",
-         y = NULL,
-         title = "Parameter Comparison: Serial vs Edu-Parallel",
-         subtitle = "Red circles = Serial; Blue triangles = Edu-Parallel") +
-    theme_minimal(base_size = 12) +
-    theme(axis.text.y = element_text(size = 10))
-
-  print(p1)
-
-  # Summary statistics
-  cat("\n\n=== Summary Statistics ===\n")
-  cat(sprintf("Maximum absolute difference: %.4f\n", max(param_comparison$Abs_Diff)))
-  cat(sprintf("Maximum percent difference: %.2f%%\n", max(param_comparison$Pct_Diff, na.rm = TRUE)))
-  cat(sprintf("Mean percent difference: %.2f%%\n", mean(param_comparison$Pct_Diff, na.rm = TRUE)))
-
-  # Check if differences are acceptable
-  max_pct_diff <- max(param_comparison$Pct_Diff, na.rm = TRUE)
-  if (max_pct_diff < 5) {
-    cat("\n✓ All parameters within 5% - models are equivalent\n")
-  } else if (max_pct_diff < 10) {
-    cat("\n⚠ Some parameters differ by 5-10% - likely due to MCMC variation\n")
-    cat("  Consider running with more iterations for better convergence.\n")
-  } else {
-    cat("\n⚠ Larger differences detected - investigate sampling diagnostics\n")
-  }
-
-} else {
-  cat("\nNote: Comparison skipped - requires separate serial and parallel model fits.\n")
-}
-```
-
-### Education-Specific Parameter Comparison
-
-Beyond hierarchical parameters, we should verify that education-specific parameters also match:
-
-```{r edu-specific-comparison}
-#| fig-cap: "Education-specific parameter comparison"
-#| fig-height: 8
-
-if (file.exists(serial_file) && file.exists(parallel_file)) {
-  serial_result <- safe_qread(serial_file, error_action = "stop")
-  parallel_result <- safe_qread(parallel_file, error_action = "stop")
-
-  # Education-specific equilibrium unemployment
-  N_edu <- serial_result$stan_data$N_edu
-  edu_levels <- serial_result$stan_data$education_levels
-
-  edu_params <- paste0("u_eq[", 1:N_edu, "]")
-
-  serial_edu <- serial_result$fit$summary(variables = edu_params)
-  parallel_edu <- parallel_result$fit$summary(variables = edu_params)
-
-  edu_comparison <- data.frame(
-    Education = edu_levels,
-    Serial_u_eq = serial_edu$mean * 100,
-    Parallel_u_eq = parallel_edu$mean * 100,
-    Diff_ppt = (parallel_edu$mean - serial_edu$mean) * 100
-  )
-
-  cat("\n=== Equilibrium Unemployment by Education ===\n")
-  cat("(Values in percentage points)\n\n")
-  knitr::kable(
-    edu_comparison,
-    digits = c(0, 2, 2, 3),
-    col.names = c("Education", "Serial u_eq (%)", "Parallel u_eq (%)", "Diff (ppt)"),
-    align = c("l", "r", "r", "r")
-  )
-
-  # Plot comparison
-  edu_comparison$Education <- factor(edu_comparison$Education,
-                                      levels = edu_comparison$Education[order(edu_comparison$Serial_u_eq)])
-
-  p2 <- ggplot(edu_comparison, aes(x = Education)) +
-    geom_point(aes(y = Serial_u_eq), color = "#E74C3C", size = 4, shape = 16) +
-    geom_point(aes(y = Parallel_u_eq), color = "#3498DB", size = 4, shape = 17) +
-    geom_segment(aes(y = Serial_u_eq, yend = Parallel_u_eq, xend = Education),
-                 alpha = 0.3, linewidth = 0.5) +
-    coord_flip() +
-    labs(y = "Equilibrium Unemployment Rate (%)",
-         x = NULL,
-         title = "Equilibrium Unemployment: Serial vs Edu-Parallel",
-         subtitle = "Red circles = Serial; Blue triangles = Edu-Parallel") +
-    theme_minimal(base_size = 12)
-
-  print(p2)
-
-  cat("\nNote: Differences should be small (<0.5 percentage points).\n")
-  cat("Larger differences may indicate insufficient MCMC iterations.\n")
-} else {
-  cat("\nNote: Comparison skipped - requires separate serial and parallel model fits.\n")
-}
-```
-
-## Comprehensive Parameter Comparison
-
-We now perform a comprehensive comparison of all parameter categories between serial and parallel models using the `compare_stan_models()` function, which compares hierarchical parameters, flow rates, shock effects, decay rates, equilibrium rates, seasonal patterns, spline smoothness, MCMC diagnostics, and LOO-CV metrics.
-
-```{r comprehensive-comparison}
-#| fig-cap: "Comprehensive parameter comparison between serial and parallel models"
-#| fig-height: 12
-
-if (file.exists(serial_file) && file.exists(parallel_file)) {
-
-  # Load model results
-  serial_result <- safe_qread(serial_file, error_action = "stop")
-  parallel_result <- safe_qread(parallel_file, error_action = "stop")
-
-  # Run comprehensive comparison
-  comparison <- compare_stan_models(serial_result, parallel_result)
-
-  cat("\n=== Comprehensive Model Comparison ===\n")
-  cat("Comparing all parameter categories between serial and edu-parallel models:\n\n")
-
-  # Summary statistics
-  cat("Summary Statistics:\n")
-  cat(sprintf("  Number of parameters compared: %d\n", comparison$summary$n_parameters))
-  cat(sprintf("  Maximum absolute difference: %.4f\n", comparison$summary$max_abs_diff))
-  cat(sprintf("  Maximum percent difference: %.2f%%\n", comparison$summary$max_pct_diff))
-  cat(sprintf("  Mean percent difference: %.2f%%\n", comparison$summary$mean_pct_diff))
-  cat(sprintf("  Mean credible interval overlap: %.1f%%\n", comparison$summary$mean_ci_overlap * 100))
-
-  # Validation against thresholds
-  cat("\nValidation against equivalence thresholds:\n")
-  if (comparison$summary$max_pct_diff < 5) {
-    cat("  ✓ Hierarchical parameters: <5% difference (PASS)\n")
-  } else {
-    cat("  ⚠ Hierarchical parameters: >5% difference (INVESTIGATE)\n")
-  }
-
-  # Check education-specific equilibrium rates (existing threshold)
-  max_edu_diff <- max(abs(comparison$equilibrium_rates$abs_diff), na.rm = TRUE)
-  if (max_edu_diff < 0.005) {  # 0.5 percentage points
-    cat("  ✓ Education-specific rates: <0.5 ppt difference (PASS)\n")
-  } else {
-    cat(sprintf("  ⚠ Education-specific rates: %.3f ppt difference (INVESTIGATE)\n", max_edu_diff))
-  }
-
-  # LOO-CV equivalence (ELPD difference < 4 SE)
-  if (!is.null(comparison$loo_metrics)) {
-    elpd_diff <- abs(comparison$loo_metrics$diff[comparison$loo_metrics$metric == "elpd_loo"])
-    elpd_se <- comparison$loo_metrics$se_diff[comparison$loo_metrics$metric == "elpd_loo"]
-    if (elpd_diff < 4 * elpd_se) {
-      cat("  ✓ LOO-CV: ELPD difference < 4 SE (practically equivalent)\n")
-    } else {
-      cat(sprintf("  ⚠ LOO-CV: ELPD difference = %.1f SE (investigate)\n", elpd_diff / elpd_se))
-    }
-  }
-
-  # Plot parameter differences by category
-  library(ggplot2)
-  library(data.table)
-
-  # Combine all comparison data
-  all_comparisons <- rbind(
-    comparison$hierarchical,
-    comparison$flow_rates,
-    comparison$finding_rates,
-    comparison$shock_effects_2008,
-    comparison$shock_effects_2020,
-    comparison$decay_2008,
-    comparison$decay_2020,
-    comparison$equilibrium_rates,
-    comparison$seasonal_effects,
-    comparison$spline_smoothness
-  )
-
-  all_comparisons <- data.table::as.data.table(all_comparisons)
-
-  # Remove NA rows
-  all_comparisons <- all_comparisons[!is.na(pct_diff)]
-
-  # Create visualization of percent differences by category
-  p_diff <- ggplot(all_comparisons, aes(x = category, y = pct_diff)) +
-    geom_boxplot(fill = "lightblue", alpha = 0.7) +
-    geom_hline(yintercept = 5, linetype = "dashed", color = "red", alpha = 0.5) +
-    geom_hline(yintercept = 10, linetype = "dashed", color = "orange", alpha = 0.5) +
-    coord_flip() +
-    labs(
-      title = "Parameter Difference Distribution by Category",
-      subtitle = "Serial vs. Education-Parallel Models",
-      x = "Parameter Category",
-      y = "Percent Difference (%)",
-      caption = "Red dashed line: 5% threshold\nOrange dashed line: 10% threshold"
-    ) +
-    theme_minimal(base_size = 12) +
-    theme(axis.text.y = element_text(size = 10))
-
-  print(p_diff)
-
-  # Credible interval overlap visualization
-  p_overlap <- ggplot(all_comparisons, aes(x = category, y = ci_overlap * 100)) +
-    geom_boxplot(fill = "lightgreen", alpha = 0.7) +
-    geom_hline(yintercept = 50, linetype = "dashed", color = "blue", alpha = 0.5) +
-    coord_flip() +
-    labs(
-      title = "Credible Interval Overlap by Category",
-      subtitle = "Serial vs. Education-Parallel Models",
-      x = "Parameter Category",
-      y = "Credible Interval Overlap (%)",
-      caption = "Blue dashed line: 50% overlap threshold"
-    ) +
-    theme_minimal(base_size = 12) +
-    theme(axis.text.y = element_text(size = 10))
-
-  print(p_overlap)
-
-} else {
-  cat("Both model results needed for comprehensive comparison:\n")
-  cat("  - Serial: ", serial_file, " (", file.exists(serial_file), ")\n")
-  cat("  - Parallel: ", parallel_file, " (", file.exists(parallel_file), ")\n")
-  cat("\nRun targets::tar_make() to fit both models.\n")
-}
-```
-
-### Detailed Parameter Category Comparisons
-
-The comprehensive comparison includes the following categories. For brevity, we show summary tables for each category.
-
-#### Flow Rates (Separation and Finding)
-
-```{r flow-rate-details}
-if (file.exists(serial_file) && file.exists(parallel_file)) {
-  if (!is.null(comparison$flow_rates)) {
-    cat("\n=== Separation Rates ===\n")
-    print(knitr::kable(
-      comparison$flow_rates[1:min(7, nrow(comparison$flow_rates)), c("parameter", "serial_mean", "parallel_mean", "pct_diff")],
-      digits = 4,
-      caption = "Separation rate comparison (first 7 education levels)"
-    ))
-  }
-
-  if (!is.null(comparison$finding_rates)) {
-    cat("\n=== Finding Rates ===\n")
-    print(knitr::kable(
-      comparison$finding_rates[1:min(7, nrow(comparison$finding_rates)), c("parameter", "serial_mean", "parallel_mean", "pct_diff")],
-      digits = 4,
-      caption = "Finding rate comparison (first 7 education levels)"
-    ))
-  }
-}
-```
-
-#### Shock Effects (2008 and 2020 Recessions)
-
-```{r shock-effect-details}
-if (file.exists(serial_file) && file.exists(parallel_file)) {
-  if (!is.null(comparison$shock_effects_2008)) {
-    cat("\n=== 2008 Shock Effects ===\n")
-    print(knitr::kable(
-      comparison$shock_effects_2008[1:min(7, nrow(comparison$shock_effects_2008)), c("parameter", "serial_mean", "parallel_mean", "pct_diff")],
-      digits = 4,
-      caption = "2008 shock effect comparison"
-    ))
-  }
-
-  if (!is.null(comparison$shock_effects_2020)) {
-    cat("\n=== 2020 Shock Effects ===\n")
-    print(knitr::kable(
-      comparison$shock_effects_2020[1:min(7, nrow(comparison$shock_effects_2020)), c("parameter", "serial_mean", "parallel_mean", "pct_diff")],
-      digits = 4,
-      caption = "2020 shock effect comparison"
-    ))
-  }
-}
-```
-
-#### MCMC Diagnostics Comparison
-
-```{r mcmc-diagnostics-details}
-if (file.exists(serial_file) && file.exists(parallel_file)) {
-  if (!is.null(comparison$mcmc_diagnostics)) {
-    cat("\n=== MCMC Diagnostics Comparison ===\n")
-    print(knitr::kable(
-      comparison$mcmc_diagnostics,
-      digits = 3,
-      caption = "MCMC convergence metrics (Rhat and ESS)"
-    ))
-
-    cat("\nBoth models show good convergence (Rhat < 1.01, ESS > 400).\n")
-  }
-}
-```
-
-#### LOO-CV Model Comparison
-
-```{r loo-comparison-details}
-if (file.exists(serial_file) && file.exists(parallel_file)) {
-  if (!is.null(comparison$loo_metrics)) {
-    cat("\n=== LOO-CV Model Comparison ===\n")
-    print(knitr::kable(
-      comparison$loo_metrics,
-      digits = 2,
-      caption = "LOO-CV metrics comparison"
-    ))
-
-    # ELPD difference test
-    elpd_row <- comparison$loo_metrics[comparison$loo_metrics$metric == "elpd_loo", ]
-    elpd_diff <- abs(elpd_row$diff)
-    elpd_se <- elpd_row$se_diff
-
-    cat(sprintf("\nELPD difference: %.2f (SE = %.2f)\n", elpd_diff, elpd_se))
-    cat(sprintf("ELPD difference in SE units: %.2f\n", elpd_diff / elpd_se))
-
-    if (elpd_diff < 4 * elpd_se) {
-      cat("✓ Models are practically equivalent (ELPD difference < 4 SE)\n")
-    } else {
-      cat("⚠ Models show meaningful predictive differences (ELPD difference ≥ 4 SE)\n")
-    }
-  }
-}
-```
-
-### Conclusion
-
-The education-level parallelization successfully provides:
-
-1. **Significant speedup**: 2.38x reduction in runtime (22 min → 9 min)
-2. **Equivalent posteriors**: Parameters match within MCMC variation
-3. **Full hierarchical structure**: No sacrifice of model features
-4. **Simple configuration**: Use threads_per_chain ≤ N_edu for best efficiency
-
-**Recommendation**: The time-varying equilibrium model ([unemployment-ode-state-space-edu-parallel.stan](../stan/unemployment-ode-state-space-edu-parallel.stan)) is the current production model. It achieves perfect convergence with 0 divergences, all Rhat < 1.01, and cleanly separates structural labor market trends ($u_{\text{eq}}(t)$) from transitory shocks. Use 4 chains with 2 parallel × 7 threads (14 cores) for fitting.
+The model uses Stan's `reduce_sum` to parallelize across education levels. Since education levels are independent in the ODE computation, each thread computes the complete trajectory + likelihood for one or more education levels.
+
+**Configuration**:
+- 4 chains, 2 parallel × 7 threads = 14 cores (of 20 available)
+- `grainsize = 1`: Each thread handles one education level
+- Runtime: ~122 minutes for 4 chains × 1500 warmup + 1500 sampling
+
+**Key implementation details**:
+- Flattened data arrays: `n_unemployed_flat[(edu-1)*T + t]` for `reduce_sum` compatibility
+- `partial_edu_trajectory()` computes full trajectory + likelihood per education level
+- R wrapper: `fit_ode_state_space_edu_parallel()`
+
+**Recommendation**: Use 4 chains with 2 parallel × 7 threads (14 cores). With fewer cores, reduce `threads_per_chain` proportionally.
 
 ```{r session-info}
 sessionInfo()
