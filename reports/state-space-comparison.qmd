@@ -672,12 +672,11 @@ edu_params <- rbind(
              param = "Mean Equilibrium", edu = edu_levels)
 )
 
-ggplot(edu_params, aes(x = edu, y = median)) +
+ggplot(edu_params, aes(x = median, y = edu)) +
   geom_point(size = 2.5, color = "steelblue") +
-  geom_errorbar(aes(ymin = q5, ymax = q95), width = 0.2, color = "steelblue") +
-  facet_wrap(~ param, scales = "free_y", ncol = 2) +
-  coord_flip() +
-  labs(x = NULL, y = "Posterior median with 90% CI",
+  geom_errorbarh(aes(xmin = q5, xmax = q95), height = 0.2, color = "steelblue") +
+  facet_wrap(~ param, scales = "free_x", ncol = 2) +
+  labs(y = NULL, x = "Posterior median with 90% CI",
        title = "Education-Specific Parameter Estimates") +
   theme_minimal(base_size = 12)
 ```
