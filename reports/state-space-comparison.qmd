@@ -177,13 +177,13 @@ This report presents a hierarchical Bayesian state space model for unemployment 
 **Spline-Based Equilibrium**
 - B-spline basis (K=10) constructs smooth time-varying $u_{\text{eq}}(t)$
 - Random walk prior on spline coefficients for adaptive smoothness
-- Replaces the previous constant-equilibrium + separate-spline architecture
+- Each education level has its own equilibrium trajectory with data-informed flexibility
 
-**Technical Innovations**
-- Spline basis for smooth residual variation (25 basis functions)
-- Non-centered parameterization for sampling efficiency
-- Data-informed priors from exploratory model fits
-- Prior-centered initialization to avoid multimodality
+**Technical Approach**
+- Non-centered parameterization for efficient MCMC sampling
+- Strong hierarchical pooling (Exponential(20) priors) on shock and adjustment parameters
+- Education-level parallelization via Stan's `reduce_sum` for multi-threaded sampling
+- Prior-centered initialization via `make_init_at_prior_edu_parallel()`
 
 ## Recent Trends: December 2023 - April 2026
 
@@ -245,16 +245,13 @@ ggplot(recent_trend, aes(x = year_frac)) +
         axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-## Residual Diagnostics: What the Model Misses
+## Residual Diagnostics: Model Fit Assessment
 
-These plots show two views of what the model leaves unexplained.
+**Observation residual** (observed minus full model prediction):
+Positive values mean the model underpredicts unemployment; negative values mean overprediction.
+Shaded bands show 90% credible intervals from posterior uncertainty.
 
-**Observation residual** (observed unemployment rate minus full model prediction):
-Positive values mean the model underpredicts unemployment (observed > model);
-negative values mean the model overpredicts (observed < model).
-The shaded bands show 90% credible intervals.
-
-```{r fig-residual-obs, fig.cap="Observation residuals: what the full model (including spline) leaves unexplained"}
+```{r fig-residual-obs, fig.cap="Observation residuals: observed minus model prediction with 90% credible intervals"}
 knitr::include_graphics("figures/residual-observation.png")
 ```
 
@@ -526,7 +523,6 @@ logit_u_eq[t, i] = sum_k B_spline[t, k] * u_eq_coef_raw[k, i]
 - B-spline basis (K=10) constructs smooth time-varying equilibrium
 - Random walk prior penalizes rapid changes → decade-scale trends
 - Each education level has its own trajectory with adaptive smoothness
-- Replaces the previous constant equilibrium + separate spline deviation
 
 **2. Adjustment Speed (adj)**
 ```
@@ -602,119 +598,97 @@ sigma_u_eq_spline[i] ~ Exponential(3)      # Per-edu smoothness (mean 0.33)
 
 ## Hierarchical Variance Analysis: Comparing Pooling Strength
 
-A key question for hierarchical models: **Which unemployment dynamics show the most education-specific variation?**
-
-The hierarchical structure allows us to directly compare the strength of pooling across all parameter groups by examining the between-education standard deviation ($\sigma$) for each.
-
-### Between-Education Variance Summary
+The hierarchical structure pools information across education levels. The between-education standard deviation ($\sigma$) parameters quantify how much groups differ. Smaller $\sigma$ = stronger pooling.
 
 ```{r hierarchical-variance}
-#| fig-cap: "Between-education variance (σ) for all hierarchical parameters"
+# Extract sigma parameters directly from v4 fit
+N_edu <- result$stan_data$N_edu
+edu_levels <- result$stan_data$education_levels
 
-# Load the variance analysis results
-variance_file <- here("results", "hierarchical-variance-summary.rds")
-
-if (!file.exists(variance_file)) {
-  cat("Running hierarchical variance analysis...\n")
-  system("Rscript scripts/analyze-hierarchical-variance.R")
-}
-
-variance_summary <- readRDS(variance_file)
-
-# Display summary table
-cat("\n=== Between-Education Variance (σ) ===\n")
-cat("Smaller σ = stronger pooling = more similar across education\n\n")
-
-knitr::kable(
-  variance_summary[, .(Parameter = parameter,
-                       `σ (mean)` = sprintf("%.3f", sigma_mean),
-                       `90% CI` = sprintf("[%.3f, %.3f]", sigma_q5, sigma_q95),
-                       `Edu CV` = sprintf("%.1f%%", edu_cv * 100),
-                       `Pooling Strength` = pooling)],
-  align = c("l", "r", "r", "r", "l")
+sigma_params <- c(
+  "sigma_log_adj_speed",
+  "sigma_log_shock_2008", "sigma_log_shock_2020",
+  "sigma_decay_2008", "sigma_decay_2020",
+  "sigma_seasonal"
 )
+sigma_summary <- result$fit$summary(variables = sigma_params)
+
+cat("\n=== Between-Education Standard Deviations ===\n")
+cat("Smaller values = stronger pooling = more similar across education groups\n\n")
+
+sigma_display <- data.frame(
+  Parameter = c("Adjustment speed", "2008 shock", "2020 shock",
+                "2008 decay", "2020 decay", "Seasonal"),
+  `Sigma median` = round(sigma_summary$median, 3),
+  `90% CI` = sprintf("[%.3f, %.3f]", sigma_summary$q5, sigma_summary$q95),
+  check.names = FALSE
+)
+knitr::kable(sigma_display, align = c("l", "r", "r"))
 ```
 
 ```{r variance-comparison-plot}
-#| fig-cap: "Comparing pooling strength across all hierarchical parameters"
-#| fig-height: 6
-#| fig-width: 10
+#| fig-cap: "Between-education standard deviations with 90% credible intervals"
+#| fig-height: 4
+#| fig-width: 9
 
-knitr::include_graphics(here("reports", "figures", "hierarchical-variance-comparison.png"))
-```
+sigma_plot <- data.frame(
+  parameter = factor(sigma_display$Parameter, levels = rev(sigma_display$Parameter)),
+  median = sigma_summary$median,
+  q5 = sigma_summary$q5,
+  q95 = sigma_summary$q95
+)
 
-### Interpretation: Universal vs. Education-Specific Dynamics
-
-**Tight Pooling (σ < 0.15)** - Nearly universal across education:
-```{r tight-pooling}
-tight <- variance_summary[sigma_mean < 0.15, parameter]
-if (length(tight) > 0) {
-  cat(paste0("  • ", tight, collapse = "\n"), "\n\n")
-  cat("→ These dynamics are fundamental to all education levels\n")
-  cat("→ Education-specific differences are small relative to uncertainty\n")
-  cat("→ The data supports a common mechanism\n")
-} else {
-  cat("No parameters show tight pooling.\n")
-}
-```
-
-**Moderate Pooling (0.15 ≤ σ < 0.4)** - Some education differences:
-```{r moderate-pooling}
-moderate <- variance_summary[sigma_mean >= 0.15 & sigma_mean < 0.4, parameter]
-if (length(moderate) > 0) {
-  cat(paste0("  • ", moderate, collapse = "\n"), "\n\n")
-  cat("→ Modest education-specific variation exists\n")
-  cat("→ Pooling provides moderate regularization\n")
-  cat("→ Groups are similar but distinguishable\n")
-} else {
-  cat("No parameters show moderate pooling.\n")
-}
-```
-
-**Weak Pooling (σ ≥ 0.4)** - Substantial education differences:
-```{r weak-pooling}
-weak <- variance_summary[sigma_mean >= 0.4, parameter]
-if (length(weak) > 0) {
-  cat(paste0("  • ", weak, collapse = "\n"), "\n\n")
-  cat("→ Education levels genuinely differ in these dynamics\n")
-  cat("→ Pooling provides modest shrinkage but preserves differences\n")
-  cat("→ The data supports education-specific mechanisms\n")
-} else {
-  cat("No parameters show weak pooling.\n")
-}
+ggplot(sigma_plot, aes(x = median, y = parameter)) +
+  geom_point(size = 3, color = "steelblue") +
+  geom_errorbarh(aes(xmin = q5, xmax = q95), height = 0.2, color = "steelblue") +
+  labs(x = "Between-Education SD", y = NULL,
+       title = "Hierarchical Pooling Strength",
+       subtitle = "Smaller values = education groups are more similar") +
+  theme_minimal(base_size = 13)
 ```
 
 ### Education-Specific Parameter Values
 
-To visualize the differences, compare selected parameters with different pooling strengths:
+Parameter estimates for key quantities across all seven education levels:
 
 ```{r education-specific-comparison}
-#| fig-cap: "Education-specific parameter values for parameters with different pooling strengths"
-#| fig-height: 6
+#| fig-cap: "Key parameter estimates by education level with 90% credible intervals"
+#| fig-height: 9
 #| fig-width: 10
 
-knitr::include_graphics(here("reports", "figures", "education-specific-parameters.png"))
+# Build per-edu parameter table
+edu_params <- rbind(
+  data.frame(result$fit$summary(variables = paste0("adj_speed[", 1:N_edu, "]")),
+             param = "Adjustment Speed", edu = edu_levels),
+  data.frame(result$fit$summary(variables = paste0("shock_2008_effect[", 1:N_edu, "]")),
+             param = "2008 Shock Effect", edu = edu_levels),
+  data.frame(result$fit$summary(variables = paste0("shock_2020_effect[", 1:N_edu, "]")),
+             param = "2020 Shock Effect", edu = edu_levels),
+  data.frame(result$fit$summary(variables = paste0("decay_2008[", 1:N_edu, "]")),
+             param = "2008 Decay Rate", edu = edu_levels),
+  data.frame(result$fit$summary(variables = paste0("decay_2020[", 1:N_edu, "]")),
+             param = "2020 Decay Rate", edu = edu_levels),
+  data.frame(result$fit$summary(variables = paste0("u_eq_mean[", 1:N_edu, "]")),
+             param = "Mean Equilibrium", edu = edu_levels)
+)
+
+ggplot(edu_params, aes(x = edu, y = median)) +
+  geom_point(size = 2.5, color = "steelblue") +
+  geom_errorbar(aes(ymin = q5, ymax = q95), width = 0.2, color = "steelblue") +
+  facet_wrap(~ param, scales = "free_y", ncol = 2) +
+  coord_flip() +
+  labs(x = NULL, y = "Posterior median with 90% CI",
+       title = "Education-Specific Parameter Estimates") +
+  theme_minimal(base_size = 12)
 ```
 
 ### Key Insights
 
-To meaningfully compare variability across parameters with different units, we use the **coefficient of variation** (CV = σ/|μ|), which measures relative variability:
+1. **Adjustment speeds** increase with education: less_than_hs has the slowest adjustment, PhD and professional degrees the fastest — consistent with more fluid labor markets at higher education levels.
 
-1. **Most Variable** (by CV): `r variance_summary[order(-edu_cv)][1, parameter]` (CV = `r sprintf("%.1f%%", variance_summary[order(-edu_cv)][1, edu_cv * 100])`)
-   - Education levels differ substantially in this aspect of unemployment dynamics
-   - Hierarchical prior prevents overfitting while allowing genuine differences
-   - Raw σ = `r sprintf("%.3f", variance_summary[order(-edu_cv)][1, sigma_mean])`
+2. **Shock effects** are tightly pooled across education groups — the Exponential(20) prior on $\sigma$ reflects the economic prior that macro shocks affect all workers similarly. The model estimates similar shock magnitudes across groups.
 
-2. **Least Variable** (by CV): `r variance_summary[order(-edu_cv)][.N, parameter]` (CV = `r sprintf("%.1f%%", variance_summary[order(-edu_cv)][.N, edu_cv * 100])`)
-   - All education levels share nearly identical dynamics for this parameter
-   - Strong pooling is appropriate and improves estimation efficiency
-   - Raw σ = `r sprintf("%.3f", variance_summary[order(-edu_cv)][.N, sigma_mean])`
-
-3. **Practical Implications**:
-   - Parameters with high CV require education-specific interpretation
-   - Parameters with low CV can be summarized at the population level
-   - The hierarchy automatically discovers which dynamics are universal vs. education-specific
-   - **Note**: Comparing raw σ values across parameters is invalid because they have different units
+3. **Mean equilibrium unemployment** ranges from ~1.3% (professional degrees) to ~10.2% (less than high school) — matching the raw data well while the time-varying equilibrium captures structural trends within each group.
 
 ## Data Preparation
 
