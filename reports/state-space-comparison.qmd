@@ -258,19 +258,18 @@ The shaded bands show 90% credible intervals.
 knitr::include_graphics("figures/residual-observation.png")
 ```
 
-**Equilibrium trajectory** (`u_eq[t]`): The time-varying structural unemployment rate
-toward which the ODE pulls. Constructed from a B-spline basis with a random walk prior
-for smoothness, this replaces the previous constant-equilibrium + separate-spline-deviation
-architecture.
+**Equilibrium trajectory** ($u_{\text{eq}}[t]$): The time-varying structural unemployment rate
+(green) constructed from the B-spline basis. The blue band shows the full model fit including
+shocks and seasonal effects. Gray dots are observed monthly unemployment rates.
 
-```{r fig-residual-spline, fig.cap="Spline component: what the B-spline adds beyond ODE dynamics"}
+```{r fig-residual-spline, fig.cap="Time-varying equilibrium u_eq[t] (green) with full model fit (blue) and observed data (gray dots)"}
 knitr::include_graphics("figures/residual-spline-component.png")
 ```
 
-> **Note:** In the current model (v4), there is no separate "spline component." The
-> B-spline constructs the time-varying equilibrium $u_{\text{eq}}(t)$ directly. The
-> residual plot above was generated from the previous model architecture and is kept
-> for reference. Updated figures will replace this in a future render.
+> The green band shows the time-varying equilibrium toward which the ODE pulls
+> unemployment. Deviations of the blue line from the green band represent the
+> combined effect of the 2008 and 2020 shocks. The gray dots show the observed
+> monthly unemployment rates from the CPS data.
 
 ## Model Structure: Time-Varying Equilibrium
 
