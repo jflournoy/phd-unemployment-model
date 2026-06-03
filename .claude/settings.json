@@ -13,12 +13,16 @@
       "Bash(bash scripts/run-edu-parallel.sh)",
       "Bash(ps -p 76528 -o pid,state,%cpu,etime --no-headers)",
       "Bash(ps -p 76528 -o pid,state --no-headers)",
-      "Bash(ps -p 76615 -o pid,etime,%cpu,args --no-headers)"
+      "Bash(ps -p 76615 -o pid,etime,%cpu,args --no-headers)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl -s -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/jflournoy/phd-unemployment-model/actions/runs?per_page=5)",
+      "Bash(echo \"PID: $!\")"
     ],
     "additionalDirectories": [
       "/home/jflournoy/code/verse-cmdstan/rsession.conf",
       "/home/jflournoy/code/verse-cmdstan/init.sh",
-      "/home/rstudio"
+      "/home/rstudio",
+      "/tmp"
     ]
   },
   "hooks": {

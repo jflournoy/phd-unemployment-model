@@ -181,6 +181,7 @@ Examples of honest responses:
 - Keep functions focused and testable (< 50 lines preferred)
 - R script files under 400 lines
 - Comprehensive error handling with informative messages
+- **Always write R analysis scripts to `.R` files** — never use multi-line Bash `Rscript -e` commands. Save to `scripts/` and run with `Rscript scripts/foo.R`.
 - **Prefer base R and data.table over tidyverse**
   - Use base R for core operations (subsetting, transformations)
   - Use data.table for efficient operations on large datasets (millions of rows)
