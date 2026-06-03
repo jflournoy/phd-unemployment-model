@@ -1781,22 +1781,22 @@ make_init_at_prior_edu_parallel <- function(stan_data) {
 
       # Adjustment speeds
       mu_log_adj_speed = rnorm(1, 2.3, 0.1),
-      sigma_log_adj_speed = abs(rnorm(1, 0.05, 0.02)),
+      sigma_log_adj_speed = abs(rnorm(1, 0.5, 0.1)),  # Mean 0.5 matches exponential(2) prior
       adj_speed_raw = rnorm(N_edu, 0, 0.1),
 
       # 2008 shock
       mu_log_shock_2008 = rnorm(1, -2, 0.1),
-      sigma_log_shock_2008 = abs(rnorm(1, 0.05, 0.02)),
+      sigma_log_shock_2008 = abs(rnorm(1, 0.2, 0.05)),  # Mean 0.2 matches exponential(5) prior
       shock_2008_raw = rnorm(N_edu, 0, 0.1),
 
       # 2020 shock
       mu_log_shock_2020 = rnorm(1, -1.5, 0.1),
-      sigma_log_shock_2020 = abs(rnorm(1, 0.05, 0.02)),
+      sigma_log_shock_2020 = abs(rnorm(1, 0.2, 0.05)),  # Mean 0.2 matches exponential(5) prior
       shock_2020_raw = rnorm(N_edu, 0, 0.1),
 
       # Decay rates
       mu_decay_2008 = rnorm(1, 0, 0.1),
-      sigma_decay_2008 = abs(rnorm(1, 0.2, 0.05)),
+      sigma_decay_2008 = abs(rnorm(1, 1.0, 0.2)),  # Mean 1.0 matches exponential(1) prior
       decay_2008_raw = rnorm(N_edu, 0, 0.1),
 
       mu_decay_2020 = rnorm(1, 0, 0.1),

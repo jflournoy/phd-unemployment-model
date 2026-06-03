@@ -321,21 +321,21 @@ model {
 
   // Adjustment speeds
   mu_log_adj_speed ~ normal(2.3, 0.25);
-  sigma_log_adj_speed ~ exponential(20);
+  sigma_log_adj_speed ~ exponential(2);  // Mean 0.5 — allows real edu variation in adj speed
   adj_speed_raw ~ std_normal();
 
   // Shock effects
   mu_log_shock_2008 ~ normal(-2, 0.8);
-  sigma_log_shock_2008 ~ exponential(20);
+  sigma_log_shock_2008 ~ exponential(5);  // Mean 0.2 — moderate pooling, spline no longer competes
   shock_2008_raw ~ std_normal();
 
   mu_log_shock_2020 ~ normal(-1.5, 0.8);
-  sigma_log_shock_2020 ~ exponential(20);
+  sigma_log_shock_2020 ~ exponential(5);  // Mean 0.2 — moderate pooling
   shock_2020_raw ~ std_normal();
 
   // Decay rates
   mu_decay_2008 ~ normal(0, 0.5);
-  sigma_decay_2008 ~ exponential(5);
+  sigma_decay_2008 ~ exponential(1);  // Mean 1.0 — data show large edu variation in 2008 recovery
   decay_2008_raw ~ std_normal();
 
   mu_decay_2020 ~ normal(0, 0.5);
