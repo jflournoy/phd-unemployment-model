@@ -66,7 +66,7 @@ safe_qread <- function(file, error_action = c("stop", "warn", "silent")) {
 }
 
 # Validate required model results exist
-edu_par_file <- here("models", "ode-state-space-edu-parallel-fit-v4.rds")
+edu_par_file <- here("models", "ode-state-space-edu-parallel-fit-v5.rds")
 edu_par_fallback <- here("models", "ode-state-space-edu-parallel-fit.rds")
 
 if (!file.exists(edu_par_file) && !file.exists(edu_par_fallback)) {
@@ -110,7 +110,7 @@ K_SPLINE <- 10  # Spline basis functions for time-varying equilibrium
 
 result <- NULL
 possible_model_files <- c(
-  here("models", "ode-state-space-edu-parallel-fit-v4.rds"),
+  here("models", "ode-state-space-edu-parallel-fit-v5.rds"),
   here("models", "ode-state-space-edu-parallel-fit.rds"),
   here("models", "ode-state-space-monotonic-spline-fit.rds")
 )
