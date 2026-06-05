@@ -1809,6 +1809,12 @@ make_init_at_prior_edu_parallel <- function(stan_data) {
       seasonal_u_raw = matrix(rnorm(11 * N_edu, 0, 0.1),
                               nrow = 11, ncol = N_edu),
 
+      # Asymmetric shock shapes (centered at 1 = symmetric)
+      rise_power_2008 = rnorm(1, 1, 0.1),
+      decay_shape_2008 = rnorm(1, 1, 0.1),
+      rise_power_2020 = rnorm(1, 1, 0.1),
+      decay_shape_2020 = rnorm(1, 1, 0.1),
+
       # Initial states
       logit_u_init = rnorm(N_edu, -3.0, 0.1),
 

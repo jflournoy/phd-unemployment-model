@@ -6,7 +6,7 @@ library(cmdstanr)
 library(data.table)
 
 cat("Loading v4 fit...\n")
-wrap <- readRDS("models/ode-state-space-edu-parallel-fit-v5.rds")
+wrap <- readRDS("models/ode-state-space-edu-parallel-fit-v7.rds")
 fit <- wrap$fit
 stan_data <- wrap$stan_data
 

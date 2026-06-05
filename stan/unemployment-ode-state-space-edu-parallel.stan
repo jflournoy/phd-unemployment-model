@@ -72,6 +72,10 @@ functions {
     vector shock_2020_effect,
     vector decay_2008,
     vector decay_2020,
+    real rise_power_2008,
+    real decay_shape_2008,
+    real rise_power_2020,
+    real decay_shape_2020,
     vector logit_u_init,
     matrix seasonal_u,       // [12, N_edu]
     real phi,
@@ -107,11 +111,16 @@ functions {
         real s_base = u_eq_safe * adj_speed[edu];
         real f_base = (1 - u_eq_safe) * adj_speed[edu];
 
-        // Shock intensities
-        real shock_2008_intensity = shock_2008_rise[t] *
-          exp(-decay_2008[edu] * time_since_2008_peak[t]);
-        real shock_2020_intensity = shock_2020_rise[t] *
-          exp(-decay_2020[edu] * time_since_2020_peak[t]);
+        // Shock intensities with asymmetric rise/decay
+        real shock_2008_rise_pow = shock_2008_rise[t] > 0
+          ? pow(shock_2008_rise[t], rise_power_2008) : 0.0;
+        real shock_2008_intensity = shock_2008_rise_pow *
+          exp(-pow(decay_2008[edu] * time_since_2008_peak[t], decay_shape_2008));
+
+        real shock_2020_rise_pow = shock_2020_rise[t] > 0
+          ? pow(shock_2020_rise[t], rise_power_2020) : 0.0;
+        real shock_2020_intensity = shock_2020_rise_pow *
+          exp(-pow(decay_2020[edu] * time_since_2020_peak[t], decay_shape_2020));
 
         // Effective separation rate
         real s_eff = s_base
@@ -261,6 +270,12 @@ parameters {
 
   // Dispersion
   real log_phi_minus_1;
+
+  // === ASYMMETRIC SHOCK SHAPE PARAMETERS ===
+  real<lower=0.1, upper=5> rise_power_2008;
+  real<lower=0.1, upper=5> decay_shape_2008;
+  real<lower=0.1, upper=5> rise_power_2020;
+  real<lower=0.1, upper=5> decay_shape_2020;
 }
 
 transformed parameters {
@@ -354,6 +369,12 @@ model {
   // Dispersion
   log_phi_minus_1 ~ normal(8.5, 0.5);
 
+  // Asymmetric shock shapes (centered at 1 = symmetric)
+  rise_power_2008 ~ normal(1, 0.5);
+  decay_shape_2008 ~ normal(1, 0.5);
+  rise_power_2020 ~ normal(1, 0.5);
+  decay_shape_2020 ~ normal(1, 0.5);
+
   // === LIKELIHOOD (parallelized across education levels) ===
   target += reduce_sum(
     partial_edu_trajectory,
@@ -367,6 +388,8 @@ model {
     adj_speed,
     shock_2008_effect, shock_2020_effect,
     decay_2008, decay_2020,
+    rise_power_2008, decay_shape_2008,
+    rise_power_2020, decay_shape_2020,
     logit_u_init,
     seasonal_u,
     phi, T
@@ -396,10 +419,15 @@ generated quantities {
 
   for (t in 1:T) {
     for (i in 1:N_edu) {
-      shock_2008_intensity[t][i] = shock_2008_rise[t] *
-        exp(-decay_2008[i] * time_since_2008_peak[t]);
-      shock_2020_intensity[t][i] = shock_2020_rise[t] *
-        exp(-decay_2020[i] * time_since_2020_peak[t]);
+      real r08 = shock_2008_rise[t] > 0
+        ? pow(shock_2008_rise[t], rise_power_2008) : 0.0;
+      shock_2008_intensity[t][i] = r08 *
+        exp(-pow(decay_2008[i] * time_since_2008_peak[t], decay_shape_2008));
+
+      real r20 = shock_2020_rise[t] > 0
+        ? pow(shock_2020_rise[t], rise_power_2020) : 0.0;
+      shock_2020_intensity[t][i] = r20 *
+        exp(-pow(decay_2020[i] * time_since_2020_peak[t], decay_shape_2020));
     }
   }
 

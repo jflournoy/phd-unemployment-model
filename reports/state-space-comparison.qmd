@@ -66,7 +66,7 @@ safe_qread <- function(file, error_action = c("stop", "warn", "silent")) {
 }
 
 # Validate required model results exist
-edu_par_file <- here("models", "ode-state-space-edu-parallel-fit-v5.rds")
+edu_par_file <- here("models", "ode-state-space-edu-parallel-fit-v7.rds")
 edu_par_fallback <- here("models", "ode-state-space-edu-parallel-fit.rds")
 
 if (!file.exists(edu_par_file) && !file.exists(edu_par_fallback)) {
@@ -110,7 +110,7 @@ K_SPLINE <- 10  # Spline basis functions for time-varying equilibrium
 
 result <- NULL
 possible_model_files <- c(
-  here("models", "ode-state-space-edu-parallel-fit-v5.rds"),
+  here("models", "ode-state-space-edu-parallel-fit-v7.rds"),
   here("models", "ode-state-space-edu-parallel-fit.rds"),
   here("models", "ode-state-space-monotonic-spline-fit.rds")
 )
@@ -170,9 +170,10 @@ This report presents a hierarchical Bayesian state space model for unemployment 
 - Hierarchical parameters: adjustment speed, shock magnitudes, recovery rates, seasonal effects
 
 **Shock Modeling**
-- Explicit shock effects on separation rates (2008 financial crisis, 2020 COVID-19)
-- Education-specific shock magnitudes with strong hierarchical pooling
-- Decay parameters capture recovery dynamics (education-specific half-lives)
+- Asymmetric impulse functions: power-law rise ($\rho$) + stretched-exponential decay ($\kappa$)
+- 2008: convex rise ($\rho=1.47$) — gradual build then acceleration; stretched decay ($\kappa=0.65$)
+- 2020: near-linear rise ($\rho=0.90$); strongly stretched decay ($\kappa=0.53$) — disruption persisted
+- Education-specific magnitudes and recovery rates with hierarchical pooling
 
 **Spline-Based Equilibrium**
 - B-spline basis (K=10) constructs smooth time-varying $u_{\text{eq}}(t)$
@@ -181,7 +182,7 @@ This report presents a hierarchical Bayesian state space model for unemployment 
 
 **Technical Approach**
 - Non-centered parameterization for efficient MCMC sampling
-- Strong hierarchical pooling (Exponential(20) priors) on shock and adjustment parameters
+- Asymmetric shock shapes (power-law rise, stretched-exponential decay) for flexible impulse modeling
 - Education-level parallelization via Stan's `reduce_sum` for multi-threaded sampling
 - Prior-centered initialization via `make_init_at_prior_edu_parallel()`
 
